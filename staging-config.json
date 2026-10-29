@@ -1,0 +1,7 @@
+{
+  "environment": "staging",
+  "projectRef": "phiscfwfuzeptetimdbo",
+  "supabaseUrl": "https://phiscfwfuzeptetimdbo.supabase.co",
+  "publishableKey": "sb_publishable_zfedf52rUuWtiwxB-Jqivg_OP-9qxz3",
+  "storagePrefix": "rollingbudget_staging_phiscfwfuzeptetimdbo"
+}

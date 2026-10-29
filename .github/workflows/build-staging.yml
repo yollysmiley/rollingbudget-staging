@@ -1,0 +1,38 @@
+name: Build isolated staging frontend
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Check out pinned application source
+        uses: actions/checkout@v5
+        with:
+          repository: yollysmiley/rollingbudget
+          ref: 3c9277bb5dd3209c603a8fd1e952583970136385
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Build with staging-only configuration
+        run: node scripts/build-staging.mjs upstream/rollover-budget-app.html
+      - name: Upload static staging build
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-frontend
+          path: dist/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: error
