@@ -1,12 +1,17 @@
-name: Build isolated staging frontend
+name: Build and deploy isolated staging frontend
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: staging-pages-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -36,3 +41,24 @@ jobs:
           include-hidden-files: true
           retention-days: 7
           if-no-files-found: error
+      - name: Package Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy staging to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
