@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { hardenRendering } from './harden-rendering.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../staging-config.json', import.meta.url), 'utf8'));
 assert.equal(config.environment, 'staging');
@@ -35,6 +36,7 @@ for (const key of ['rollover_pro_v5', 'rollover_pro_v4', 'budget_theme']) {
   assert.ok(!html.includes(`'${key}'`) && !html.includes(`"${key}"`), `Unisolated storage key remains: ${key}`);
 }
 
+html = hardenRendering(html);
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/rollover-budget-app.html', html);
 writeFileSync('dist/index.html', '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=rollover-budget-app.html"><title>Staging budget</title></head><body><a href="rollover-budget-app.html">Open staging budget</a></body></html>\n');
