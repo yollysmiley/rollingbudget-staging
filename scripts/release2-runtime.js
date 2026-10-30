@@ -58,7 +58,16 @@ function rb2Notice(message) {
         try {
             const key = RB2_PREFIX + ':release2:' + (rb2Account == null ? 'guest' : 'account:' + encodeURIComponent(rb2Account));
             const legacy = Object.fromEntries(['_rollover_pro_v5', '_rollover_pro_v4'].map(suffix => [RB2_PREFIX + suffix, localStorage.getItem(RB2_PREFIX + suffix)]));
-            const blob = new Blob([JSON.stringify({ current: localStorage.getItem(key), legacy, cloud: rb2CloudRecovery }, null, 2)], { type: 'application/json' });
+            const recoveryPayload = {
+                formatVersion: 1,
+                exportedAt: new Date().toISOString(),
+                accountId: rb2Account ?? null,
+                draft: { schemaVersion: 2, data: state },
+                current: localStorage.getItem(key),
+                legacy,
+                cloud: rb2CloudRecovery
+            };
+            const blob = new Blob([JSON.stringify(recoveryPayload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'staging-budget-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (error) { alert('Recovery export failed: ' + error.message); }
     });
