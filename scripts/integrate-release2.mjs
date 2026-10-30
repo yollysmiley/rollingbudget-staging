@@ -28,6 +28,13 @@ export function integrateRelease2(source, prefix) {
     once("rbOption(pi, p.name || 'Paycheck ' + (pi + 1), selected === pi)", "rbOption('pay_' + p.id, p.name || 'Paycheck ' + (pi + 1), selected === 'pay_' + p.id)");
     once("rbOption('excl_' + bi, '🔒 ' + (b.name || 'Bucket ' + (bi + 1)), selected === 'excl_' + bi)", "rbOption('excl_' + b.id, '🔒 ' + (b.name || 'Bucket ' + (bi + 1)), selected === 'excl_' + b.id)");
     once("bucket.value === '' ? null : (isNaN(bucket.value) ? bucket.value : parseInt(bucket.value, 10))", 'bucket.value');
+    // Refresh derived displays without replacing the active input or month chips.
+    once('if (isTyping) {', `if (isTyping) {
+        renderSummary(activeYear);
+        document.querySelectorAll('#monthList .month-balance').forEach((el, index) => {
+            const month = activeYear.months[index];
+            if (month) el.textContent = ' · ' + money(month.endRollover);
+        });`);
     html = html.replace(/localStorage\.getItem\(('[^']*budget_theme')\)/g, '(function() { try { return localStorage.getItem($1); } catch { return null; } })()');
     html = html.replace(/localStorage\.setItem\(('[^']*budget_theme'), t\);/g, 'try { localStorage.setItem($1, t); } catch { /* Theme preference is optional. */ }');
     assert.ok(!html.includes('JSON.parse(localStorage.getItem('), 'Unsafe initialization remains');

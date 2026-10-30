@@ -1,0 +1,29 @@
+name: Live staging auth and database tests
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: live-staging-database-tests
+  cancel-in-progress: false
+jobs:
+  integration:
+    if: github.ref == 'refs/heads/main'
+    environment: staging-live-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Test real authentication and ownership policies
+        run: node scripts/live-staging-tests.mjs
+        env:
+          STAGING_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
+          STAGING_TEST_A_EMAIL: ${{ secrets.STAGING_TEST_A_EMAIL }}
+          STAGING_TEST_A_PASSWORD: ${{ secrets.STAGING_TEST_A_PASSWORD }}
+          STAGING_TEST_B_EMAIL: ${{ secrets.STAGING_TEST_B_EMAIL }}
+          STAGING_TEST_B_PASSWORD: ${{ secrets.STAGING_TEST_B_PASSWORD }}
