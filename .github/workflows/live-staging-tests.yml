@@ -13,7 +13,13 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: staging-live-tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
+    env:
+      STAGING_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
+      STAGING_TEST_A_EMAIL: ${{ secrets.STAGING_TEST_A_EMAIL }}
+      STAGING_TEST_A_PASSWORD: ${{ secrets.STAGING_TEST_A_PASSWORD }}
+      STAGING_TEST_B_EMAIL: ${{ secrets.STAGING_TEST_B_EMAIL }}
+      STAGING_TEST_B_PASSWORD: ${{ secrets.STAGING_TEST_B_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -23,9 +29,23 @@ jobs:
           node-version: '24'
       - name: Test real authentication and ownership policies
         run: node scripts/live-staging-tests.mjs
-        env:
-          STAGING_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
-          STAGING_TEST_A_EMAIL: ${{ secrets.STAGING_TEST_A_EMAIL }}
-          STAGING_TEST_A_PASSWORD: ${{ secrets.STAGING_TEST_A_PASSWORD }}
-          STAGING_TEST_B_EMAIL: ${{ secrets.STAGING_TEST_B_EMAIL }}
-          STAGING_TEST_B_PASSWORD: ${{ secrets.STAGING_TEST_B_PASSWORD }}
+      - name: Check out pinned application source
+        uses: actions/checkout@v5
+        with:
+          repository: yollysmiley/rollingbudget
+          ref: 3c9277bb5dd3209c603a8fd1e952583970136385
+          path: upstream
+          persist-credentials: false
+      - name: Install test runner and browser
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build exact staging revision
+        run: node scripts/build-staging.mjs upstream/rollover-budget-app.html
+      - name: Check authenticated test syntax
+        run: node --check tests/live/authenticated.spec.js
+      - name: Run authenticated desktop acceptance
+        run: npx playwright test --config=playwright.live.config.js
+      - name: Remove sensitive temporary browser outputs
+        if: always()
+        run: rm -rf test-results playwright-report playwright/.auth

@@ -1,0 +1,1 @@
+module.exports = class { onTestEnd(test, result) { console.log(result.status.toUpperCase() + ' ' + test.title); } onError() { console.error('Live test infrastructure error; sensitive details suppressed.'); } onEnd(result) { console.log('Authenticated desktop suite: ' + result.status); } };
