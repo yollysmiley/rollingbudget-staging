@@ -1,0 +1,30 @@
+name: Validate authenticated desktop test code
+on:
+  pull_request:
+  push:
+    branches: [ci/authenticated-desktop-tests]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Install pinned runner without lifecycle scripts or staging credentials
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Validate JavaScript syntax
+        run: |
+          node --check playwright.live.config.js
+          node --check tests/live/authenticated.spec.js
+          node --check tests/live/safe-reporter.cjs
+          node --check tests/live/safety.mjs
+      - name: Test safety helpers with synthetic inputs
+        run: node --test tests/live/safety.test.mjs
+      - name: Discover authenticated cases without secrets or live requests
+        run: npx playwright test --config=playwright.live.config.js --list
