@@ -1,0 +1,85 @@
+name: Private logout diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: live-staging-database-tests
+  cancel-in-progress: false
+jobs:
+  diagnostics:
+    if: github.ref == 'refs/heads/main'
+    environment: staging-live-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Require encryption secret
+        env:
+          TRACE_PASSPHRASE: ${{ secrets.TRACE_DIAGNOSTICS_PASSPHRASE }}
+        run: |
+          test ${#TRACE_PASSPHRASE} -ge 32 || { echo 'Set TRACE_DIAGNOSTICS_PASSPHRASE to a strong random value of at least 32 characters.'; exit 1; }
+      - uses: actions/checkout@v5
+        with:
+          repository: yollysmiley/rollingbudget
+          ref: 3c9277bb5dd3209c603a8fd1e952583970136385
+          path: upstream
+          persist-credentials: false
+      - name: Install and build
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          node scripts/build-staging.mjs upstream/rollover-budget-app.html
+          node --check tests/live/authenticated.spec.js
+          node --test tests/live/safety.test.mjs
+      - name: Trace both logout tests separately
+        id: tests
+        continue-on-error: true
+        env:
+          STAGING_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
+          STAGING_TEST_A_EMAIL: ${{ secrets.STAGING_TEST_A_EMAIL }}
+          STAGING_TEST_A_PASSWORD: ${{ secrets.STAGING_TEST_A_PASSWORD }}
+          STAGING_TEST_B_EMAIL: ${{ secrets.STAGING_TEST_B_EMAIL }}
+          STAGING_TEST_B_PASSWORD: ${{ secrets.STAGING_TEST_B_PASSWORD }}
+        shell: bash
+        run: |
+          umask 077
+          mkdir -p private-diagnostics
+          set +e
+          npx playwright test --config=playwright.live.config.js --grep '^logout closes open selected recurring modal before B loads$' --workers=1 --retries=0 --trace=on --reporter=list --output=private-diagnostics/modal > private-diagnostics/modal.log 2>&1
+          modal=$?
+          npx playwright test --config=playwright.live.config.js --grep '^UI logout propagates to another tab without retaining account budget$' --workers=1 --retries=0 --trace=on --reporter=list --output=private-diagnostics/cross-tab > private-diagnostics/cross-tab.log 2>&1
+          tabs=$?
+          printf 'Modal test exit code: %s\nCross-tab test exit code: %s\n' "$modal" "$tabs" | tee private-diagnostics/status.txt
+          test "$modal" -eq 0 && test "$tabs" -eq 0
+      - name: Encrypt diagnostics
+        id: encrypt
+        if: always() && steps.tests.outcome != 'skipped'
+        env:
+          TRACE_PASSPHRASE: ${{ secrets.TRACE_DIAGNOSTICS_PASSPHRASE }}
+        shell: bash
+        run: |
+          umask 077
+          test -d private-diagnostics
+          mkdir -p encrypted-diagnostics
+          set -o pipefail
+          tar -czf - private-diagnostics | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass env:TRACE_PASSPHRASE -out encrypted-diagnostics/logout-diagnostics.tar.gz.enc
+      - name: Upload encrypted diagnostics only
+        if: always() && steps.encrypt.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-logout-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: encrypted-diagnostics/logout-diagnostics.tar.gz.enc
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove raw and encrypted temporary files
+        if: always()
+        run: rm -rf private-diagnostics encrypted-diagnostics test-results playwright-report playwright/.auth
+      - name: Preserve test failure status
+        if: always() && steps.tests.outcome == 'failure'
+        run: exit 1
