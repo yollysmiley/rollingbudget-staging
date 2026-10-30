@@ -1,0 +1,1 @@
+{"name":"rollingbudget-staging","private":true,"type":"module","scripts":{"test:e2e":"playwright test"},"devDependencies":{"@playwright/test":"1.56.0"}}
