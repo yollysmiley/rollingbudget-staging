@@ -5,7 +5,7 @@ export function requiredSettings(env) {
   return Object.fromEntries(names.map(name => [name, env[name]]));
 }
 export function logoutAccepted(status, body) {
-  return status === 200 || status === 204 || (status === 403 && body?.code === 'session_not_found');
+  return status === 200 || status === 204 || ((status === 403 || status === 404) && body?.code === 'session_not_found');
 }
 export function assertOwnedFixture(row, id, userId, run) {
   if (row.id !== id || row.user_id !== userId || row.state?.integrationRun !== run) throw new Error('Fixture ownership mismatch; refusing cleanup');

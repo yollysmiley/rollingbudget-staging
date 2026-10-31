@@ -12,6 +12,13 @@ test('logout cleanup accepts only success or exact already-ended-session respons
   for (const status of [400,401,403,404,429,500]) assert.equal(logoutAccepted(status,{code:'unexpected'}),false);
   assert.equal(logoutAccepted(401,{code:'session_not_found'}),false);
 });
+test('404 cleanup requires the exact session_not_found code', () => {
+  assert.equal(logoutAccepted(404,{code:'session_not_found'}),true);
+  for (const body of [null,undefined,{},'Not Found',{code:'not_found'},{code:'invalid_token'},{message:'session_not_found'},{code:'SESSION_NOT_FOUND'}]) {
+    assert.equal(logoutAccepted(404,body),false);
+  }
+  for (const status of [400,401,429,500,503]) assert.equal(logoutAccepted(status,{code:'session_not_found'}),false);
+});
 test('fixture cleanup requires exact ID, owner and run marker', () => {
   const row={id:'row',user_id:'owner',state:{integrationRun:'run'}};
   assertOwnedFixture(row,'row','owner','run');
