@@ -73,36 +73,43 @@ async function cloudName(a) {
 }
 test.beforeEach(async()=>{
   accounts=[];owned.clear();
-  settings=requiredSettings(process.env);
+  await test.step('setup.settings',async()=>{ settings=requiredSettings(process.env); });
   for(const letter of ['A','B']) {
-    const r=await fetch(URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:settings.STAGING_PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:settings['STAGING_TEST_'+letter+'_EMAIL'],password:settings['STAGING_TEST_'+letter+'_PASSWORD']}),signal:AbortSignal.timeout(20000)});
-    if(!r.ok) throw new Error('Test account sign-in failed');
-    const s=await r.json();
-    if(!s.user?.id || !s.access_token || !s.refresh_token) throw new Error('Invalid test session');
-    accounts.push(s);
+    await test.step('setup.signin.'+letter,async()=>{
+      const r=await fetch(URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:settings.STAGING_PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:settings['STAGING_TEST_'+letter+'_EMAIL'],password:settings['STAGING_TEST_'+letter+'_PASSWORD']}),signal:AbortSignal.timeout(20000)});
+      if(!r.ok) throw new Error('Test account sign-in failed');
+      const s=await r.json();
+      if(!s.user?.id || !s.access_token || !s.refresh_token) throw new Error('Invalid test session');
+      accounts.push(s);
+    });
   }
-  expect(accounts[0].user.id).not.toBe(accounts[1].user.id);
-  for(const a of accounts) expect(await rows(a)).toHaveLength(0);
-  for(const a of accounts) owned.set(a.user.id,randomUUID());
+  await test.step('setup.accounts-distinct',async()=>{ expect(accounts[0].user.id).not.toBe(accounts[1].user.id); });
+  for(const [index,a] of accounts.entries()) await test.step('setup.empty.'+(index===0?'A':'B'),async()=>{ expect(await rows(a)).toHaveLength(0); });
+  await test.step('setup.fixture-ids',async()=>{ for(const a of accounts) owned.set(a.user.id,randomUUID()); });
 });
 test.afterEach(async({context})=>{
   let failed=false;
-  try { await context.close(); } catch { failed=true; }
-  for(const a of accounts) {
+  try { await test.step('cleanup.context',async()=>{ await context.close(); }); } catch { failed=true; }
+  for(const [index,a] of accounts.entries()) {
+    const letter=index===0?'A':'B';
     try {
-      const id=owned.get(a.user.id);
-      if(id) {
-        const row=(await rows(a)).find(r=>r.id===id);
-        if(row) {
-          assertOwnedFixture(row,id,a.user.id,RUN);
-          await api('/rest/v1/budget_data?id=eq.'+id+'&user_id=eq.'+a.user.id,a,'DELETE');
+      await test.step('cleanup.fixture.'+letter,async()=>{
+        const id=owned.get(a.user.id);
+        if(id) {
+          const row=(await rows(a)).find(r=>r.id===id);
+          if(row) {
+            assertOwnedFixture(row,id,a.user.id,RUN);
+            await api('/rest/v1/budget_data?id=eq.'+id+'&user_id=eq.'+a.user.id,a,'DELETE');
+          }
+          expect((await rows(a)).some(r=>r.id===id)).toBe(false);
         }
-        expect((await rows(a)).some(r=>r.id===id)).toBe(false);
-      }
+      });
     } catch { failed=true; }
     try {
-      const r=await response('/auth/v1/logout?scope=local',a,'POST');
-      if(!logoutAccepted(r.status,r.data)) throw new Error('Unexpected session cleanup response');
+      await test.step('cleanup.session.'+letter,async()=>{
+        const r=await response('/auth/v1/logout?scope=local',a,'POST');
+        if(!logoutAccepted(r.status,r.data)) throw new Error('Unexpected session cleanup response');
+      });
     } catch { failed=true; }
   }
   if(failed) throw new Error('Cleanup failed; inspect dedicated staging fixtures and sessions');
@@ -126,25 +133,31 @@ test('cloud save through UI survives fresh browser context',async({browser,conte
 });
 test('logout closes open selected recurring modal before B loads',async({context})=>{
   const [a,b]=accounts;
-  await seed(a,fixture('ACCOUNT-A'));await seed(b,fixture('ACCOUNT-B'));
-  const page=await open(context,a);
-  await page.locator('button[onclick="openRecurringModal()"]').click();
-  await expect(page.locator('#recSelectList')).toContainText('ACCOUNT-A-BILL');
-  await page.locator('.rec-select-item').first().click();
-  expect(await page.evaluate(()=>modalSelections.size)).toBe(1);
+  await test.step('modal.seed',async()=>{ await seed(a,fixture('ACCOUNT-A'));await seed(b,fixture('ACCOUNT-B')); });
+  const page=await test.step('modal.open-account-A',async()=>open(context,a));
+  await test.step('modal.open-recurring',async()=>{
+    await page.locator('button[onclick="openRecurringModal()"]').click();
+    await expect(page.locator('#recSelectList')).toContainText('ACCOUNT-A-BILL');
+  });
+  await test.step('modal.select-recurring',async()=>{
+    await page.locator('.rec-select-item').first().click();
+    expect(await page.evaluate(()=>modalSelections.size)).toBe(1);
+  });
   // Controlled app action: modal overlay prevents clicking the underlying sign-out button.
-  await page.evaluate(()=>signOut());
-  await signedOut(page);
-  await expect(page.locator('#recurringModal')).not.toHaveClass(/open/);
-  await expect(page.locator('#recSelectList')).toBeEmpty();
-  expect(await page.evaluate(()=>modalSelections.size)).toBe(0);
-  await expect(page.locator('#paycheckContainer input')).toHaveCount(0);
-  await switchTo(page,b);
-  await expect(page.locator('#paycheckContainer input[type=text]').first()).toHaveValue('ACCOUNT-B');
-  await page.locator('button[onclick="openRecurringModal()"]').click();
-  await expect(page.locator('#recSelectList')).toContainText('ACCOUNT-B-BILL');
-  await expect(page.locator('#recSelectList')).not.toContainText('ACCOUNT-A');
-  expect(await cloudName(a)).toBe('ACCOUNT-A');
+  await test.step('modal.signout-call',async()=>{ await page.evaluate(()=>signOut()); });
+  await test.step('modal.account-cleared',async()=>{ await signedOut(page); });
+  await test.step('modal.overlay-closed',async()=>{ await expect(page.locator('#recurringModal')).not.toHaveClass(/open/); });
+  await test.step('modal.list-cleared',async()=>{ await expect(page.locator('#recSelectList')).toBeEmpty(); });
+  await test.step('modal.selection-cleared',async()=>{ expect(await page.evaluate(()=>modalSelections.size)).toBe(0); });
+  await test.step('modal.budget-cleared',async()=>{ await expect(page.locator('#paycheckContainer input')).toHaveCount(0); });
+  await test.step('modal.switch-account-B',async()=>{ await switchTo(page,b); });
+  await test.step('modal.account-B-visible',async()=>{ await expect(page.locator('#paycheckContainer input[type=text]').first()).toHaveValue('ACCOUNT-B'); });
+  await test.step('modal.account-B-recurring',async()=>{
+    await page.locator('button[onclick="openRecurringModal()"]').click();
+    await expect(page.locator('#recSelectList')).toContainText('ACCOUNT-B-BILL');
+    await expect(page.locator('#recSelectList')).not.toContainText('ACCOUNT-A');
+  });
+  await test.step('modal.account-A-cloud-unchanged',async()=>{ expect(await cloudName(a)).toBe('ACCOUNT-A'); });
 });
 test('delayed A cloud result cannot replace active B state',async({context})=>{
   const [a,b]=accounts;
@@ -207,13 +220,17 @@ test('local storage failure prevents cloud overwrite',async({context})=>{
   expect(writes).toBe(0);expect((await rows(a))[0].state.years[0].months[0].paychecks[0].amount).toBe(100);
 });
 test('UI logout propagates to another tab without retaining account budget',async({context})=>{
-  const a=accounts[0];await seed(a,fixture('TWO-TABS'));
-  const first=await open(context,a);
-  const second=await context.newPage();second.on('dialog',d=>d.dismiss());
-  await second.goto('/rollover-budget-app.html');await settled(second,a);
-  await logout(first);
-  await expect.poll(()=>second.evaluate(()=>rb2Account===null)).toBe(true);
-  await expect(second.locator('#paycheckContainer input')).toHaveCount(0);
+  const a=accounts[0];
+  await test.step('tabs.seed',async()=>{ await seed(a,fixture('TWO-TABS')); });
+  const first=await test.step('tabs.open-first',async()=>open(context,a));
+  const second=await test.step('tabs.open-second',async()=>{
+    const page=await context.newPage();page.on('dialog',d=>d.dismiss());
+    await page.goto('/rollover-budget-app.html');await settled(page,a);
+    return page;
+  });
+  await test.step('tabs.logout-first',async()=>{ await logout(first); });
+  await test.step('tabs.second-account-cleared',async()=>{ await expect.poll(()=>second.evaluate(()=>rb2Account===null)).toBe(true); });
+  await test.step('tabs.second-budget-cleared',async()=>{ await expect(second.locator('#paycheckContainer input')).toHaveCount(0); });
 });
 for(const kind of ['paychecks','excludedBuckets']) for(const position of [0,1,2]) {
   test(kind+' deletion at position '+position+' preserves other references',async({context})=>{
