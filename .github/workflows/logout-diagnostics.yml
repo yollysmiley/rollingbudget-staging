@@ -51,9 +51,9 @@ jobs:
           umask 077
           mkdir -p private-diagnostics
           set +e
-          npx playwright test --config=playwright.live.config.js --grep '^logout closes open selected recurring modal before B loads$' --workers=1 --retries=0 --trace=on --reporter=list --output=private-diagnostics/modal > private-diagnostics/modal.log 2>&1
+          npx playwright test --config=playwright.live.config.js --grep 'logout closes open selected recurring modal before B loads$' --workers=1 --retries=0 --trace=on --reporter=list --output=private-diagnostics/modal > private-diagnostics/modal.log 2>&1
           modal=$?
-          npx playwright test --config=playwright.live.config.js --grep '^UI logout propagates to another tab without retaining account budget$' --workers=1 --retries=0 --trace=on --reporter=list --output=private-diagnostics/cross-tab > private-diagnostics/cross-tab.log 2>&1
+          npx playwright test --config=playwright.live.config.js --grep 'UI logout propagates to another tab without retaining account budget$' --workers=1 --retries=0 --trace=on --reporter=list --output=private-diagnostics/cross-tab > private-diagnostics/cross-tab.log 2>&1
           tabs=$?
           printf 'Modal test exit code: %s\nCross-tab test exit code: %s\n' "$modal" "$tabs" | tee private-diagnostics/status.txt
           test "$modal" -eq 0 && test "$tabs" -eq 0
