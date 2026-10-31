@@ -82,17 +82,14 @@ function rb2SetBucket(index, value) {
 }
 async function rb2Activate(id) {
     rb2SigningOut = false;
-    if (id === rb2Account && !rb2Blocked && !rb2Loading) return;
+    if (id === rb2Account) return;
     rb2Account = id;
     const token = rb2Store.switchAccount(id);
     rb2Blocked = false; rb2Loading = id !== null; rb2CloudRecovery = null;
     state = normalizeState({});
-    modalSelections.clear();
     closeRecurringModal();
-    const list = document.getElementById('recSelectList');
-    if (list) list.replaceChildren();
-    const modalMonthName = document.getElementById('modalMonthName');
-    if (modalMonthName) modalMonthName.textContent = '';
+    document.getElementById('recSelectList').replaceChildren();
+    document.getElementById('modalMonthName').textContent = '';
     updateModalUI();
     document.getElementById('release2Notice')?.remove();
     render();
@@ -189,7 +186,6 @@ async function rb2SignOut() {
 
     await renderAuth();
     rb2SigningOut = false;
-    rb2Loading = false;
 }
 function rb2Install() {
     const originalRender = render;
