@@ -94,7 +94,8 @@ async function rb2Activate(id) {
     state = normalizeState({});
     closeRecurringModal();
     document.getElementById('recSelectList')?.replaceChildren();
-    document.getElementById('modalMonthName')?.textContent = '';
+    const modalMonthName = document.getElementById('modalMonthName');
+    if (modalMonthName) modalMonthName.textContent = '';
     updateModalUI?.();
     document.getElementById('release2Notice')?.remove();
     render();
