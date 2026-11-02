@@ -102,10 +102,8 @@ async function rb2SignOut() {
 supabaseClient.auth.onAuthStateChange((event, session) => {
     const id = session?.user?.id ?? null;
 
-    if (rb2SigningOut) {
-        if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') return;
-    }
-    if (id === rb2Account && event !== 'SIGNED_OUT') return;
+    if (rb2SigningOut && (event === 'SIGNED_OUT' || event === 'USER_UPDATED')) return;
+    if (event !== 'INITIAL_SESSION' && id === rb2Account && id !== null) return;
 
     if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
         void rb2Activate(id);
