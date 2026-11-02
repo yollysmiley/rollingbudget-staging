@@ -78,6 +78,7 @@ async function rb2SignOut() {
         state = normalizeState({});
         modalSelections.clear();
         rb2Notice('sign-out failed');
+        rb2SigningOut = false;
         return;
     }
 
@@ -88,6 +89,7 @@ async function rb2SignOut() {
         state = normalizeState({});
         modalSelections.clear();
         rb2Notice('sign-out failed');
+        rb2SigningOut = false;
         return;
     }
 
