@@ -19,6 +19,7 @@ async function rb2Activate(id) {
     render();
 
     const saved = rb2Store.load(normalizeState);
+    if (rb2Account !== id || !rb2Store.isCurrent(token)) return;
     if (saved.status === 'ok') {
         state = saved.value;
         render();
@@ -30,7 +31,9 @@ async function rb2Activate(id) {
     if (id === null) return;
 
     setTimeout(() => {
-        if (rb2Store.isCurrent(token)) void window.loadFromCloud(token, id);
+        if (rb2Account !== id) return;
+        if (!rb2Store.isCurrent(token)) return;
+        void window.loadFromCloud(token, id);
     }, 0);
 }
 
@@ -75,6 +78,7 @@ async function rb2SignOut() {
         state = normalizeState({});
         modalSelections.clear();
         rb2Notice('sign-out failed');
+        rb2SigningOut = false;
         return;
     }
 
@@ -85,6 +89,7 @@ async function rb2SignOut() {
         state = normalizeState({});
         modalSelections.clear();
         rb2Notice('sign-out failed');
+        rb2SigningOut = false;
         return;
     }
 
@@ -97,9 +102,8 @@ async function rb2SignOut() {
 supabaseClient.auth.onAuthStateChange((event, session) => {
     const id = session?.user?.id ?? null;
 
-    if (rb2SigningOut) {
-        if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') return;
-    }
+    if (rb2SigningOut && (event === 'SIGNED_OUT' || event === 'USER_UPDATED')) return;
+    if (event !== 'INITIAL_SESSION' && id === rb2Account && id !== null) return;
 
     if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
         void rb2Activate(id);
