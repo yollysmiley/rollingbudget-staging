@@ -22,7 +22,7 @@ const context = vm.createContext({
     }
 });
 const run = code => vm.runInContext(code, context);
-run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); ${runtime}`);
+run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { VERSION, normalizeMonth, normalizeState, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let state = normalizeState({}); let rb2Account = null; let rb2CloudRecovery = null; let supabaseClient = null; function render() {} function renderAuth() {} function closeRecurringModal() {} function updateModalUI() {} const window = { update() {} }; ${runtime}; rb2Install();`);
 run("rb2Account = null; state.recurring.push({name:'unsaved-draft-marker',amount:5}); rb2Notice('Export your draft before reloading.');");
 buttons.at(-1).click();
 assert.equal(alerts.length, 0);
