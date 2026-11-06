@@ -17,7 +17,7 @@ export function integrateRelease2(source, prefix) {
     block('if (supabaseClient) supabaseClient.auth.onAuthStateChange(', '</script>', 'rb2Install();\nrender();\n');
     const module = readFileSync(new URL('./release2-state.mjs', import.meta.url), 'utf8').replace(/^export /gm, '');
     const runtime = readFileSync(new URL('./release2-runtime.js', import.meta.url), 'utf8');
-    block('function normalizeState(raw)', 'function ordinal(', `const RB2_PREFIX = ${JSON.stringify(prefix)};\nconst RB2 = (() => {\n${module}\nreturn { normalizeMonth, deleteEntity, createAccountStore };\n})();\n${runtime}\n`);
+    block('function normalizeState(raw)', 'function ordinal(', `const RB2_PREFIX = ${JSON.stringify(prefix)};\nconst RB2 = (() => {\n${module}\nreturn { VERSION, normalizeMonth, normalizeState, deleteEntity, createAccountStore };\n})();\n${runtime}\n`);
     block('async function signOut()', 'function updateModalUI()', 'async function signOut() { return rb2SignOut(); }');
     once('async function signInWithGitHub() {', 'async function signInWithGitHub() { rb2SigningOut = false;');
     once('!isExclBucket(e.bucketIndex)', '!e.excludedBucketId');
