@@ -22,7 +22,7 @@ const context = vm.createContext({
     }
 });
 const run = code => vm.runInContext(code, context);
-run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, normalizeState, deleteEntity, createAccountStore }; })(); const normalizeState = RB2.normalizeState; const MONTHS = Array.from({length:12},(_,i)=>String(i)); ${runtime}`);
+run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, normalizeState, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); ${runtime}`);
 run("rb2Account = null; state.recurring.push({name:'unsaved-draft-marker',amount:5}); rb2Notice('Export your draft before reloading.');");
 buttons.at(-1).click();
 assert.equal(alerts.length, 0);
