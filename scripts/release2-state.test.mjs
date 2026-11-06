@@ -32,7 +32,7 @@ await vm.runInContext('rb2Activate(null)', context);
 await vm.runInContext("rb2Activate('A')", context);
 vm.runInContext("state = normalizeState(legacy); rb2Store.save(state, normalizeState, rb2Store.token());", context);
 await vm.runInContext("rb2Activate('B')", context);
-assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),0);
+assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),1, 'A new account starts with the default paycheck');
 await vm.runInContext("rb2Activate('A')", context);
 assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),2);
 const stale = vm.runInContext('rb2Store.token()', context);
