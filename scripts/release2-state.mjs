@@ -16,18 +16,47 @@ export function normalizeMonth(input, makeId = () => crypto.randomUUID()) {
   }
   const paychecks = entities(m.paychecks);
   const excludedBuckets = entities(m.excludedBuckets);
-  const resolve = (row, idKey, indexKey, targets) => {
-    if (Object.hasOwn(row, idKey)) return targets.some(t => t.id === row[idKey]) ? row[idKey] : null;
-    const i = row[indexKey];
-    return Number.isInteger(i) && i >= 0 && i < targets.length ? targets[i].id : null;
+
+  const resolveLegacyReference = (value, targets) => {
+    if (Number.isInteger(value) && value >= 0 && value < targets.length) {
+      return targets[value].id;
+    }
+    if (typeof value === 'string' && value.startsWith('excl_')) {
+      const index = Number.parseInt(value.slice(5), 10);
+      if (Number.isInteger(index) && index >= 0 && index < targets.length) {
+        return targets[index].id;
+      }
+    }
+    return null;
   };
+
+  const resolve = (row, idKey, indexKey, legacyKey, targets) => {
+    if (Object.hasOwn(row, idKey)) return targets.some(t => t.id === row[idKey]) ? row[idKey] : null;
+
+    const explicit = row[indexKey];
+    if (Object.hasOwn(row, legacyKey)) {
+      return resolveLegacyReference(row[legacyKey], targets);
+    }
+    if (Number.isInteger(explicit) || typeof explicit === 'string') {
+      return resolveLegacyReference(explicit, targets);
+    }
+    return null;
+  };
+
   const expenses = list(m.expenses).map(value => {
     const row = object(value) ? value : {};
-    const out = { ...row, amount: money(row.amount), paycheckId: resolve(row, 'paycheckId', 'paycheckIndex', paychecks), excludedBucketId: resolve(row, 'excludedBucketId', 'excludedBucketIndex', excludedBuckets) };
+    const out = {
+      ...row,
+      amount: money(row.amount),
+      paycheckId: resolve(row, 'paycheckId', 'paycheckIndex', 'bucketIndex', paychecks),
+      excludedBucketId: resolve(row, 'excludedBucketId', 'excludedBucketIndex', 'bucketIndex', excludedBuckets)
+    };
     delete out.paycheckIndex;
     delete out.excludedBucketIndex;
+    delete out.bucketIndex;
     return out;
   });
+
   return { ...m, paychecks, excludedBuckets, expenses };
 }
 export function deleteEntity(month, kind, id) {
