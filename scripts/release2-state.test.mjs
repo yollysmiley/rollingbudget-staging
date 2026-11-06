@@ -7,7 +7,7 @@ const module = readFileSync(new URL('./release2-state.mjs', import.meta.url), 'u
 const storage = new Map();
 const node = () => ({ remove() {}, replaceChildren() {}, append() {}, addEventListener() {}, classList: { remove() {} }, setAttribute() {}, textContent: '' });
 const context = vm.createContext({ crypto: webcrypto, console, setTimeout, URL, Blob, alert() {}, localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k,v) => storage.set(k,v) }, document: { getElementById: () => node(), createElement: node, createTextNode: value => value, body: { prepend() {} } } });
-vm.runInContext(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let supabaseClient = null; function render() {} function renderAuth() {} function closeRecurringModal() {} function updateModalUI() {} const window = { update() {} }; ${runtime}`, context);
+vm.runInContext(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { VERSION, normalizeMonth, normalizeState, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let supabaseClient = null; function render() {} function renderAuth() {} function closeRecurringModal() {} function updateModalUI() {} const window = { update() {} }; ${runtime}`, context);
 vm.runInContext(`
 const check = (value, message) => { if (!value) throw new Error(message); };
 const legacy = { years: [{ months: [{ paychecks: [{amount:100}, {amount:200}], excludedBuckets:[{amount:50}], expenses:[{amount:10,bucketIndex:1},{amount:20,bucketIndex:'excl_0'},{amount:30,bucketIndex:99}] }] }] };
@@ -42,7 +42,7 @@ storage.set('rollingbudget_staging_test:release2:account:broken','{bad');
 await vm.runInContext("rb2Activate('broken')",context);
 assert.equal(vm.runInContext('rb2Blocked',context),true);
 assert.equal(storage.get('rollingbudget_staging_test:release2:account:broken'),'{bad');
-vm.runInContext("rb2Account = 'A'; rb2Store.switchAccount('A'); rb2Blocked=false; rb2Loading=false; let resolveCloud; supabaseClient = { from: () => ({select: () => ({eq: () => ({single: () => new Promise(resolve => {resolveCloud=resolve;})})})}) }; var pending = window.loadFromCloud();",context);
+vm.runInContext("rb2Account = 'A'; rb2Store.switchAccount('A'); rb2Blocked=false; rb2Loading=false; let resolveCloud; supabaseClient = { from: () => ({select: () => ({eq: () => ({single: () => new Promise(resolve => { resolveCloud = resolve; })})})}) };", context);
 await vm.runInContext("rb2Activate('B')",context);
 vm.runInContext("resolveCloud({data:{state:legacy},error:null})",context);
 await vm.runInContext('pending',context);
