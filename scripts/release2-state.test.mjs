@@ -5,7 +5,7 @@ import { webcrypto } from 'node:crypto';
 const runtime = readFileSync(new URL('./release2-runtime.js', import.meta.url), 'utf8');
 const module = readFileSync(new URL('./release2-state.mjs', import.meta.url), 'utf8').replace(/^export /gm, '');
 const storage = new Map();
-const node = () => ({ remove() {}, replaceChildren() {}, append() {}, addEventListener() {}, classList: { remove() {} }, setAttribute() {}, textContent: '' });
+const node = () => ({ remove() {}, replaceChildren() {}, append() {}, addEventListener() {}, classList: { remove() {} }, setAttribute() {}, dataset: {}, textContent: '' });
 const context = vm.createContext({ crypto: webcrypto, console, setTimeout, URL, Blob, alert() {}, localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k,v) => storage.set(k,v) }, document: { getElementById: () => node(), createElement: node, createTextNode: value => value, body: { prepend() {}, append() {} } } });
 vm.runInContext(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, normalizeState, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let supabaseClient = null; function render() {} function renderAuth() {} function closeRecurringModal() {} function updateModalUI() {} const window = { update() {} }; ${runtime}`, context);
 vm.runInContext(`
