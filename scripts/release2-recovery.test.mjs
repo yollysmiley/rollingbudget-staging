@@ -7,7 +7,7 @@ const module = readFileSync(new URL('./release2-state.mjs', import.meta.url), 'u
 const storage = new Map();
 const buttons = [], blobs = [], alerts = [];
 let writes = 0;
-const node = () => ({ remove() {}, replaceChildren() {}, append() {}, addEventListener(event, handler) { this[event] = handler; }, classList: { remove() {} }, setAttribute() {}, textContent: '' });
+const node = () => ({ remove() {}, replaceChildren() {}, append() {}, addEventListener(event, handler) { this[event] = handler; }, classList: { remove() {} }, setAttribute() {}, dataset: {}, textContent: '' });
 const context = vm.createContext({
     crypto: webcrypto, console, Blob,
     setTimeout() {},
@@ -18,11 +18,12 @@ const context = vm.createContext({
         getElementById: () => node(),
         createElement(tag) { const element = node(); if (tag === 'button') buttons.push(element); if (tag === 'a') element.click = () => {}; return element; },
         createTextNode: value => value,
-        body: { prepend() {} }
+        body: { prepend() {}, append() {} }
     }
 });
 const run = code => vm.runInContext(code, context);
-run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); ${runtime}`);
+run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, normalizeState, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let state = RB2.normalizeState({}); const modalSelections = new Set(); const window = {}; function closeRecurringModal() {} function updateModalUI() {} function render() {} function renderAuth() {} ${runtime}`);
+run('rb2Install()');
 run("rb2Account = null; state.recurring.push({name:'unsaved-draft-marker',amount:5}); rb2Notice('Export your draft before reloading.');");
 buttons.at(-1).click();
 assert.equal(alerts.length, 0);

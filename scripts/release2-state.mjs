@@ -59,6 +59,62 @@ export function normalizeMonth(input, makeId = () => crypto.randomUUID()) {
 
   return { ...m, paychecks, excludedBuckets, expenses };
 }
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export function normalizeState(raw, makeId = () => crypto.randomUUID()) {
+  if (!object(raw)) throw new Error('Budget state must be an object');
+  if (Object.hasOwn(raw, 'release2Version') && raw.release2Version !== VERSION) {
+    throw new Error('Unsupported Release 2 state version');
+  }
+  if (Object.hasOwn(raw, 'years') && !Array.isArray(raw.years)) throw new Error('Invalid years');
+  if (Array.isArray(raw.years) && raw.years.length === 0) throw new Error('Budget state must contain at least one year');
+
+  const currentYear = new Date().getFullYear();
+  const sourceYears = Array.isArray(raw.years) ? raw.years : [{
+    year: String(currentYear),
+    activeMonth: 0,
+    months: MONTH_NAMES.map(name => ({ name, paychecks: [{ name: 'Paycheck 1', amount: 2500, date: '' }], expenses: [], excludedBuckets: [] }))
+  }];
+
+  const years = sourceYears.map((value, yearIndex) => {
+    if (!object(value)) throw new Error('Invalid year at index ' + yearIndex);
+    if (Object.hasOwn(value, 'months') && !Array.isArray(value.months)) throw new Error('Invalid months for year ' + yearIndex);
+    const sourceMonths = Array.isArray(value.months) ? value.months : [];
+    if (sourceMonths.length > 12) throw new Error('A year cannot contain more than 12 months');
+    const months = MONTH_NAMES.map((name, monthIndex) => {
+      const candidate = sourceMonths[monthIndex];
+      if (candidate === undefined) {
+        return normalizeMonth({
+          name,
+          paychecks: [{ name: 'Paycheck 1', amount: 2500, date: '' }],
+          expenses: [],
+          excludedBuckets: []
+        }, makeId);
+      }
+      if (!object(candidate)) throw new Error('Invalid month at year ' + yearIndex + ', month ' + monthIndex);
+      for (const key of ['paychecks', 'expenses', 'excludedBuckets']) {
+        if (Object.hasOwn(candidate, key) && !Array.isArray(candidate[key])) {
+          throw new Error('Invalid ' + key + ' in month ' + monthIndex);
+        }
+      }
+      return normalizeMonth({ ...candidate, name: candidate.name ?? name }, makeId);
+    });
+    const requestedMonth = Number.isInteger(value.activeMonth) ? value.activeMonth : 0;
+    return { ...value, activeMonth: Math.min(11, Math.max(0, requestedMonth)), months };
+  });
+
+  const requestedYear = Number.isInteger(raw.activeYearIndex) ? raw.activeYearIndex : 0;
+  return {
+    ...raw,
+    activeYearIndex: Math.min(years.length - 1, Math.max(0, requestedYear)),
+    recurring: Array.isArray(raw.recurring) ? raw.recurring.map((item, index) => {
+      if (!object(item)) throw new Error('Invalid recurring item at index ' + index);
+      return { ...item, amount: money(item.amount) };
+    }) : [{ name: 'Housing/Rent', amount: 1500, category: 'Housing', dueDay: 1 }],
+    years
+  };
+}
+
 export function deleteEntity(month, kind, id) {
   if (!['paychecks', 'excludedBuckets'].includes(kind)) throw new Error('Invalid entity kind');
   const reference = kind === 'paychecks' ? 'paycheckId' : 'excludedBucketId';
