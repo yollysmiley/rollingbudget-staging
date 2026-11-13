@@ -22,8 +22,8 @@ const context = vm.createContext({
     }
 });
 const run = code => vm.runInContext(code, context);
-run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); ${runtime}`);
-run("rb2Account = null; state.recurring.push({name:'unsaved-draft-marker',amount:5}); rb2Notice('Export your draft before reloading.');");
+run(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); ${runtime}\nglobalThis.rb2Test = { getState: () => state };`);
+run("rb2Account = null; rb2Test.getState().recurring.push({name:'unsaved-draft-marker',amount:5}); rb2Notice('Export your draft before reloading.');");
 buttons.at(-1).click();
 assert.equal(alerts.length, 0);
 const firstBlob = blobs.at(-1);
@@ -36,7 +36,7 @@ assert.equal(first.accountId, null);
 assert.equal(first.formatVersion, 1);
 assert.ok(Number.isFinite(Date.parse(first.exportedAt)));
 console.log('PASS: guest unsaved draft and versioned export metadata');
-run("state.recurring[0].name = 'later-edit';");
+run("rb2Test.getState().recurring[0].name = 'later-edit';");
 assert.equal(JSON.parse(await firstBlob.text()).draft.data.recurring[0].name, 'unsaved-draft-marker');
 console.log('PASS: exported snapshot is unaffected by later edits');
 storage.set('rollingbudget_staging_test:release2:account:A', '{malformed-original');
