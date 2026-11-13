@@ -3,38 +3,41 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 const runtime = readFileSync(new URL('./release2-runtime.js', import.meta.url), 'utf8');
+const testRuntime = runtime
+  .replace('function normalizeState(raw)', 'globalThis.normalizeState = function normalizeState(raw)')
+  .replace('let state = normalizeState({});', 'globalThis.state = normalizeState({});');
 const module = readFileSync(new URL('./release2-state.mjs', import.meta.url), 'utf8').replace(/^export /gm, '');
 const storage = new Map();
 const node = () => ({ remove() {}, replaceChildren() {}, append() {}, addEventListener() {}, classList: { remove() {} }, setAttribute() {}, textContent: '' });
 const context = vm.createContext({ crypto: webcrypto, console, setTimeout, URL, Blob, alert() {}, localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k,v) => storage.set(k,v) }, document: { getElementById: () => node(), createElement: node, createTextNode: value => value, body: { prepend() {} } } });
-vm.runInContext(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let supabaseClient = null; function render() {} function renderAuth() {} function closeRecurringModal() {} function updateModalUI() {} const window = { update() {} }; ${runtime}\nglobalThis.rb2Test = { normalizeState, getState: () => state, setState: value => { state = value; } };`, context);
+vm.runInContext(`const RB2_PREFIX = 'rollingbudget_staging_test'; const RB2 = (() => { ${module}; return { normalizeMonth, deleteEntity, createAccountStore }; })(); const MONTHS = Array.from({length:12},(_,i)=>String(i)); let supabaseClient = null; function render() {} function renderAuth() {} function closeRecurringModal() {} function updateModalUI() {} const window = { update() {} }; ${testRuntime}`, context);
 vm.runInContext(`
 const check = (value, message) => { if (!value) throw new Error(message); };
 const legacy = { years: [{ months: [{ paychecks: [{amount:100}, {amount:200}], excludedBuckets:[{amount:50}], expenses:[{amount:10,bucketIndex:1},{amount:20,bucketIndex:'excl_0'},{amount:30,bucketIndex:99}] }] }] };
-const migrated = rb2Test.normalizeState(legacy);
+const migrated = normalizeState(legacy);
 const m = migrated.years[0].months[0];
 check(m.expenses[0].paycheckId === m.paychecks[1].id, 'Legacy paycheck migration');
 check(m.expenses[1].excludedBucketId === m.excludedBuckets[0].id, 'Legacy excluded migration');
 check(m.expenses[2].paycheckId === null && m.expenses[2].excludedBucketId === null, 'Invalid index unassigned');
 check(!('bucketIndex' in m.expenses[0]), 'Index reference removed');
-check(JSON.stringify(rb2Test.normalizeState(migrated)) === JSON.stringify(migrated), 'Migration idempotence');
+check(JSON.stringify(normalizeState(migrated)) === JSON.stringify(migrated), 'Migration idempotence');
 const deletedFirst = RB2.deleteEntity(m, 'paychecks', m.paychecks[0].id);
 check(deletedFirst.expenses[0].paycheckId === m.paychecks[1].id, 'Unrelated assignment preserved');
 const deletedAssigned = RB2.deleteEntity(m, 'paychecks', m.paychecks[1].id);
 check(deletedAssigned.expenses[0].paycheckId === null, 'Deleted paycheck unassigned');
 check(RB2.deleteEntity(m, 'excludedBuckets', m.excludedBuckets[0].id).expenses[1].excludedBucketId === null, 'Deleted excluded bucket unassigned');
-for (const bad of [null, [], {years:{}}, {years:[{months:[{paychecks:{}}]}]}, {release2Version:99}]) { let threw=false; try { rb2Test.normalizeState(bad); } catch { threw=true; } check(threw, 'Invalid schema rejected'); }
-const empty = rb2Test.normalizeState({ activeYearIndex: 900, years:[{activeMonth:-1}] });
+for (const bad of [null, [], {years:{}}, {years:[{months:[{paychecks:{}}]}]}, {release2Version:99}]) { let threw=false; try { normalizeState(bad); } catch { threw=true; } check(threw, 'Invalid schema rejected'); }
+const empty = normalizeState({ activeYearIndex: 900, years:[{activeMonth:-1}] });
 check(empty.activeYearIndex === 0 && empty.years[0].activeMonth === 0 && empty.years[0].months.length === 12, 'Incomplete state repaired');
 rb2Install();
 `, context);
 await vm.runInContext('rb2Activate(null)', context);
 await vm.runInContext("rb2Activate('A')", context);
-vm.runInContext("rb2Test.setState(rb2Test.normalizeState(legacy)); rb2Store.save(rb2Test.getState(), rb2Test.normalizeState, rb2Store.token());", context);
+vm.runInContext("state = normalizeState(legacy); rb2Store.save(state, normalizeState, rb2Store.token());", context);
 await vm.runInContext("rb2Activate('B')", context);
-assert.equal(vm.runInContext('rb2Test.getState().years[0].months[0].paychecks.length', context),0);
+assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),0);
 await vm.runInContext("rb2Activate('A')", context);
-assert.equal(vm.runInContext('rb2Test.getState().years[0].months[0].paychecks.length', context),2);
+assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),2);
 const stale = vm.runInContext('rb2Store.token()', context);
 await vm.runInContext('rb2Activate(null)', context);
 assert.equal(vm.runInContext(`rb2Store.isCurrent(${stale})`,context),false);
@@ -46,5 +49,5 @@ vm.runInContext("rb2Account = 'A'; rb2Store.switchAccount('A'); rb2Blocked=false
 await vm.runInContext("rb2Activate('B')",context);
 vm.runInContext("resolveCloud({data:{state:legacy},error:null})",context);
 await vm.runInContext('pending',context);
-assert.equal(vm.runInContext('rb2Test.getState().years[0].months[0].paychecks.length', context),0);
+assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),0);
 console.log('PASS: legacy migration, idempotence, deletion, schema recovery, account/guest separation, malformed retention, stale cloud response');
