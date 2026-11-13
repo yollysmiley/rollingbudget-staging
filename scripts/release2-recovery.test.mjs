@@ -4,8 +4,8 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 const runtime = readFileSync(new URL('./release2-runtime.js', import.meta.url), 'utf8');
 const testRuntime = runtime
-    .replace('function normalizeState(raw)', 'globalThis.normalizeState = function normalizeState(raw)')
-    .replace('let state = normalizeState({});', 'globalThis.state = normalizeState({});');
+    .replace('function normalizeState(raw)', 'var normalizeState = function normalizeState(raw)')
+    .replace('let state = normalizeState({});', 'var state = normalizeState({});');
 const module = readFileSync(new URL('./release2-state.mjs', import.meta.url), 'utf8').replace(/^export /gm, '');
 const storage = new Map();
 const buttons = [], blobs = [], alerts = [];
