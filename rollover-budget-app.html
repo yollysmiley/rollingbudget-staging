@@ -865,7 +865,7 @@ async function initApp() {
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
       const mobileAuthBtn = document.getElementById("mobileAuthBtn");
       if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
-      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
+      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Plan smarter. Grow stronger.";
       setTimeout(async () => {
         await loadAllYears();
         render();
@@ -873,7 +873,7 @@ async function initApp() {
     });
   }
   document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
-  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
+  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Plan smarter. Grow stronger.";
   await loadAllYears();
   render();
 }
