@@ -209,13 +209,13 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
 
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.amount).toBe(4321.25);
-  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.accountId).toBe('cpm');
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.accountId).toBe(FIXTURE_ACCOUNT_ID);
 
   const fresh = await browser.newContext({ locale: 'en-US', trace: 'off' });
   try {
     const restored = await open(fresh, account, 'UI-SAVED');
     await expect(restored.locator('#incomeBody tr:not(.roll-row) input[aria-label="Income amount"]')).toHaveValue('4321.25');
-    await expect.poll(() => restored.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.accountId)).toBe('cpm');
+    await expect.poll(() => restored.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.accountId)).toBe(FIXTURE_ACCOUNT_ID);
     await expect.poll(() => restored.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.amount)).toBe(4321.25);
     await expect(restored.locator('#incTotalBadge')).toHaveText('$4,321.25');
   } finally {
