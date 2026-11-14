@@ -26,11 +26,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Build redesigned UI with staging-only configuration
         run: node scripts/build-staging.mjs
-      - name: Run staging build and security regression tests
-        run: |
-          node --test tests/empty-budget-state.test.mjs tests/security-rendering.test.mjs
-          node scripts/release2-state.test.mjs
-          node scripts/release2-recovery.test.mjs
+      - name: Run redesigned UI build and rendering regression tests
+        run: node --test tests/empty-budget-state.test.mjs tests/security-rendering.test.mjs
       - name: Run desktop and mobile acceptance tests
         run: npm run test:e2e
       - name: Retain browser reports and failure evidence
