@@ -73,3 +73,12 @@ test('zero-value income is migrated once without duplicating entries', () => {
   assert.deepEqual(first.year.months[0].income, [{ name: 'Empty', amount: 0, accountId: 'cpm' }]);
   assert.equal(migrateLegacyYear(first.year).changed, false);
 });
+
+test('migration rejects absent source accounts without modifying original income', () => {
+  const year = { months: [{ income: [{ name: 'Pay', cpm: 10, usaa: 20 }] }] };
+  assert.throws(() => migrateLegacyYear(year, [{ id: 'cpm' }]), /Missing legacy income account: usaa/);
+  assert.equal(year.months[0].income[0].usaa, 20);
+  assert.deepEqual(migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], [{ id: 'usaa' }]), [{ name: 'Zero', amount: 0, accountId: 'usaa' }]);
+  assert.throws(() => migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], []), /Missing legacy income account/);
+  assert.equal(canRemoveAccount('cpm', { 2026: { months: [{ income: [{ cpm: 0, usaa: 0 }] }] } }), false);
+});
