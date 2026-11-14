@@ -55,7 +55,7 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
 test('guest storage is namespaced and existing browser keys are not cleared', async ({ page }) => {
   await page.locator('#newIncName').fill('Stored');
   await page.locator('#newIncCpm').fill('10');
-  await page.locator('button[onclick="addIncome()"]).click();
+  await page.locator('button[onclick="addIncome()"]').click();
   const result = await page.evaluate(() => ({
     keys: Object.keys(localStorage),
     prefix: 'rollingbudget_staging_phiscfwfuzeptetimdbo_guest_budget_'
