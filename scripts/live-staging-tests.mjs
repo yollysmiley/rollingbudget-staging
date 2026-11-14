@@ -41,8 +41,11 @@ function denied(result) {
     'Unauthorized operation was not denied'
   );
 }
+function tablePathAt(targetYear, extra = '') {
+  return '/rest/v1/budget_ui_years?select=user_id,year,budget_data,updated_at&year=eq.' + targetYear + extra;
+}
 function tablePath(extra = '') {
-  return '/rest/v1/budget_ui_years?select=user_id,year,budget_data,updated_at&year=eq.' + year + extra;
+  return tablePathAt(year, extra);
 }
 async function rows(session) {
   const result = await request(tablePath('&user_id=eq.' + session.user.id), { token: session.access_token });
@@ -90,12 +93,11 @@ try {
     success(result);
     assert.equal(result.data?.[0]?.user_id, session.user.id);
     assert.equal(result.data?.[0]?.year, year);
-    created.push({ session, budget });
+    created.push({ session });
   }
 
   for (const [index, session] of sessions.entries()) {
-    const own = created[index];
-    const other = created[1 - index];
+    const otherSession = sessions[1 - index];
 
     await check('account ' + index + ' reads only its own year row', async () => {
       const data = await rows(session);
@@ -114,37 +116,45 @@ try {
       assert.equal((await rows(session))[0].budget_data.value, 200);
     });
     await check('account ' + index + ' cannot read the other account row', async () => {
-      const result = await request(tablePath('&user_id=eq.' + sessions[1 - index].user.id), { token: session.access_token });
+      const result = await request(tablePath('&user_id=eq.' + otherSession.user.id), { token: session.access_token });
       success(result);
       assert.deepEqual(result.data, []);
     });
     await check('account ' + index + ' cannot update the other account row', async () => {
-      const result = await request(tablePath('&user_id=eq.' + sessions[1 - index].user.id), {
+      const result = await request(tablePath('&user_id=eq.' + otherSession.user.id), {
         token: session.access_token,
         method: 'PATCH',
         body: { budget_data: { integrationRun: run, unauthorized: true } }
       });
       denied(result);
-      assert.equal((await rows(other.session))[0].budget_data.unauthorized, undefined);
+      assert.equal((await rows(otherSession))[0].budget_data.unauthorized, undefined);
     });
     await check('account ' + index + ' cannot delete the other account row', async () => {
-      const result = await request(tablePath('&user_id=eq.' + sessions[1 - index].user.id), {
+      const result = await request(tablePath('&user_id=eq.' + otherSession.user.id), {
         token: session.access_token,
         method: 'DELETE'
       });
       denied(result);
-      assert.equal((await rows(other.session)).length, 1);
+      assert.equal((await rows(otherSession)).length, 1);
     });
     await check('account ' + index + ' cannot insert as another owner', async () => {
+      const attemptedYear = year - 1;
       const result = await request('/rest/v1/budget_ui_years', {
         token: session.access_token,
         method: 'POST',
         body: {
-          user_id: sessions[1 - index].user.id,
-          year: year - 1,
-          budget_data: { integrationRun: run }
+          user_id: otherSession.user.id,
+          year: attemptedYear,
+          budget_data: { integrationRun: run, unauthorized: true }
         }
       });
+      if (result.ok) {
+        const cleanup = await request(tablePathAt(attemptedYear, '&user_id=eq.' + otherSession.user.id), {
+          token: otherSession.access_token,
+          method: 'DELETE'
+        });
+        success(cleanup);
+      }
       assert([401, 403].includes(result.status), 'Cross-owner insert must be rejected by RLS');
     });
     await check('account ' + index + ' cannot change row ownership', async () => {
@@ -192,7 +202,7 @@ try {
   failures++;
   console.error('FAIL setup or fixture creation; sensitive response details suppressed');
 } finally {
-  for (const { session, budget } of created) {
+  for (const { session } of created) {
     await check('cleanup owned synthetic year row', async () => {
       const current = await rows(session);
       const row = current.find(item => item.year === year);
