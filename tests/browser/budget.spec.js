@@ -61,7 +61,7 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
   await page.reload();
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
-  await expect(page.locator('#incomeBody tr:not(.roll-row)')).toContainText('$2,713.45');
+  await expect(page.locator('#incomeBody input[aria-label="Income amount"]').first()).toHaveValue('2713.45');
   await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
 });
 
@@ -257,4 +257,19 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
   await page.reload();
   expect(await read()).toEqual(entries);
   await expect(page.locator('#incomeBody button', { hasText: 'Split income' })).toHaveCount(0);
+});
+
+test('account-based income amount can be edited and persists after reload', async ({ page }) => {
+  await page.locator('#newIncName').fill('Edited Pay');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('200');
+  await page.locator('button[onclick="addIncome()"]').click();
+  const amount = page.locator('#incomeBody input[aria-label="Income amount"]').first();
+  await amount.fill('350');
+  await amount.press('Tab');
+  await expect(page.locator('#incTotalBadge')).toHaveText('$350.00');
+  await page.reload();
+  await expect(page.locator('#incomeBody input[aria-label="Income amount"]').first()).toHaveValue('350');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
