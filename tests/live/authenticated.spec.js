@@ -160,7 +160,7 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   const name = page.locator('#incomeBody input:not([type])').first();
   await name.fill('UI-SAVED');
   await name.press('Tab');
-  const cpm = page.locator('#incomeBody input[onchange*="' + "'cpm'" + ']');
+  const cpm = page.locator("#incomeBody input[onchange*=\"'cpm'\"]");
   await expect(cpm).toHaveCount(1);
   await cpm.fill('4321.25');
   await cpm.press('Tab');
@@ -171,7 +171,7 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   const fresh = await browser.newContext({ locale: 'en-US', trace: 'off' });
   try {
     const restored = await open(fresh, account, 'UI-SAVED');
-    await expect(restored.locator('#incomeBody input[onchange*="' + "'cpm'" + '"]')).toHaveValue('4321.25');
+    await expect(restored.locator("#incomeBody input[onchange*=\"'cpm'\"]")).toHaveValue('4321.25');
     await expect(restored.locator('#incTotalBadge')).toHaveText('$4,321.25');
   } finally {
     await fresh.close();
