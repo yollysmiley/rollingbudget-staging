@@ -45,3 +45,22 @@ test('migration does not change existing year documents or income totals', async
   assert.deepEqual(legacy, snapshot);
   assert.equal(legacy.months[0].income[0].cpm + legacy.months[0].income[0].usaa, 200);
 });
+
+test('account creation validates duplicates before writing', async () => {
+  const { createAccount } = await import('../scripts/account-storage.mjs');
+  const mock = mockClient();
+  await assert.rejects(() => createAccount(mock.client, 'user-1', [{ id: 'cpm', name: 'Checking', included: true }], 'checking', 'new'), /unique/);
+  assert.equal(mock.writes, 0);
+});
+
+test('account update rejects unknown accounts before contacting database', async () => {
+  const { updateAccount } = await import('../scripts/account-storage.mjs');
+  await assert.rejects(() => updateAccount(mockClient().client, 'user-1', [], 'missing', { name: 'Other' }), /not found/);
+});
+
+test('account removal blocks referenced entries and recurring rules', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const accounts = [{ id: 'cpm', name: 'CPM Federal', included: true }];
+  await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [{ fixed: [{ accountId: 'cpm' }] }] } }), /Reassign/);
+  await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [], recurringRules: [{ acct: 'cpm' }] } }), /Reassign/);
+});
