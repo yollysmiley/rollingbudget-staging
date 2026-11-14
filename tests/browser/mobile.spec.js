@@ -17,7 +17,6 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveTitle(/STAGING/);
   await expect(page.locator('body')).toContainText('STAGING ONLY');
   await expect(page.locator('#mobileOverview')).toBeVisible();
-  await expect(page.locator('.mobile-bottom-nav')).toBeVisible();
   await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
 });
 
@@ -25,20 +24,22 @@ test('mobile overview renders the balance, snapshot and allocation sections', as
   await expect(page.locator('#mobileOverview .mobile-overview-hero')).toBeVisible();
   await expect(page.locator('#mobileOverview .mobile-snapshot-grid')).toBeVisible();
   await expect(page.locator('#mobileOverview .mobile-allocation')).toBeVisible();
-  await expect(page.locator('.mobile-bottom-nav button[data-mobile-tab="overview"]')).toHaveClass(/active/);
   await expect(page.locator('.main-grid')).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   expect(await page.evaluate(() => window.__errors)).toEqual([]);
 });
 
 test('mobile navigation switches between Overview and Plan', async ({ page }) => {
-  await page.locator('.mobile-bottom-nav button[data-mobile-tab="plan"]').click();
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="plan"]').click();
   await expect(page.locator('body')).toHaveClass(/mobile-tab-plan/);
   await expect(page.locator('#mobileOverview')).toBeHidden();
   await expect(page.locator('.main-grid')).toBeVisible();
   await expect(page.locator('#rollingStrip')).toBeVisible();
 
-  await page.locator('.mobile-bottom-nav button[data-mobile-tab="overview"]').click();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
   await expect(page.locator('body')).toHaveClass(/mobile-tab-overview/);
   await expect(page.locator('#mobileOverview')).toBeVisible();
   await expect(page.locator('.main-grid')).toBeHidden();
@@ -90,12 +91,20 @@ test('mobile header exposes Sign In and opens the account modal', async ({ page 
   await expect(page.locator('#authModal')).not.toHaveClass(/open/);
 });
 
-test('mobile Activity and Settings navigation remains reachable', async ({ page }) => {
-  for (const tab of ['activity', 'settings']) {
-    const button = page.locator('.mobile-bottom-nav button').filter({ has: page.locator('span') }).filter({ hasText: new RegExp(tab, 'i') });
-    await button.click();
-    await expect(page.locator('body')).toHaveClass(new RegExp('mobile-tab-' + tab));
-    await expect(button).toHaveClass(/active/);
-    await expect(page.locator('.mobile-bottom-nav')).toBeVisible();
-  }
+test('mobile sidebar contains only Overview, Plan and Settings', async ({ page }) => {
+  await expect(page.locator('.mobile-bottom-nav')).toBeHidden();
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toBeVisible();
+  await expect(page.locator('.mobile-sidebar-nav button')).toHaveText(['Overview', 'Plan', 'Settings']);
+  await expect(page.locator('.mobile-sidebar-nav button')).toHaveCount(3);
+  await expect(page.locator('.mobile-sidebar-nav')).not.toContainText('Activity');
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
+  await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ New Year' })).toBeVisible();
+  await expect(page.locator('#autoRollToggle')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Recurring Rules/ })).toBeVisible();
+  await expect(page.locator('#authBtn')).toBeHidden();
+  await expect(page.locator('#mobileAuthBtn')).toBeVisible();
 });
