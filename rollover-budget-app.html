@@ -1527,7 +1527,7 @@ function syncMobileSettingsControls() {
   const recurringButton = controls.querySelector("button[onclick='openRecurringModal()']");
   const movable = Array.from(controls.children).filter(node => node.id !== "authBtn" && node !== recurringButton);
   if (mobile) movable.forEach(node => mount.appendChild(node));
-  else movable.forEach(node => controls.insertBefore(node, document.getElementById("authBtn")));
+  else movable.forEach(node => controls.insertBefore(node, recurringButton || document.getElementById("authBtn")));
 }
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
