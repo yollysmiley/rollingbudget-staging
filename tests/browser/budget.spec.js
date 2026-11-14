@@ -256,5 +256,5 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
   ]);
   await page.reload();
   expect(await read()).toEqual(entries);
-  await expect(page.locator('#incomeBody button')).not.toContainText('Split income');
+  await expect(page.locator('#incomeBody button', { hasText: 'Split income' })).toHaveCount(0);
 });
