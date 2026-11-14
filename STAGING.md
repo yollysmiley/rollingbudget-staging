@@ -44,6 +44,8 @@ New signups explicitly redirect to `https://yollysmiley.github.io/rollingbudget-
 
 ## Password reset
 
+The public homepage Forgot Password button opens an email-only mode in the branded account dialog. Submitting requests a Supabase recovery email; the dedicated reset page is only opened from a recovery callback, not directly from the homepage.
+
 The Forgot Password action sends a recovery email with `redirectTo` set to `https://yollysmiley.github.io/rollingbudget-staging/reset-password.html`. The page uses the staging Supabase project and the same isolated auth storage key as the app. It waits for a verified `PASSWORD_RECOVERY` callback instead of treating a pending callback as an expired link, and supports recovery `token_hash` callbacks via `verifyOtp`. It validates password length and confirmation and updates the authenticated user through `auth.updateUser()`. A recovery callback that never completes is rejected after a bounded wait.
 
 In the staging Supabase dashboard, add that exact URL under **Authentication → URL Configuration → Redirect URLs**. Keep the Site URL and redirect allowlist scoped to staging; do not add production destinations to the staging project. The Supabase connector available to this workflow does not expose Auth URL configuration, so this allowlist entry must be added in the staging dashboard.
