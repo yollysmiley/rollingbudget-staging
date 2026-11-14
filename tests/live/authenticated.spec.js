@@ -3,21 +3,20 @@ import { randomUUID } from 'node:crypto';
 import { requiredSettings, logoutAccepted } from './safety.mjs';
 
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
-const YEAR = '2026';
+const YEAR = 2026;
 const RUN = randomUUID();
 let settings;
 let accounts = [];
 
 async function request(path, session, method = 'GET', body) {
-  const headers = {
-    apikey: settings.STAGING_PUBLISHABLE_KEY,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation'
-  };
-  if (session?.access_token) headers.Authorization = 'Bearer ' + session.access_token;
   const response = await fetch(URL + path, {
     method,
-    headers,
+    headers: {
+      apikey: settings.STAGING_PUBLISHABLE_KEY,
+      Authorization: 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(20000)
   });
@@ -33,13 +32,13 @@ async function api(path, session, method = 'GET', body) {
   return result.data;
 }
 
-function documentPath(userId) {
-  return '/rest/v1/budget_data?select=id,user_id,state,updated_at&user_id=eq.' +
-    encodeURIComponent(userId);
+function yearPath(userId) {
+  return '/rest/v1/budget_ui_years?select=user_id,year,budget_data,updated_at&user_id=eq.' +
+    encodeURIComponent(userId) + '&year=eq.' + YEAR;
 }
 
 async function rows(account) {
-  return api(documentPath(account.user.id), account);
+  return api(yearPath(account.user.id), account);
 }
 
 function fixture(label) {
@@ -62,13 +61,14 @@ function fixture(label) {
 }
 
 async function seed(account, label) {
-  const result = await api('/rest/v1/budget_data', account, 'POST', {
+  const result = await api('/rest/v1/budget_ui_years', account, 'POST', {
     user_id: account.user.id,
-    state: { [YEAR]: fixture(label) },
+    year: YEAR,
+    budget_data: fixture(label),
     updated_at: new Date().toISOString()
   });
   expect(result[0].user_id).toBe(account.user.id);
-  expect(result[0].state?.[YEAR]?.integrationRun).toBe(RUN);
+  expect(result[0].year).toBe(YEAR);
 }
 
 async function guestPage(context) {
@@ -106,10 +106,10 @@ async function cleanup(account) {
   const existing = await rows(account);
   if (existing.length) {
     const row = existing[0];
-    if (row.state?.[YEAR]?.integrationRun !== RUN) {
-      throw new Error('Refusing to clean a staging budget document not created by this test run');
+    if (row.budget_data?.integrationRun !== RUN) {
+      throw new Error('Refusing to clean a staging budget row not created by this test run');
     }
-    await api(documentPath(account.user.id), account, 'DELETE');
+    await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, account, 'DELETE');
   }
   expect(await rows(account)).toHaveLength(0);
 }
@@ -136,7 +136,7 @@ test.beforeEach(async () => {
   }
   expect(accounts[0].user.id).not.toBe(accounts[1].user.id);
   for (const account of accounts) {
-    expect(await rows(account), 'Dedicated integration account must not have an existing budget document').toHaveLength(0);
+    expect(await rows(account), 'Dedicated test year must be empty; no existing budget will be overwritten').toHaveLength(0);
   }
 });
 
@@ -149,7 +149,7 @@ test.afterEach(async () => {
       if (!logoutAccepted(result.status, result.data)) failed = true;
     } catch { failed = true; }
   }
-  if (failed) throw new Error('Staging cleanup failed; inspect only test-owned budget_data fixtures before rerunning');
+  if (failed) throw new Error('Staging cleanup failed; inspect only the dedicated test-year fixtures before rerunning');
 });
 
 test('authenticated cloud save survives a fresh browser context', async ({ browser, context }) => {
@@ -164,8 +164,8 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   await amount.fill('4321.25');
   await amount.press('Tab');
 
-  await expect.poll(async () => (await rows(account))[0]?.state?.[YEAR]?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
-  await expect.poll(async () => (await rows(account))[0]?.state?.[YEAR]?.months?.[0]?.income?.[0]?.cpm).toBe(4321.25);
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.cpm).toBe(4321.25);
 
   const fresh = await browser.newContext({ locale: 'en-US', trace: 'off' });
   try {
