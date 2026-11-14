@@ -188,6 +188,7 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   await expect(cpm).toHaveCount(1);
   await cpm.fill('4321.25');
   await cpm.press('Tab');
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.cpm)).toBe(4321.25);
 
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.cpm).toBe(4321.25);

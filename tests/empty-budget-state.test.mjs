@@ -18,7 +18,9 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
   assert.ok(html.includes('currentUser?.id || "guest"'));
   assert.ok(!html.includes('localStorage.removeItem('));
   assert.ok(html.includes('localStorage.getItem(storageKey(yr))'));
-  assert.ok(html.includes('localStorage.setItem(storageKey(activeYear)'));
+  assert.ok(html.includes('localStorage.setItem(storageKey(year)'));
+  assert.ok(html.includes('const year = activeYear;'));
+  assert.ok(html.includes('const userId = currentUser?.id || null;'));
 });
 
 test('new UI loads and saves its own cloud records without touching Release 2 data', () => {

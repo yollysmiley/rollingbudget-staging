@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Serialized staging cloud saves per account and year using immutable budget snapshots to prevent earlier edits overwriting later ones. Show an accessible warning when cloud sync fails while preserving local data; added ordering and failure regression tests and strengthened authenticated save assertions.
+
 - Avoid attempting a second logout of a browser-revoked Supabase session in the live authenticated test teardown. Keep owner-verified fixture cleanup, and report the failing teardown phase without exposing tokens or budget data. Added regression coverage.
 
 - Fixed live authenticated browser fixture cleanup after UI logout by signing in again with the dedicated test account, verifying the original owner, deleting only rows marked by the current test run, and signing out the cleanup session. Added regression coverage for identity mismatches.
