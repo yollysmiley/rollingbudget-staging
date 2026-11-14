@@ -53,6 +53,9 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
 });
 
 test('guest storage is namespaced and existing browser keys are not cleared', async ({ page }) => {
+  await page.locator('#newIncName').fill('Stored');
+  await page.locator('#newIncCpm').fill('10');
+  await page.locator('button[onclick="addIncome()"]).click();
   const result = await page.evaluate(() => ({
     keys: Object.keys(localStorage),
     prefix: 'rollingbudget_staging_phiscfwfuzeptetimdbo_guest_budget_'
@@ -86,6 +89,7 @@ test('recurring rule applies to the selected months', async ({ page }) => {
 });
 
 test('year switching and narrow viewport remain usable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#activeYearSelect').selectOption('2027');
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
   const size = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
