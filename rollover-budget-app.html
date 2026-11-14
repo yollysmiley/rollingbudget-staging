@@ -769,6 +769,7 @@
         <input type="text" id="newFixName" placeholder="Fixed bill name" style="flex:1;min-width:130px" />
         <input type="text" id="newFixDue" placeholder="Due (e.g. 5th)" style="width:95px" />
         <input type="number" step="0.01" id="newFixAmt" placeholder="Amount $" style="width:95px" />
+        <label>Account <select id="newFixAccount" data-new-entry-account aria-label="Account for new newFix"></select></label>
         <button class="primary" onclick="addExpense('fixed')">Add</button>
       </div>
     </div>
@@ -794,6 +795,7 @@
         <input type="text" id="newVarName" placeholder="Variable expense" style="flex:1;min-width:130px" />
         <input type="text" id="newVarDue" placeholder="Due" style="width:95px" />
         <input type="number" step="0.01" id="newVarAmt" placeholder="Amount $" style="width:95px" />
+        <label>Account <select id="newVarAccount" data-new-entry-account aria-label="Account for new newVar"></select></label>
         <button class="primary" onclick="addExpense('variable')">Add</button>
       </div>
     </div>
@@ -822,6 +824,7 @@
         <input type="text" id="newLoanDue" placeholder="Due" style="width:65px" />
         <input type="number" step="0.01" id="newLoanBal" placeholder="Balance $" style="width:90px" />
         <input type="number" step="0.01" id="newLoanPay" placeholder="Pay $" style="width:85px" />
+        <label>Account <select id="newLoanAccount" data-new-entry-account aria-label="Account for new newLoan"></select></label>
         <button class="primary" onclick="addLoan()">Add</button>
       </div>
     </div>
@@ -851,6 +854,7 @@
         <input type="number" step="0.01" id="newCcStmt" placeholder="Statement $" style="width:110px" />
         <input type="number" step="0.01" id="newCcApr" placeholder="APR/Min" style="width:95px" />
         <input type="number" step="0.01" id="newCcPay" placeholder="Payment $" style="width:110px" />
+        <label>Account <select id="newCcAccount" data-new-entry-account aria-label="Account for new newCc"></select></label>
         <button class="primary" onclick="addCC()">Add</button>
       </div>
     </div>
@@ -1320,6 +1324,25 @@ function computeRolling(yrKey) {
   return results;
 }
 
+
+function accountOptions(selectedId, unassigned = true) {
+  const blank = unassigned ? '<option value="">Unassigned (included)</option>' : '';
+  return blank + budgetAccounts.map(account => '<option value="' + esc(account.id) + '"' + (account.id === selectedId ? ' selected' : '') + '>' + esc(account.name) + (account.included ? '' : ' (excluded)') + '</option>').join('');
+}
+function accountPicker(type, idx, accountId) {
+  return '<label>Account <select aria-label="Account for ' + esc(type) + ' entry" onchange="editEntryAccount(&quot;' + type + '&quot;,' + idx + ',this.value)">' + accountOptions(accountId) + '</select></label>';
+}
+async function editEntryAccount(type, idx, accountId) {
+  if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
+  const entry = db[activeYear].months[selectedIdx][type]?.[idx];
+  if (!entry) return;
+  entry.accountId = accountId || null;
+  await saveDB(); render();
+}
+function refreshAccountSelectors() {
+  document.querySelectorAll('[data-new-entry-account]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior); });
+  document.querySelectorAll('[data-rec-field="account"]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior, false); });
+}
 function render() {
   const yearData = db[activeYear];
   if (!yearData) return;
@@ -1329,6 +1352,7 @@ function render() {
   const c = computed[selectedIdx];
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade;
+  refreshAccountSelectors();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
   document.getElementById("mobileOverview").innerHTML = `
@@ -1481,6 +1505,7 @@ function render() {
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('fixed', ${idx}, 'due', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
+      <td>${accountPicker("fixed", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('fixed', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1491,6 +1516,7 @@ function render() {
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('variable', ${idx}, 'due', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
+      <td>${accountPicker("variable", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('variable', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1503,6 +1529,7 @@ function render() {
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.balance) || 0}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
       <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
+      <td>${accountPicker("loans", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('loans', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1516,6 +1543,7 @@ function render() {
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.statement) || 0}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
+      <td>${accountPicker("creditCards", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('creditCards', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1550,7 +1578,7 @@ async function addExpense(type) {
   const due = document.getElementById(p + 'Due').value.trim();
   const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx][type].push({ name, due, amount });
+  db[activeYear].months[selectedIdx][type].push({ name, due, amount, accountId: document.getElementById(p + 'Account').value || null });
   document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
   await saveDB(); render();
 }
@@ -1561,7 +1589,7 @@ async function addLoan() {
   const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
   const payment = parseFloat(document.getElementById("newLoanPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment });
+  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment, accountId: document.getElementById('newLoanAccount').value || null });
   ['newLoanName','newLoanDue','newLoanBal','newLoanPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
@@ -1573,7 +1601,7 @@ async function addCC() {
   const apr = parseFloat(document.getElementById("newCcApr").value) || 0;
   const payment = parseFloat(document.getElementById("newCcPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment });
+  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment, accountId: document.getElementById('newCcAccount').value || null });
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
