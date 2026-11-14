@@ -20,7 +20,7 @@ replaceOnce('<title>Multi-Year Rolling Budget & Planning Manager</title>', '<tit
 replaceOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-align:center;background:#fff3cd;color:#332701;border-bottom:2px solid #946200;font-weight:700">STAGING ONLY — isolated from production — legacy budget records are preserved separately and are not imported into this UI — ' + config.projectRef + '</aside>', 'Staging banner');
 
 assert.ok(html.includes('function storageKey(year)'), 'Account-scoped storage is missing');
-assert.ok(html.includes('from("budget_ui_years").select("year,budget_data")'), 'Cloud data loading is missing');
+assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'), 'Cloud data loading is missing');
 assert.ok(html.includes('from("budget_ui_years").upsert('), 'Cloud data saving is missing');
 assert.ok(!html.includes('YOUR_SUPABASE_'), 'Unconfigured Supabase placeholder remains');
 assert.ok(!html.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Unconfigured storage placeholder remains');
