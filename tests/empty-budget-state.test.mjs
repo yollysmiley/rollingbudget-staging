@@ -2,12 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const html = readFileSync(new URL('../rollover-budget-app.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../dist/rollover-budget-app.html', import.meta.url), 'utf8');
 
-test('budget starts empty and clears stored values on load', () => {
-  assert.match(html, /const BASELINE_2026 = \{[\s\S]*recurringRules:\s*\[],/m);
-  assert.doesNotMatch(html, /4015\.79|3498\.73|1050\.86|Yolande Pay|Planet Home Lending/);
-  assert.match(html, /for \(const key of Object\.keys\(localStorage\)\) \{\s*if \(key\.startsWith\("budget_cloud_"\)\)/s);
-  assert.match(html, /recordedLeftover:\s*0/);
-  assert.match(html, /income:\s*\[]/);
+test('staging build uses the redesigned UI and isolated staging project', () => {
+  assert.match(html, /STAGING ONLY/);
+  assert.match(html, /phiscfwfuzeptetimdbo/);
+  assert.match(html, /const STAGING_STORAGE_PREFIX = "rollingbudget_staging_phiscfwfuzeptetimdbo"/);
+  assert.match(html, /const SUPABASE_URL = "https:\\/\\/phiscfwfuzeptetimdbo\\.supabase\\.co"/);
+  assert.match(html, /const BASELINE_2026 = \\{/);
+  assert.doesNotMatch(html, /4015\\.79|3498\\.73|1050\\.86|Yolande Pay|Planet Home Lending/);
+});
+
+test('new UI preserves browser data and uses account-scoped local storage', () => {
+  assert.match(html, /function storageKey\\(year\\)/);
+  assert.match(html, /currentUser\\?\\.id \\|\\| "guest"/);
+  assert.doesNotMatch(html, /localStorage\\.removeItem\\s*\\(/);
+  assert.match(html, /localStorage\\.getItem\\(storageKey\\(yr\\)\\)/);
+  assert.match(html, /localStorage\\.setItem\\(storageKey\\(activeYear\\)/);
+});
+
+test('new UI loads and saves its own cloud records without touching Release 2 data', () => {
+  assert.match(html, /from\\("user_budgets"\\)\\.select\\("year,budget_data"\\)/);
+  assert.match(html, /from\\("user_budgets"\\)\\.upsert\\(/);
+  assert.doesNotMatch(html, /from\\("budget_data"\\)/);
+});
+
+test('user-entered strings are HTML-escaped before entering markup', () => {
+  assert.match(html, /function esc\\(str\\)[\\s\\S]*?replace\\(\/</);
+  assert.match(html, /esc\\(r\\.name\\)/);
+  assert.match(html, /esc\\(r\\.due/);
 });
