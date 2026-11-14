@@ -35,10 +35,10 @@ test('homepage forgot password requests email before navigating to recovery page
   await dialog.locator('#accountEmail').fill('user@example.com');
   await dialog.locator('#accountSubmit').click();
   await expect(dialog.locator('#accountMessage')).toContainText('password reset link will be sent');
-  expect(await page.evaluate(() => window.__resetRequest)).toEqual({
-    email: 'user@example.com',
-    redirectTo: 'http://127.0.0.1:4173/reset-password.html'
-  });
+  const request = await page.evaluate(() => window.__resetRequest);
+  expect(request.email).toBe('user@example.com');
+  expect(new URL(request.redirectTo).pathname).toBe('/reset-password.html');
+  expect(new URL(request.redirectTo).origin).toBe(new URL(page.url()).origin);
   await expect(page).toHaveURL('/');
   await dialog.locator('#accountBack').click();
   await expect(dialog.locator('#accountPasswordField')).toBeVisible();
