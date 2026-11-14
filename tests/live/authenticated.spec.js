@@ -160,9 +160,10 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   const name = page.locator('#incomeBody input:not([type])').first();
   await name.fill('UI-SAVED');
   await name.press('Tab');
-  const amount = page.locator('#incomeBody input[type="number"]').first();
-  await amount.fill('4321.25');
-  await amount.press('Tab');
+  const cpm = page.locator("#incomeBody input[onchange*=\"'cpm'\"]");
+  await expect(cpm).toHaveCount(1);
+  await cpm.fill('4321.25');
+  await cpm.press('Tab');
 
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.cpm).toBe(4321.25);
@@ -170,7 +171,7 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   const fresh = await browser.newContext({ locale: 'en-US', trace: 'off' });
   try {
     const restored = await open(fresh, account, 'UI-SAVED');
-    await expect(restored.locator('#incomeBody input[type="number"]').first()).toHaveValue('4321.25');
+    await expect(restored.locator("#incomeBody input[onchange*=\"'cpm'\"]")).toHaveValue('4321.25');
     await expect(restored.locator('#incTotalBadge')).toHaveText('$4,321.25');
   } finally {
     await fresh.close();
@@ -199,7 +200,10 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   await page.locator('#authBtn').click();
   await expect.poll(() => page.evaluate(() => currentUser === null)).toBe(true);
   await expect(page.locator('#authBtn')).toHaveText('Sign In');
-  await expect(page.locator('#incomeBody input')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    db['2026']?.months?.[0]?.income?.some(item => item.name === 'LOGOUT-A') ?? false
+  )).toBe(false);
+  await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
 
   await switchTo(page, b, 'LOGOUT-B');
   await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
