@@ -602,6 +602,15 @@
   .desktop-settings-panel[hidden] { display:none !important; }
   .desktop-settings-card { padding:22px; margin:16px 0; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
   .desktop-settings-card h3 { margin:0 0 12px; }
+  .account-manager-list { display:grid; gap:10px; margin:14px 0; }
+  .account-manager-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+  .account-manager-row strong { overflow-wrap:anywhere; }
+  .account-manager-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .account-manager-actions button { min-height:40px; }
+  .account-manager-form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px; }
+  .account-manager-form input { min-height:42px; flex:1; min-width:160px; padding:9px; border:1px solid var(--border); border-radius:9px; }
+  .account-manager-status { color:var(--muted); font-size:.85rem; margin-top:10px; }
+  @media(max-width:768px) { .account-manager-row { flex-direction:column; align-items:stretch; } .account-manager-actions button { flex:1; } }
   .desktop-settings-card .controls { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
   body.desktop-settings-open > .container { display:none; }
   @media (max-width:768px) { .desktop-settings-panel { display:none !important; } }
@@ -657,7 +666,8 @@
   <h2>Settings</h2>
   <div class="desktop-settings-card">
     <h3>Accounts</h3>
-    <p>Account management will be available when the Dynamic Account Management feature is implemented.</p>
+    <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
+    <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
   </div>
   <div class="desktop-settings-card">
     <h3>Year Management, Auto-Cascade &amp; Recurring Rules</h3>
@@ -695,11 +705,19 @@
   <section id="mobileSettingsPanel" class="mobile-settings-panel" aria-label="Settings">
     <h2>Settings</h2>
     <p style="color:var(--muted);font-size:.86rem;margin:8px 0 16px">Manage your Rolling Budget account and application preferences.</p>
+    <div class="card" style="padding:16px;box-shadow:none;margin-bottom:12px">
+      <h3 style="font-size:.95rem;margin-bottom:8px">Accounts Manager</h3>
+      <div id="mobileSettingsAccounts" class="account-manager"></div>
+    </div>
     <div class="card" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Account & cloud sync</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
       <button type="button" class="primary" onclick="handleAuthClick()">Manage Account</button>
     </div>
+  </section>
+  <section class="mobile-settings-panel" id="mobileAccountsManagerPanel" aria-label="Mobile Accounts Manager" style="display:none">
+    <h3>Accounts</h3>
+    <div id="mobileAccountsManager" class="account-manager"></div>
   </section>
   <!-- Main Tables -->
   <div class="mobile-card-tools"><button type="button" id="toggleAllCards" onclick="toggleAllMobileCards()">Collapse all cards</button></div>
@@ -934,6 +952,98 @@ const BASELINE_2026 = {
 let activeYear = "2026";
 let selectedIdx = 0;
 let db = {};
+let budgetAccounts = [];
+let accountService = null;
+let accountsBusy = false;
+function accountStatus(message) {
+  for (const id of ['desktopAccountsStatus', 'mobileAccountsStatus']) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = message;
+  }
+}
+function renderAccounts() {
+  const markup = budgetAccounts.map(account => `
+    <div class="account-manager-row" data-account-id="${esc(account.id)}">
+      <strong>${esc(account.name)}</strong>
+      <div class="account-manager-actions">
+        <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Included</label>
+        <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Rename</button>
+        <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
+      </div>
+    </div>`).join('');
+  for (const [target, suffix] of [['desktopAccountsManager','desktop'], ['mobileSettingsAccounts','mobile']]) {
+    const el = document.getElementById(target);
+    if (!el) continue;
+    el.innerHTML = `<div class="account-manager-list">${markup || '<p>No accounts yet.</p>'}</div>
+      <form class="account-manager-form" data-account-form>
+        <input type="text" name="accountName" maxlength="120" placeholder="New account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}>
+        <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
+      </form>
+      <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite"></p>`;
+  }
+}
+async function initializeAccounts() {
+  try {
+    accountService = await import('./scripts/account-storage.mjs');
+    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    renderAccounts();
+  } catch (error) {
+    console.error('Accounts could not be loaded:', error);
+    renderAccounts();
+    accountStatus('Could not load accounts. Please retry by refreshing the page.');
+  }
+}
+async function runAccountAction(action, id, value) {
+  if (accountsBusy || !accountService || !currentUser) return;
+  accountsBusy = true;
+  renderAccounts();
+  try {
+    if (action === 'create') {
+      const name = String(value || '').trim();
+      if (!name) throw new Error('Enter an account name');
+      const accountId = 'account-' + crypto.randomUUID();
+      await accountService.createAccount(supabaseClient, currentUser.id, budgetAccounts, name, accountId);
+    } else if (action === 'rename') {
+      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { name: value });
+    } else if (action === 'included') {
+      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { included: value });
+    } else if (action === 'remove') {
+      await accountService.deleteAccount(supabaseClient, currentUser.id, budgetAccounts, id, db);
+    }
+    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    accountStatus('Account changes saved.');
+  } catch (error) {
+    console.error('Account change failed:', error);
+    accountStatus(error.message || 'Account changes could not be saved.');
+  } finally {
+    accountsBusy = false;
+    renderAccounts();
+  }
+}
+document.addEventListener('submit', event => {
+  const form = event.target.closest('[data-account-form]');
+  if (!form) return;
+  event.preventDefault();
+  const name = form.elements.accountName.value;
+  void runAccountAction('create', null, name);
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-account-action]');
+  if (!button || accountsBusy) return;
+  const id = button.dataset.accountId;
+  const account = budgetAccounts.find(item => item.id === id);
+  if (!account) return;
+  if (button.dataset.accountAction === 'rename') {
+    const name = prompt('Account name:', account.name);
+    if (name !== null) void runAccountAction('rename', id, name.trim());
+  } else if (button.dataset.accountAction === 'remove') {
+    if (confirm('Remove ' + account.name + '? This cannot be undone.')) void runAccountAction('remove', id);
+  }
+});
+document.addEventListener('change', event => {
+  const input = event.target.closest('[data-account-action="included"]');
+  if (input) void runAccountAction('included', input.dataset.accountId, input.checked);
+});
 
 function storageKey(year) {
   return STAGING_STORAGE_PREFIX + "_" + (currentUser?.id || "guest") + "_budget_" + year;
@@ -982,6 +1092,7 @@ async function initApp() {
   document.getElementById("mobileAuthBtn").textContent = "Sign Out";
   document.getElementById("userStatusSub").textContent = "Logged in as " + currentUser.email;
   await loadAllYears();
+  await initializeAccounts();
   render();
 }
 function parseLocalBudgetRecord(raw) {
