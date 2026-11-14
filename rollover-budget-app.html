@@ -555,13 +555,14 @@
 // --- CLOUD CONFIGURATION ---
 // Replace with your backend URL and Anon Key when deploying
 const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 let supabaseClient = null;
 let currentUser = null;
 let isSignUpMode = false;
 
 if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { storageKey: STAGING_STORAGE_PREFIX + "_auth" } });
 }
 
 const BASELINE_2026 = {
@@ -587,70 +588,66 @@ let activeYear = "2026";
 let selectedIdx = 0;
 let db = {};
 
+function storageKey(year) {
+  return STAGING_STORAGE_PREFIX + "_" + (currentUser?.id || "guest") + "_budget_" + year;
+}
+function validYearData(value) {
+  return value && typeof value === "object" && Array.isArray(value.months) && value.months.length === 12 &&
+    value.months.every(m => m && typeof m === "object" && ["income", "fixed", "variable", "creditCards", "loans"].every(k => Array.isArray(m[k])));
+}
 async function initApp() {
   if (supabaseClient) {
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (session) {
-      currentUser = session.user;
-      document.getElementById("authBtn").textContent = "Sign Out";
-      document.getElementById("userStatusSub").textContent = `Logged in as ${currentUser.email}`;
-    }
+    currentUser = session?.user || null;
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUser = session?.user || null;
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
-      document.getElementById("userStatusSub").textContent = currentUser ? `Logged in as ${currentUser.email}` : "Multi-Year & Mid-Month Financial Tracker";
+      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
       await loadAllYears();
       render();
     });
   }
+  document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
+  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
   await loadAllYears();
   render();
 }
-
 async function loadAllYears() {
-  for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("budget_cloud_")) {
-      localStorage.removeItem(key);
-    }
-  }
-
   const all = {};
   for (const yr of ["2026", "2027"]) {
-    if (yr === "2026") {
-      all[yr] = JSON.parse(JSON.stringify(BASELINE_2026));
-    } else {
-      const base2026 = JSON.parse(JSON.stringify(BASELINE_2026));
-      all[yr] = {
-        autoCascade: true,
-        recurringRules: [],
-        months: base2026.months.map((m, i) => ({
-          ...m,
-          recordedLeftover: 0,
-          income: [], fixed: [], variable: [], creditCards: [], loans: []
-        }))
-      };
-    }
+    all[yr] = JSON.parse(JSON.stringify(BASELINE_2026));
+    try {
+      const saved = localStorage.getItem(storageKey(yr));
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (validYearData(parsed)) all[yr] = parsed;
+        else console.warn("Ignored invalid local budget data for", yr, "; original storage was preserved.");
+      }
+    } catch (error) { console.warn("Could not read local budget data for", yr, "; original storage was preserved.", error); }
+  }
+  if (supabaseClient && currentUser) {
+    try {
+      const { data, error } = await supabaseClient.from("user_budgets").select("year,budget_data").eq("user_id", currentUser.id);
+      if (error) throw error;
+      for (const row of data || []) {
+        const year = String(row.year);
+        if (validYearData(row.budget_data) && (!Object.hasOwn(all, year) || localStorage.getItem(storageKey(year)) === null)) all[year] = row.budget_data;
+      }
+    } catch (error) { console.error("Cloud load error; local data was retained:", error); }
   }
   db = all;
 }
-
 async function saveDB() {
   const currentYearData = db[activeYear];
-  localStorage.setItem("budget_cloud_" + activeYear, JSON.stringify(currentYearData));
-
+  try { localStorage.setItem(storageKey(activeYear), JSON.stringify(currentYearData)); }
+  catch (error) { console.error("Local save error:", error); alert("Could not save this budget in browser storage. Your changes may not persist."); return; }
   if (supabaseClient && currentUser) {
     try {
-      await supabaseClient.from('user_budgets').upsert({
-        user_id: currentUser.id,
-        year: activeYear,
-        budget_data: currentYearData
-      }, { onConflict: 'user_id,year' });
-    } catch(e) {
-      console.error("Cloud sync error:", e);
-    }
+      const { error } = await supabaseClient.from("user_budgets").upsert({ user_id: currentUser.id, year: activeYear, budget_data: currentYearData }, { onConflict: "user_id,year" });
+      if (error) throw error;
+    } catch(error) { console.error("Cloud sync error; local copy was retained:", error); }
   }
 }
-
 function switchYear(yr) {
   activeYear = yr;
   selectedIdx = 0;
@@ -664,6 +661,7 @@ function switchYear(yr) {
 async function createNewYear() {
   const newYr = prompt("Enter new year to plan (e.g. 2028):", String(parseInt(activeYear) + 1));
   if (!newYr) return;
+  if (!/^\d{4}$/.test(newYr)) { alert("Enter a four-digit year."); return; }
   
   const computed = computeRolling(activeYear);
   const decEnding = computed[11].endingRollover;
@@ -909,7 +907,7 @@ function render() {
   `).join("");
 }
 
-function esc(str) { return String(str).replace(/"/g, "&quot;"); }
+function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
 function selectMonth(idx) { selectedIdx = idx; render(); }
 
 document.getElementById("autoRollToggle").addEventListener("change", async (e) => {
@@ -999,7 +997,7 @@ async function submitAuth() {
   } else {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) alert(error.message);
-    else { closeAuthModal(); initApp(); }
+    else { closeAuthModal(); }
   }
 }
 
@@ -1031,7 +1029,7 @@ function renderRulesList() {
   container.innerHTML = rules.map((r, idx) => `
     <div style="display:flex; justify-content:space-between; align-items:center; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px;">
       <div>
-        <strong>${r.name}</strong> (${r.cat.toUpperCase()}) — <strong>${fmt(r.amount)}</strong> (Due: ${r.due || '1st'})
+        <strong>${esc(r.name)}</strong> (${esc(r.cat).toUpperCase()}) — <strong>${fmt(r.amount)}</strong> (Due: ${esc(r.due || "1st")})
       </div>
       <button class="danger" style="padding:3px 8px; font-size:0.75rem;" onclick="deleteRecurringRule(${idx})">Delete</button>
     </div>
