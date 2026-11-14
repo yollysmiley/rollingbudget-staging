@@ -1,7 +1,9 @@
+import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await mockSignedInBudget(page);
   await page.route('https://**/rest/v1/**', route => route.abort());
   await page.route('https://**/auth/v1/**', route => route.abort());
   await page.addInitScript(() => {
@@ -15,7 +17,8 @@ test.beforeEach(async ({ page }) => {
       sessionStorage.setItem('__budget_test_storage_cleaned', '1');
     }
   });
-  await page.goto('/rollover-budget-app.html');
+  await page.goto('/app/');
+  await expectAuthenticatedBudget(page);
   await expect(page).toHaveTitle(/STAGING/);
   await expect(page.locator('body')).toContainText('STAGING ONLY');
   // An empty tbody has no visible box. Assert the containing desktop card instead.
@@ -61,16 +64,13 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
   await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
 });
 
-test('guest storage is namespaced and existing browser keys are not cleared', async ({ page }) => {
+test('authenticated storage is owner-scoped and existing browser keys are preserved', async ({ page }) => {
   await page.locator('#newIncName').fill('Stored');
   await page.locator('#newIncCpm').fill('10');
   await page.locator('button[onclick="addIncome()"]').click();
-  const result = await page.evaluate(() => ({
-    keys: Object.keys(localStorage),
-    prefix: 'rollingbudget_staging_phiscfwfuzeptetimdbo_guest_budget_'
-  }));
-  expect(result.keys.some(key => key.startsWith(result.prefix))).toBe(true);
-  expect(result.keys.some(key => key.startsWith('budget_cloud_'))).toBe(false);
+  const result = await page.evaluate(() => Object.keys(localStorage));
+  expect(result.some(key => key.startsWith('rollingbudget_staging_phiscfwfuzeptetimdbo_browser-test-owner_budget_'))).toBe(true);
+  expect(result.some(key => key.includes('_guest_budget_'))).toBe(false);
 });
 
 test('user-entered markup is rendered as text, not executable HTML', async ({ page }) => {
@@ -169,13 +169,13 @@ test('timestamp comparison selects the newest budget copy', async ({ page }) => 
 test('desktop header uses the approved email branding', async ({ page }) => {
   const brand = page.locator('header .title-group');
   await expect(brand.locator('h1')).toHaveText('Rolling Budget');
-  await expect(brand.locator('p')).toHaveText('Plan smarter. Grow stronger.');
+  await expect(brand.locator('p')).toHaveText('Logged in as browser-test@example.invalid');
   await expect(brand.locator('.brand-bar')).toHaveCount(3);
   await expect(brand.locator('.brand-bar-short')).toHaveCSS('background-color', 'rgb(139, 124, 255)');
   await expect(brand.locator('.brand-bar-tall')).toHaveCSS('background-color', 'rgb(177, 166, 255)');
   await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(23, 21, 43)');
   await expect(page.locator('#authBtn')).toBeVisible();
-  await expect(page.locator('#authBtn')).toHaveText('Sign In');
+  await expect(page.locator('#authBtn')).toHaveText('Sign Out');
 });
 
 
@@ -188,20 +188,18 @@ test('brand guidelines document the approved logo, palette, and typography', asy
   expect(guidelines).toContain('"Inter"');
 });
 
-test('desktop authentication modal uses the official Rolling Budget mark and clear account copy', async ({ page }) => {
+test('desktop sign-out revokes access and returns to public homepage', async ({ page }) => {
+  page.once('dialog', dialog => dialog.accept());
   await page.locator('#authBtn').click();
-  const modal = page.locator('#authModal');
-  await expect(modal).toHaveClass(/open/);
-  await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
-  await expect(modal.locator('#authModalTitle')).toHaveText('Welcome back!');
-  await expect(modal.locator('#authModalDescription')).toContainText('access your budget across devices');
-  await modal.locator('#authModeLink').click();
-  await expect(modal.locator('#authModalTitle')).toHaveText('Create your account');
-  await expect(modal.locator('#authSubmitBtn')).toHaveText('Create Account');
-  await modal.locator('#authModeLink').click();
-  await modal.locator('#authResetLink').click();
-  await expect(modal.locator('#authModalTitle')).toHaveText('Reset your password');
-  await modal.locator('#authSubmitBtn').click();
-  await expect(modal.locator('#authMessage')).toContainText('Enter your email address');
-  await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+  await expect(page.locator('#incomeBody')).toHaveCount(0);
+});
+
+test('cancelling desktop sign-out keeps the authenticated budget visible', async ({ page }) => {
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#authBtn').click();
+  await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
+  await expect(page.locator('#authBtn')).toHaveText('Sign Out');
+  await expect(page.locator('#incTotalBadge')).toBeVisible();
 });
