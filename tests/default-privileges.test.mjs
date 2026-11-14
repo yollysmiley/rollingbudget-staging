@@ -17,11 +17,11 @@ test('future public tables, sequences, and functions are not granted to client r
 });
 
 test('new public functions do not inherit PostgreSQL PUBLIC execute access', () => {
-  assert.match(migration, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres\\s+REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;/i);
+  assert.match(migration, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres\s+REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;/i);
 });
 
 test('migration does not modify existing budget rows, tables, or ownership policies', () => {
-  assert.doesNotMatch(migration, /\\b(?:DELETE FROM|TRUNCATE|DROP TABLE|ALTER TABLE|CREATE POLICY)\\b/i);
+  assert.doesNotMatch(migration, /\b(?:DELETE FROM|TRUNCATE|DROP TABLE|ALTER TABLE|CREATE POLICY)\b/i);
   assert.match(migration, /BEGIN;/);
   assert.match(migration, /COMMIT;/);
 });
