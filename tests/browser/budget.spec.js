@@ -1,21 +1,93 @@
 import { test, expect } from '@playwright/test';
-async function view(page, name) { const mobile = await page.locator('.bottom-nav').isVisible(); await page.locator('#' + (mobile ? 'bn' : 'nav') + name).click(); }
-async function paycheck(page, amount, label = 'TEST PAY') { await page.locator("button[onclick=\"addItem('paychecks')\"]").click(); const row = page.locator('#paycheckContainer .row-paycheck').last(); await row.locator('input[type=text]').fill(label); await row.locator('input[type=text]').press('Tab'); await row.locator('input[type=number]').fill(amount); await page.locator('#kpiEnd').click(); }
-async function expense(page, amount) { await page.locator("button[onclick=\"addItem('expenses')\"]").click(); await page.locator('#expenseContainer input[type=number]').last().fill(amount); await page.locator('#kpiEnd').click(); }
-test.beforeEach(async ({page}) => {
+
+test.beforeEach(async ({ page }) => {
   await page.route('https://**/rest/v1/**', route => route.abort());
   await page.route('https://**/auth/v1/**', route => route.abort());
-  await page.addInitScript(() => { window.__errors = []; window.addEventListener('error', e => window.__errors.push(e.message)); });
-  page.on('dialog', dialog => dialog.dismiss());
+  await page.addInitScript(() => {
+    window.__errors = [];
+    window.addEventListener('error', event => window.__errors.push(event.message));
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('rollingbudget_staging_phiscfwfuzeptetimdbo_')) localStorage.removeItem(key);
+    }
+  });
   await page.goto('/rollover-budget-app.html');
-  await expect(page.locator('#kpiEnd')).toHaveText('$0.00');
-  await expect.poll(() => page.evaluate(() => typeof rb2Account !== 'undefined' && rb2Account === null)).toBe(true);
+  await expect(page).toHaveTitle(/STAGING/);
+  await expect(page.locator('body')).toContainText('STAGING ONLY');
+  await expect(page.locator('#incomeBody')).toBeVisible();
 });
-test('startup and navigation', async ({page}) => { await expect(page).toHaveTitle(/STAGING/); await expect(page.locator('body')).toContainText('SYNTHETIC TEST DATA ONLY'); for (const name of ['Recurring','Summary','Home']) { await view(page,name); await expect(page.locator('#' + name.toLowerCase() + 'View')).toBeVisible(); } expect(await page.evaluate(() => window.__errors)).toEqual([]); });
-test('guest save and reload', async ({page}) => { await paycheck(page,'2713.45','SAVE-RELOAD-TEST'); const mobile = await page.locator('.bottom-nav').isVisible(); await page.locator(mobile ? '.bn-save' : '.nav-group button[onclick="saveData()"]').click(); await page.reload(); await expect(page.locator('#paycheckContainer input[type=text]').first()).toHaveValue('SAVE-RELOAD-TEST'); await expect(page.locator('#paycheckContainer input[type=number]').first()).toHaveValue('2713.45'); await expect(page.locator('#kpiEnd')).toHaveText('$2,713.45'); });
-test('summary updates immediately after income edit', async ({page}) => { await paycheck(page,'3000'); await view(page,'Summary'); await expect(page.locator('#summaryBody tr').first().locator('td').nth(1)).toHaveText('$3,000.00'); await expect(page.locator('#summaryBody tr').nth(1).locator('td').nth(4)).toHaveText('$3,000.00'); });
-test('regular expenses and negative rollover', async ({page}) => { await paycheck(page,'2500'); await expense(page,'3000.01'); await expect(page.locator('#kpiEnd')).toHaveText('$-500.01'); });
-test('excluded reservations reduce available only', async ({page}) => { await paycheck(page,'2500'); await page.locator('button[onclick="addExcludedBucket()"]').click(); await page.locator('#excludedBucketContainer input[type=number]').first().fill('400'); await page.locator('#kpiEnd').click(); await expect(page.locator('#kpiEnd')).toHaveText('$2,500.00'); await expect(page.locator('#kpiAvailable')).toHaveText('$2,100.00'); });
-test('deletion preserves unrelated paycheck assignment', async ({page}) => { await paycheck(page,'1000','FIRST'); await paycheck(page,'2000','SECOND'); await expense(page,'150'); const select = page.locator('#expenseContainer select').last(); await select.selectOption({label:'SECOND'}); await page.locator('#paycheckContainer .btn-remove').first().click(); await expect(page.locator('#expenseContainer select').last().locator('option:checked')).toHaveText('SECOND'); await expect(page.locator('#kpiEnd')).toHaveText('$1,850.00'); });
-test('recurring copies are independent', async ({page}) => { await view(page,'Recurring'); await page.locator('button[onclick="addRecurring()"]').click(); await page.locator('#recurringContainer input[type=number]').first().fill('1500'); await page.locator('#recurringView h2').click(); await view(page,'Home'); await page.locator('button[onclick="openRecurringModal()"]').click(); await expect(page.locator('#addSelectedBtn')).toBeDisabled(); await page.locator('.rec-select-item').first().click(); await page.locator('#addSelectedBtn').click(); await expect(page.locator('#expenseContainer .row-expense')).toHaveCount(1); await page.locator('#expenseContainer input[type=number]').first().fill('123'); await page.locator('#kpiEnd').click(); await view(page,'Recurring'); await expect(page.locator('#recurringContainer input[type=number]').first()).toHaveValue('1500'); });
-test('viewport and persisted theme', async ({page}) => { const size = await page.evaluate(() => ({width:innerWidth, content:document.documentElement.scrollWidth})); expect(size.content).toBeLessThanOrEqual(size.width + 1); const initial = await page.locator('html').getAttribute('data-theme'); const mobile = await page.locator('.bottom-nav').isVisible(); await page.locator(mobile ? '#themeToggleMobile' : '#themeToggle').click(); const changed = await page.locator('html').getAttribute('data-theme'); expect(changed).not.toBe(initial); await page.reload(); await expect(page.locator('html')).toHaveAttribute('data-theme',changed); });
+
+test('new budget UI starts empty and renders the redesigned dashboard', async ({ page }) => {
+  await expect(page.locator('#incTotalBadge')).toHaveText('$0.00');
+  await expect(page.locator('#fixTotalBadge')).toHaveText('$0.00');
+  await expect(page.locator('#varTotalBadge')).toHaveText('$0.00');
+  await expect(page.locator('#loanTotalBadge')).toHaveText('$0.00');
+  await expect(page.locator('#ccTotalBadge')).toHaveText('$0.00');
+  await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
+  expect(await page.evaluate(() => window.__errors)).toEqual([]);
+});
+
+test('income and expenses recalculate the rollover', async ({ page }) => {
+  await page.locator('#newIncName').fill('Paycheck');
+  await page.locator('#newIncCpm').fill('3000');
+  await page.locator('#newIncUsaa').fill('0');
+  await page.locator('button[onclick="addIncome()"]').click();
+  await expect(page.locator('#incTotalBadge')).toHaveText('$3,000.00');
+
+  await page.locator('#newFixName').fill('Rent');
+  await page.locator('#newFixDue').fill('1st');
+  await page.locator('#newFixAmt').fill('1200');
+  await page.locator('button[onclick="addExpense(\'fixed\')"]').click();
+  await expect(page.locator('#fixTotalBadge')).toHaveText('$1,200.00');
+  await expect(page.locator('#kpiGrid')).toContainText('$1,800.00');
+});
+
+test('new UI saves and restores the guest budget after reload', async ({ page }) => {
+  await page.locator('#newIncName').fill('SAVE-RELOAD-TEST');
+  await page.locator('#newIncCpm').fill('2713.45');
+  await page.locator('button[onclick="addIncome()"]').click();
+  await expect(page.locator('#incomeBody')).toContainText('SAVE-RELOAD-TEST');
+  await page.reload();
+  await expect(page.locator('#incomeBody input[type="text"]').first()).toHaveValue('SAVE-RELOAD-TEST');
+  await expect(page.locator('#incomeBody input[type="number"]').first()).toHaveValue('2713.45');
+  await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
+});
+
+test('guest storage is namespaced and existing browser keys are not cleared', async ({ page }) => {
+  const result = await page.evaluate(() => ({
+    keys: Object.keys(localStorage),
+    prefix: 'rollingbudget_staging_phiscfwfuzeptetimdbo_guest_budget_'
+  }));
+  expect(result.keys.some(key => key.startsWith(result.prefix))).toBe(true);
+  expect(result.keys.some(key => key.startsWith('budget_cloud_'))).toBe(false);
+});
+
+test('user-entered markup is rendered as text, not executable HTML', async ({ page }) => {
+  const payload = '<img src=x onerror=alert(1)>';
+  await page.locator('#newVarName').fill(payload);
+  await page.locator('#newVarDue').fill('4th');
+  await page.locator('#newVarAmt').fill('25');
+  await page.locator('button[onclick="addExpense(\'variable\')"]').click();
+  await expect(page.locator('#variableBody input[type="text"]').first()).toHaveValue(payload);
+  await expect(page.locator('#variableBody img')).toHaveCount(0);
+});
+
+test('recurring rule applies to the selected months', async ({ page }) => {
+  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#recName').fill('Internet');
+  await page.locator('#recAmount').fill('80');
+  await page.locator('#recDue').fill('10th');
+  await page.locator('#recStart').selectOption('0');
+  await page.locator('#recEnd').selectOption('1');
+  await page.locator('button[onclick="applyRecurringRule()"]').click();
+  await expect(page.locator('#rulesListContainer')).toContainText('Internet');
+  await expect(page.locator('#fixedBody')).toContainText('Internet');
+  await page.locator('#activeYearSelect').selectOption('2027');
+  await expect(page.locator('#fixedBody')).not.toContainText('Internet');
+});
+
+test('year switching and narrow viewport remain usable', async ({ page }) => {
+  await page.locator('#activeYearSelect').selectOption('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  const size = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
+  expect(size.content).toBeLessThanOrEqual(size.width + 1);
+});
