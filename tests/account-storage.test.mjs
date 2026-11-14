@@ -60,7 +60,7 @@ test('account update rejects unknown accounts before contacting database', async
 
 test('account removal blocks referenced entries and recurring rules', async () => {
   const { deleteAccount } = await import('../scripts/account-storage.mjs');
-  const accounts = [{ id: 'cpm', name: 'CPM Federal', included: true }];
+  const accounts = [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'savings', name: 'Savings', included: true }];
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [{ fixed: [{ accountId: 'cpm' }] }] } }), /Reassign/);
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [], recurringRules: [{ acct: 'cpm' }] } }), /Reassign/);
 });
