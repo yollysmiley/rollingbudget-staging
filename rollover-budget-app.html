@@ -286,6 +286,68 @@
     .form-group label { display: block; font-size: 0.74rem; color: var(--muted); margin-bottom: 5px; font-weight: 700; text-transform: uppercase; }
     .form-group input, .form-group select { width: 100%; background: #faf9fe; border: 1px solid var(--border); color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 0.85rem; font-family: inherit; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+    /* Dedicated mobile presentation. Desktop keeps the existing dashboard layout. */
+    .mobile-card-tools { display: none; }
+    .mobile-card-toggle { display: none; }
+    @media (min-width: 1025px) {
+      .main-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    }
+    @media (max-width: 768px) {
+      body { padding-bottom: 28px; }
+      header { padding: 12px 14px; }
+      .header-top { align-items: flex-start; gap: 12px; }
+      .title-group { gap: 9px; }
+      .brand-icon { width: 34px; height: 34px; }
+      .title-group h1 { font-size: 0.98rem; }
+      .title-group p { font-size: 0.7rem; }
+      .controls { width: 100%; gap: 7px; }
+      .controls > * { flex: 0 0 auto; }
+      .container { margin: 14px auto; padding: 0 12px; }
+      .rolling-strip {
+        display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory;
+        padding: 2px 2px 10px; margin-right: -2px;
+      }
+      .month-pill { min-width: 104px; scroll-snap-align: start; }
+      .mid-month-banner { padding: 13px; gap: 12px; }
+      .mm-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; }
+      .mm-stat-item strong { font-size: 0.94rem; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .kpi-card { padding: 12px; border-radius: 12px; min-width: 0; }
+      .kpi-label { font-size: 0.65rem; }
+      .kpi-val { font-size: 1.18rem; overflow-wrap: anywhere; }
+      .kpi-foot { font-size: 0.68rem; }
+      .flow-bar-wrap { padding: 13px; }
+      .legend { gap: 9px 14px; font-size: 0.7rem; }
+      .main-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .card, .card.full { grid-column: 1; border-radius: 13px; }
+      .card-header { padding: 13px 14px; gap: 8px; }
+      .card-header h2 { font-size: 0.88rem; flex: 1 1 auto; }
+      .card-header > span { font-size: 0.68rem !important; }
+      .mobile-card-toggle {
+        display: inline-flex; align-items: center; justify-content: center;
+        flex: 0 0 auto; min-width: 76px; padding: 7px 9px;
+        font-size: 0.72rem; color: var(--accent); background: var(--accent-soft);
+        border: 1px solid #ddd6fe; border-radius: 8px; box-shadow: none;
+      }
+      .mobile-card-tools {
+        display: flex; justify-content: flex-end; margin: 0 0 10px;
+      }
+      .mobile-card-tools button { font-size: 0.75rem; padding: 7px 11px; }
+      .card.mobile-collapsed > :not(.card-header) { display: none; }
+      .card table { font-size: 0.75rem; }
+      .card th, .card td { padding: 8px 7px; }
+      .inline-input { font-size: 0.76rem; padding: 4px 3px; }
+      .inline-input.num { width: 76px; }
+      .add-row { padding: 10px; gap: 6px; }
+      .add-row input, .add-row select { min-width: 0 !important; max-width: 100%; }
+      .add-row button { padding: 7px 10px; }
+    }
+    @media (min-width: 769px) {
+      .mobile-card-tools, .mobile-card-toggle { display: none !important; }
+      .card.mobile-collapsed > :not(.card-header) { display: revert; }
+    }
+
   </style>
 </head>
 <body>
@@ -332,13 +394,14 @@
   <div class="flow-bar-wrap" id="flowBarWrap"></div>
 
   <!-- Main Tables -->
+  <div class="mobile-card-tools"><button type="button" id="toggleAllCards" onclick="toggleAllMobileCards()">Collapse all cards</button></div>
   <div class="main-grid">
     <!-- INCOME -->
     <div class="card">
       <div class="card-header">
         <h2>Income & Starting Rollover <span class="badge" id="incTotalBadge">$0.00</span></h2>
         <span style="font-size:0.76rem;color:var(--muted);font-weight:600" id="acctSplitLabel"></span>
-      </div>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
       <table>
         <thead>
           <tr>
@@ -364,7 +427,7 @@
       <div class="card-header">
         <h2>Fixed Expenses <span class="badge" id="fixTotalBadge">$0.00</span></h2>
         <span style="font-size:0.76rem;color:var(--muted)">Recurring bills & mortgages</span>
-      </div>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
       <table>
         <thead>
           <tr>
@@ -389,7 +452,7 @@
       <div class="card-header">
         <h2>Variable & One-Time Expenses <span class="badge" id="varTotalBadge">$0.00</span></h2>
         <span style="font-size:0.76rem;color:var(--muted)">Utilities & discretionary</span>
-      </div>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
       <table>
         <thead>
           <tr>
@@ -414,7 +477,7 @@
       <div class="card-header">
         <h2>Installment Loans <span class="badge" id="loanTotalBadge">$0.00</span></h2>
         <span style="font-size:0.76rem;color:var(--muted)">Payments & balances</span>
-      </div>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
       <table>
         <thead>
           <tr>
@@ -442,7 +505,7 @@
       <div class="card-header">
         <h2>Credit Cards <span class="badge" id="ccTotalBadge">$0.00</span></h2>
         <span style="font-size:0.76rem;color:var(--muted);font-weight:600" id="ccStmtSummary"></span>
-      </div>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
       <table>
         <thead>
           <tr>
@@ -1121,6 +1184,36 @@ async function deleteRecurringRule(idx) {
   db[activeYear].recurringRules.splice(idx, 1);
   renderRulesList();
   await saveDB(); render();
+}
+
+
+function toggleMobileCard(button) {
+  const card = button.closest(".card");
+  if (!card) return;
+  const collapsed = card.classList.toggle("mobile-collapsed");
+  button.textContent = collapsed ? "Expand" : "Collapse";
+  button.setAttribute("aria-expanded", String(!collapsed));
+  updateMobileCardToggleAllLabel();
+}
+function toggleAllMobileCards() {
+  const cards = Array.from(document.querySelectorAll(".main-grid .card"));
+  const shouldCollapse = cards.some(card => !card.classList.contains("mobile-collapsed"));
+  cards.forEach(card => {
+    card.classList.toggle("mobile-collapsed", shouldCollapse);
+    const button = card.querySelector(".mobile-card-toggle");
+    if (button) {
+      button.textContent = shouldCollapse ? "Expand" : "Collapse";
+      button.setAttribute("aria-expanded", String(!shouldCollapse));
+    }
+  });
+  updateMobileCardToggleAllLabel();
+}
+function updateMobileCardToggleAllLabel() {
+  const button = document.getElementById("toggleAllCards");
+  if (!button) return;
+  const cards = Array.from(document.querySelectorAll(".main-grid .card"));
+  button.textContent = cards.length && cards.every(card => card.classList.contains("mobile-collapsed"))
+    ? "Expand all cards" : "Collapse all cards";
 }
 
 initApp();
