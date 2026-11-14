@@ -21,3 +21,7 @@ export async function verifiedCleanupSession(account, signIn) {
   }
   return session;
 }
+
+export function shouldLogoutOriginalSession(uiLoggedOutOwners, userId) {
+  return !uiLoggedOutOwners.has(userId);
+}
