@@ -158,3 +158,16 @@ test('timestamp comparison selects the newest budget copy', async ({ page }) => 
     cloudOnly: 'cloud'
   });
 });
+
+
+test('desktop header uses the approved email branding', async ({ page }) => {
+  const brand = page.locator('header .title-group');
+  await expect(brand.locator('h1')).toHaveText('Rolling Budget');
+  await expect(brand.locator('p')).toHaveText('Plan smarter. Grow stronger.');
+  await expect(brand.locator('.brand-bar')).toHaveCount(3);
+  await expect(brand.locator('.brand-bar-short')).toHaveCSS('background-color', 'rgb(139, 124, 255)');
+  await expect(brand.locator('.brand-bar-tall')).toHaveCSS('background-color', 'rgb(177, 166, 255)');
+  await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(23, 21, 43)');
+  await expect(page.locator('#authBtn')).toBeVisible();
+  await expect(page.locator('#authBtn')).toHaveText('Sign In');
+});
