@@ -232,7 +232,23 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   const page = await open(context, a, 'LOGOUT-A');
 
   await page.locator('#authBtn').click();
-  await expect(page).toHaveURL(/\\/$/);
+  await expect(page).toHaveURL(new RegExp('/
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+  await expect(page.locator('#incomeBody')).toHaveCount(0);
+  uiLoggedOutOwners.add(a.user.id);
+
+  // A signed-out visitor cannot reopen the protected budget.
+  await page.goto('/app/');
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+  await expect(page.locator('#incomeBody')).toHaveCount(0);
+
+  // Authenticate as the other account in the same browser without carrying A's budget.
+  await establishSession(page, b);
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe('LOGOUT-B');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('LOGOUT-B');
+  await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
+});
+));
   await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
   await expect(page.locator('#incomeBody')).toHaveCount(0);
   uiLoggedOutOwners.add(a.user.id);
