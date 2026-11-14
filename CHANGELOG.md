@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a branded staging email-confirmation page, routed new signups to it, and added desktop/mobile coverage for valid, invalid, and expired confirmation links.
+
 - Aligned authenticated staging API and browser integration tests with the current redesigned dashboard and `budget_ui_years` storage table; legacy Release 2 `budget_data` remains untouched.
 - Removed the unused pinned production-repository checkout from the live staging workflow so builds and tests use the exact staging application revision.
 - Replaced obsolete Release 2 browser assertions with coverage for authenticated cloud save/restore, account switching isolation, and logout clearing.
