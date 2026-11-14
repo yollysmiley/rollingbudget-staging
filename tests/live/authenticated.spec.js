@@ -72,13 +72,17 @@ async function seed(account, label) {
   expect(result[0].year).toBe(YEAR);
 }
 
-async function guestPage(context) {
-  const page = await context.newPage();
-  page.on('dialog', dialog => dialog.accept());
-  await page.goto('/rollover-budget-app.html');
-  await expect.poll(() => page.evaluate(() => typeof supabaseClient !== 'undefined' && Boolean(supabaseClient))).toBe(true);
-  await expect.poll(() => page.evaluate(() => Boolean(db['2026']))).toBe(true);
-  return page;
+const AUTH_STORAGE_KEY = 'rollingbudget_staging_phiscfwfuzeptetimdbo_auth';
+
+async function establishSession(page, account) {
+  // Seed the same per-origin storage used by Supabase before the protected app initializes.
+  await page.goto('/');
+  await page.evaluate(({ key, session }) => {
+    localStorage.setItem(key, JSON.stringify(session));
+  }, { key: AUTH_STORAGE_KEY, session: account });
+  await page.goto('/app/');
+  await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
+  await expect.poll(() => page.evaluate(id => currentUser?.id === id, account.user.id)).toBe(true);
 }
 
 async function switchTo(page, account, label) {
@@ -98,8 +102,13 @@ async function switchTo(page, account, label) {
 }
 
 async function open(context, account, label) {
-  const page = await guestPage(context);
-  await switchTo(page, account, label);
+  const page = await context.newPage();
+  page.on('dialog', dialog => dialog.accept());
+  await establishSession(page, account);
+  if (label) {
+    await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe(label);
+    await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue(label);
+  }
   return page;
 }
 
@@ -223,14 +232,19 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   const page = await open(context, a, 'LOGOUT-A');
 
   await page.locator('#authBtn').click();
-  await expect.poll(() => page.evaluate(() => currentUser === null)).toBe(true);
-  await expect(page.locator('#authBtn')).toHaveText('Sign In');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+  await expect(page.locator('#incomeBody')).toHaveCount(0);
   uiLoggedOutOwners.add(a.user.id);
-  await expect.poll(() => page.evaluate(() =>
-    db['2026']?.months?.[0]?.income?.some(item => item.name === 'LOGOUT-A') ?? false
-  )).toBe(false);
-  await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
 
-  await switchTo(page, b, 'LOGOUT-B');
+  // A signed-out visitor cannot reopen the protected budget.
+  await page.goto('/app/');
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+  await expect(page.locator('#incomeBody')).toHaveCount(0);
+
+  // Authenticate as the other account in the same browser without carrying A's budget.
+  await establishSession(page, b);
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe('LOGOUT-B');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('LOGOUT-B');
   await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
 });
