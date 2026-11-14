@@ -123,7 +123,7 @@ test('mobile recurring manager uses its distinct card layout and supports rule c
   await form.locator('[data-rec-field="name"]').fill('Annual Insurance');
   await form.locator('[data-rec-field="amount"]').fill('1200');
   await form.locator('[data-rec-field="frequency"]').selectOption('annually');
-  await page.locator('button[onclick="addRecurringRule(\\'mobile\\')"]').click();
+  await page.getByRole('button',{name:'Add rule'}).last().click();
   await expect(page.locator('#mobileRulesList')).toContainText('Annual Insurance');
   await expect(page.locator('#mobileRulesList')).toContainText('Annually');
   const size=await page.evaluate(()=>({width:innerWidth,content:document.documentElement.scrollWidth}));
