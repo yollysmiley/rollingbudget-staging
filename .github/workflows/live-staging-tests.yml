@@ -21,25 +21,19 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-      - name: Check out pinned application source
-        uses: actions/checkout@v5
-        with:
-          repository: yollysmiley/rollingbudget
-          ref: 3c9277bb5dd3209c603a8fd1e952583970136385
-          path: upstream
-          persist-credentials: false
       - name: Install runner without lifecycle scripts and install Chromium
         run: |
           npm install --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: Build exact staging revision without account credentials
-        run: node scripts/build-staging.mjs upstream/rollover-budget-app.html
-      - name: Validate and discover authenticated tests without credentials
+      - name: Build the current staging application
+        run: node scripts/build-staging.mjs
+      - name: Validate authenticated tests without credentials
         run: |
           node --check tests/live/authenticated.spec.js
+          node --check scripts/live-staging-tests.mjs
           node --test tests/live/safety.test.mjs
           npx playwright test --config=playwright.live.config.js --list
-      - name: Test real authentication and ownership policies
+      - name: Test real authentication and current-table ownership policies
         run: node scripts/live-staging-tests.mjs
         env:
           STAGING_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
