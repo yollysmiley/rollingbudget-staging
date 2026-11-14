@@ -955,7 +955,9 @@ let db = {};
 let budgetAccounts = [];
 let accountService = null;
 let accountsBusy = false;
+let accountsMessage = '';
 function accountStatus(message) {
+  accountsMessage = message;
   for (const id of ['desktopAccountsStatus', 'mobileAccountsStatus']) {
     const node = document.getElementById(id);
     if (node) node.textContent = message;
@@ -979,13 +981,14 @@ function renderAccounts() {
         <input type="text" name="accountName" maxlength="120" placeholder="New account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}>
         <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
       </form>
-      <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite"></p>`;
+      <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite">${esc(accountsMessage)}</p>`;
   }
 }
 async function initializeAccounts() {
   try {
     accountService = await import('./scripts/account-storage.mjs');
     budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    accountsMessage = '';
     renderAccounts();
   } catch (error) {
     console.error('Accounts could not be loaded:', error);
@@ -996,6 +999,7 @@ async function initializeAccounts() {
 async function runAccountAction(action, id, value) {
   if (accountsBusy || !accountService || !currentUser) return;
   accountsBusy = true;
+  accountsMessage = '';
   renderAccounts();
   try {
     if (action === 'create') {
