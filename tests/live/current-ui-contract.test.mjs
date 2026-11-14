@@ -13,7 +13,7 @@ test('authenticated tests target the active staging table and dashboard contract
   assert.match(authenticated, /#incomeBody/);
   assert.match(authenticated, /currentUser\?\.id/);
   assert.match(authenticated, /budget_ui_years/);
-  assert.doesNotMatch(authenticated, /rb2Account|#paycheckContainer|#excludedBucketContainer|budget_data\?/);
+  assert.doesNotMatch(authenticated, /rb2Account|#paycheckContainer|#excludedBucketContainer|\/rest\/v1\/budget_data/);
 });
 
 test('live API ownership tests use the same year-based table as the app', () => {
