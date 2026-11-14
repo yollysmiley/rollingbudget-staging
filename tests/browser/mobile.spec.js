@@ -116,6 +116,7 @@ test('mobile menu navigation exits the recurring manager without refreshing', as
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.getByRole('button', { name: /Recurring Rules/ }).click();
+  const managerUrl = page.url();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to budget' })).toHaveCount(0);
 
@@ -135,7 +136,7 @@ test('mobile menu navigation exits the recurring manager without refreshing', as
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
   await expect(page.locator('#mobileOverview')).toBeVisible();
-  await expect(page).not.toHaveURL(/reload/);
+  await expect(page).toHaveURL(managerUrl);
 });
 
 test('mobile recurring manager uses its distinct card layout and supports rule creation', async ({ page }) => {
