@@ -614,26 +614,69 @@ async function initApp() {
   await loadAllYears();
   render();
 }
+function parseLocalBudgetRecord(raw) {
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    // Current format is an envelope. Older staging versions stored the budget object directly.
+    if (parsed && typeof parsed === "object" && Object.hasOwn(parsed, "data")) {
+      if (!validYearData(parsed.data)) return null;
+      const time = parsed.updatedAt ? Date.parse(parsed.updatedAt) : NaN;
+      return { data: parsed.data, updatedAt: Number.isFinite(time) ? time : null, legacy: false };
+    }
+    if (validYearData(parsed)) return { data: parsed, updatedAt: null, legacy: true };
+  } catch (error) {
+    console.warn("Ignored unreadable local budget data; original storage was preserved.", error);
+  }
+  return null;
+}
+function chooseNewestBudget(localRecord, cloudRecord) {
+  if (!localRecord) return cloudRecord;
+  if (!cloudRecord) return localRecord;
+  // An unversioned legacy local record has unknown age. Prefer the timestamped cloud copy.
+  if (localRecord.updatedAt === null && cloudRecord.updatedAt !== null) return cloudRecord;
+  if (cloudRecord.updatedAt === null && localRecord.updatedAt !== null) return localRecord;
+  return (localRecord.updatedAt ?? 0) > (cloudRecord.updatedAt ?? 0) ? localRecord : cloudRecord;
+}
 async function loadAllYears() {
   const all = {};
+  const localRecords = {};
   for (const yr of ["2026", "2027"]) {
     all[yr] = JSON.parse(JSON.stringify(BASELINE_2026));
     try {
-      const saved = localStorage.getItem(storageKey(yr));
-      if (saved !== null) {
-        const parsed = JSON.parse(saved);
-        if (validYearData(parsed)) all[yr] = parsed;
-        else console.warn("Ignored invalid local budget data for", yr, "; original storage was preserved.");
+      const record = parseLocalBudgetRecord(localStorage.getItem(storageKey(yr)));
+      if (record) {
+        localRecords[yr] = record;
+        all[yr] = record.data;
       }
     } catch (error) { console.warn("Could not read local budget data for", yr, "; original storage was preserved.", error); }
   }
   if (supabaseClient && currentUser) {
     try {
-      const { data, error } = await supabaseClient.from("budget_ui_years").select("year,budget_data").eq("user_id", currentUser.id);
+      const { data, error } = await supabaseClient.from("budget_ui_years").select("year,budget_data,updated_at").eq("user_id", currentUser.id);
       if (error) throw error;
       for (const row of data || []) {
         const year = String(row.year);
-        if (validYearData(row.budget_data) && (!Object.hasOwn(all, year) || localStorage.getItem(storageKey(year)) === null)) all[year] = row.budget_data;
+        if (!validYearData(row.budget_data)) continue;
+        const cloudTime = row.updated_at ? Date.parse(row.updated_at) : NaN;
+        const cloudRecord = { data: row.budget_data, updatedAt: Number.isFinite(cloudTime) ? cloudTime : null, legacy: false };
+        const localRecord = localRecords[year];
+        // Preserve an unversioned local copy before preferring a timestamped cloud record.
+        if (localRecord?.legacy && cloudRecord.updatedAt !== null) {
+          const backupKey = storageKey(year) + "_legacy_backup";
+          try {
+            if (localStorage.getItem(backupKey) === null) {
+              localStorage.setItem(backupKey, JSON.stringify({ data: localRecord.data, backedUpAt: new Date().toISOString(), reason: "Unversioned local data preserved while loading timestamped cloud data." }));
+            }
+          } catch (backupError) { console.warn("Could not create legacy local budget backup; cloud data remains unchanged.", backupError); }
+        }
+        const newest = chooseNewestBudget(localRecord, cloudRecord);
+        all[year] = newest.data;
+        // Normalize the chosen copy to the timestamped envelope so future loads compare versions.
+        if (newest === cloudRecord) {
+          try { localStorage.setItem(storageKey(year), JSON.stringify({ data: cloudRecord.data, updatedAt: row.updated_at })); }
+          catch (storageError) { console.warn("Could not cache cloud budget locally:", storageError); }
+        }
       }
     } catch (error) { console.error("Cloud load error; local data was retained:", error); }
   }
@@ -641,11 +684,18 @@ async function loadAllYears() {
 }
 async function saveDB() {
   const currentYearData = db[activeYear];
-  try { localStorage.setItem(storageKey(activeYear), JSON.stringify(currentYearData)); }
+  const updatedAt = new Date().toISOString();
+  const localRecord = { data: currentYearData, updatedAt };
+  try { localStorage.setItem(storageKey(activeYear), JSON.stringify(localRecord)); }
   catch (error) { console.error("Local save error:", error); alert("Could not save this budget in browser storage. Your changes may not persist."); return; }
   if (supabaseClient && currentUser) {
     try {
-      const { error } = await supabaseClient.from("budget_ui_years").upsert({ user_id: currentUser.id, year: Number(activeYear), budget_data: currentYearData, updated_at: new Date().toISOString() }, { onConflict: "user_id,year" });
+      const { error } = await supabaseClient.from("budget_ui_years").upsert({
+        user_id: currentUser.id,
+        year: Number(activeYear),
+        budget_data: currentYearData,
+        updated_at: updatedAt
+      }, { onConflict: "user_id,year" });
       if (error) throw error;
     } catch(error) { console.error("Cloud sync error; local copy was retained:", error); }
   }
