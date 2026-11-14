@@ -991,15 +991,45 @@ function renderAccounts() {
       <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite">${esc(accountsMessage)}</p>`;
   }
 }
+let accountMigrationModule = null;
+async function migrateLoadedIncome() {
+  if (!currentUser || !accountMigrationModule || !budgetAccounts.length) return;
+  const owner = currentUser.id;
+  for (const [year, original] of Object.entries(db)) {
+    const migrated = accountMigrationModule.migrateLegacyYear(original);
+    if (!migrated.changed) continue;
+    const backupKey = storageKey(year) + '_pre_income_migration';
+    // Never overwrite the original backup, including on later sign-ins.
+    if (localStorage.getItem(backupKey) === null) {
+      localStorage.setItem(backupKey, JSON.stringify({ data: original, backedUpAt: new Date().toISOString() }));
+    }
+    const updatedAt = new Date().toISOString();
+    const snapshot = migrated.year;
+    // Persist the account-based version before displaying it; keep the original in memory on failure.
+    if (supabaseClient) {
+      await queueCloudSave(owner + ':' + year, async () => {
+        const { error } = await supabaseClient.from('budget_ui_years').upsert({
+          user_id: owner, year: Number(year), budget_data: snapshot, updated_at: updatedAt
+        }, { onConflict: 'user_id,year' });
+        if (error) throw error;
+      });
+    }
+    if (currentUser?.id !== owner) return;
+    localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+    db[year] = snapshot;
+  }
+}
 async function initializeAccounts() {
   try {
     accountService = await import('./scripts/account-storage.mjs');
     accountBudgetModule = await import('./scripts/account-budget.mjs');
+    accountMigrationModule = await import('./scripts/account-model.mjs');
     budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    await migrateLoadedIncome();
     accountsMessage = '';
     renderAccounts();
   } catch (error) {
-    console.error('Accounts could not be loaded:', error);
+    console.error('Accounts could not be loaded or income migrated:', error);
     renderAccounts();
     accountStatus('Could not load accounts. Please retry by refreshing the page.');
   }
@@ -1339,29 +1369,8 @@ async function editEntryAccount(type, idx, accountId) {
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
   const entry = db[activeYear].months[selectedIdx][type]?.[idx];
   if (!entry) return;
-  if (type === 'income' && !entry.accountId && (Object.hasOwn(entry, 'cpm') || Object.hasOwn(entry, 'usaa'))) {
-    const sources = ['cpm', 'usaa'].filter(id => (Number(entry[id]) || 0) !== 0);
-    if (sources.length > 1) {
-      alert('This income contains CPM and USAA amounts. Split it into separate account entries before reassigning.');
-      render();
-      return;
-    }
-    entry.amount = Number(entry.cpm) || Number(entry.usaa) || 0;
-    delete entry.cpm; delete entry.usaa;
-  }
-  if (type === 'income' && !accountId && entry.accountId) return;
+  if (type === 'income' && !accountId) return;
   entry.accountId = accountId || null;
-  await saveDB(); render();
-}
-async function splitLegacyIncome(idx) {
-  const entries = db[activeYear].months[selectedIdx].income;
-  const entry = entries[idx];
-  if (!entry || entry.accountId) return;
-  const parts = ['cpm', 'usaa'].filter(id => (Number(entry[id]) || 0) !== 0)
-    .map(id => ({ name: entry.name, accountId: id, amount: Number(entry[id]) || 0,
-      ...(entry.recurringRuleId ? { recurringRuleId: entry.recurringRuleId } : {}) }));
-  if (!parts.length) return;
-  entries.splice(idx, 1, ...parts);
   await saveDB(); render();
 }
 function refreshAccountSelectors() {
@@ -1519,7 +1528,7 @@ function render() {
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" ${item.accountId ? "disabled" : ""} onchange="editInc(${idx}, 'cpm', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" ${item.accountId ? "disabled" : ""} onchange="editInc(${idx}, 'usaa', this.value)" /></td>
       <td class="num">${fmt(item.accountId ? item.amount : (Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
-      <td>${!item.accountId && (Number(item.cpm)||0) && (Number(item.usaa)||0) ? '<button type="button" onclick="splitLegacyIncome(' + idx + ')">Split income</button>' : accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
+      <td>${accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
   `).join("");
   document.getElementById("incomeBody").innerHTML = incHtml;
