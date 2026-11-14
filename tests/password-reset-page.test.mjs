@@ -15,7 +15,9 @@ test('reset page uses the isolated staging auth namespace and requires a recover
   assert.match(page, /STAGING_STORAGE_PREFIX \+ "_auth"/);
   assert.match(page, /detectSessionInUrl: true/);
   assert.match(page, /event === "PASSWORD_RECOVERY"/);
-  assert.match(page, /!recoveryEventSeen/);
+  assert.match(page, /if \(!recoveryEventSeen\)/);
+  assert.match(page, /recoveryCheckTimer = setTimeout/);
+  assert.match(page, /auth\.verifyOtp\(\{ token_hash: tokenHash, type: "recovery" \}\)/);
   assert.match(page, /supabaseClient\.auth\.getSession\(\)/);
   assert.match(build, /dist\/reset-password\.html/);
 });
