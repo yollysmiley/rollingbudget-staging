@@ -45,7 +45,7 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
   await page.locator('#newIncName').fill('SAVE-RELOAD-TEST');
   await page.locator('#newIncCpm').fill('2713.45');
   await page.locator('button[onclick="addIncome()"]').click();
-  await expect(page.locator('#incomeBody')).toContainText('SAVE-RELOAD-TEST');
+  await expect(page.locator('#incomeBody input[type="text"]').first()).toHaveValue('SAVE-RELOAD-TEST');
   await page.reload();
   await expect(page.locator('#incomeBody input[type="text"]').first()).toHaveValue('SAVE-RELOAD-TEST');
   await expect(page.locator('#incomeBody tr:not(.roll-row) input[type="number"]').first()).toHaveValue('2713.45');
@@ -83,9 +83,9 @@ test('recurring rule applies to the selected months', async ({ page }) => {
   await page.locator('#recEnd').selectOption('1');
   await page.locator('button[onclick="applyRecurringRule()"]').click();
   await expect(page.locator('#rulesListContainer')).toContainText('Internet');
-  await expect(page.locator('#fixedBody')).toContainText('Internet');
+  await expect(page.locator('#fixedBody input[type="text"]').first()).toHaveValue('Internet');
   await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#fixedBody')).not.toContainText('Internet');
+  await expect(page.locator('#fixedBody input[type="text"]')).toHaveCount(0);
 });
 
 test('year switching and narrow viewport remain usable', async ({ page }) => {
