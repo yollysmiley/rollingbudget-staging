@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Restored the approved Rolling Budget logo, purple styling, responsive spacing, and account-mode navigation in public sign-in and registration dialogs, with desktop/mobile regression tests.
+- Corrected the invalid logout URL assertion syntax in live authenticated acceptance.
+
 - Updated live authenticated acceptance to bootstrap Supabase sessions before entering the protected `/app/` route, verify cloud restore and account isolation, and assert public-homepage redirects after logout.
 
 - Fixed browser sign-out regression tests to explicitly accept native confirmation dialogs and added desktop/mobile coverage for cancelling sign-out.
