@@ -28,3 +28,10 @@ Status: Draft / implementation pending. This document is not a completed feature
 - Production remains untouched.
 
 Do not merge until implementation and all acceptance gates are verified.
+
+## Approved desktop navigation update (2026-11-14)
+- Replace desktop header year selection, New Year, Auto-Cascade, and Recurring Rules controls with a Settings button.
+- Settings contains Year Management, Auto-Cascade, Recurring Rules, and the upcoming Accounts Manager.
+- Keep Sign In / profile in the desktop header.
+- Maintain the distinct mobile sidebar and mobile settings mount.
+- Add navigation regression tests; validate browser navigation on desktop and mobile before merge.
