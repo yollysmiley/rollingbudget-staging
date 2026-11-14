@@ -62,7 +62,8 @@ test('mobile plan cards can be collapsed and expanded individually', async ({ pa
 });
 
 test('mobile plan supports collapsing and expanding all budget cards', async ({ page }) => {
-  await page.locator('[data-mobile-tab="plan"]').click();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
   const cards = page.locator('.main-grid .card');
   await expect(cards).toHaveCount(5);
 
