@@ -21,3 +21,15 @@ The staging Forgot Password flow sends a recovery email to the branded `reset-pa
 ## Public homepage and protected app
 
 The public staging homepage is `/rollingbudget-staging/`. The authenticated budgeting app is `/rollingbudget-staging/app/`. Signed-out visits to the app redirect to the homepage, and logout clears the displayed budget before redirecting. The legacy `/rollover-budget-app.html` is retained as an authenticated compatibility entry point. Supabase RLS remains the authorization boundary; the frontend guard is not a substitute for RLS.
+
+## CI workflow responsibilities
+
+| Workflow | Trigger | Responsibility |
+| --- | --- | --- |
+| `build-staging.yml` (`build`) | Pull requests, staging `main`, manual | Build staging assets, run unit/security regressions and desktop/mobile Playwright acceptance; publish Pages only from staging `main`. Superseded PR runs may be cancelled; main deployments are not cancelled. |
+| `authenticated-test-validation.yml` (`validate`) | Pull requests, dedicated validation branch | Secret-free syntax checks and authenticated Playwright test discovery. The main build owns live safety unit-test execution to avoid redundant work. |
+| `live-staging-tests.yml` (`integration`) | Staging `main`, manual | Credential-protected Supabase authentication, RLS, and browser persistence checks using dedicated test users. It intentionally revalidates its own prerequisites for independently triggered runs. Never expose its secrets to pull-request jobs. |
+
+Keep the required `build` and `validate` status checks stable when changing CI. Browser failure reports are retained for seven days; successful runs do not upload those reports. The built staging frontend remains available as a short-lived artifact. Live tests seed only modern `amount`/`accountId` income and a run-scoped account; dedicated unit/browser regressions test historical CPM/USAA migration separately. Cleanup must verify test-run ownership before deleting fixture records.
+
+**Reproducibility follow-up:** The repository currently has no committed `package-lock.json`. CI therefore uses `npm install` rather than `npm ci`, and dependency caching is deliberately not enabled. Add a registry-generated, reviewed lockfile first; then switch all three workflows to `npm ci` and enable `actions/setup-node` npm caching keyed to the lockfile. Do not create an unverified lockfile by hand.
