@@ -40,8 +40,8 @@ test('new budget UI starts empty and renders the redesigned dashboard', async ({
 
 test('income and expenses recalculate the rollover', async ({ page }) => {
   await page.locator('#newIncName').fill('Paycheck');
-  await page.locator('#newIncCpm').fill('3000');
-  await page.locator('#newIncUsaa').fill('0');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('3000');
   await page.locator('button[onclick="addIncome()"]').click();
   await expect(page.locator('#incTotalBadge')).toHaveText('$3,000.00');
 
@@ -55,18 +55,20 @@ test('income and expenses recalculate the rollover', async ({ page }) => {
 
 test('new UI saves and restores the guest budget after reload', async ({ page }) => {
   await page.locator('#newIncName').fill('SAVE-RELOAD-TEST');
-  await page.locator('#newIncCpm').fill('2713.45');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('2713.45');
   await page.locator('button[onclick="addIncome()"]').click();
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
   await page.reload();
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
-  await expect(page.locator('#incomeBody tr:not(.roll-row) input[type="number"]').first()).toHaveValue('2713.45');
+  await expect(page.locator('#incomeBody tr:not(.roll-row)')).toContainText('$2,713.45');
   await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
 });
 
 test('authenticated storage is owner-scoped and existing browser keys are preserved', async ({ page }) => {
   await page.locator('#newIncName').fill('Stored');
-  await page.locator('#newIncCpm').fill('10');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('10');
   await page.locator('button[onclick="addIncome()"]').click();
   const result = await page.evaluate(() => Object.keys(localStorage));
   expect(result.some(key => key.startsWith('rollingbudget_staging_phiscfwfuzeptetimdbo_browser-test-owner_budget_'))).toBe(true);
@@ -232,4 +234,23 @@ test('cancelling desktop sign-out keeps the authenticated budget visible', async
   await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
   await expect(page.locator('#authBtn')).toHaveText('Sign Out');
   await expect(page.locator('#incTotalBadge')).toBeVisible();
+});
+
+test('legacy mixed income migrates automatically once and survives reload', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].months[0].income = [{ name: 'Legacy Pay', cpm: 200, usaa: 300, recurringRuleId: 'legacy-rule' }];
+    await saveDB();
+  });
+  await page.reload();
+  await expect(page.locator('#incomeBody')).toContainText('Legacy Pay');
+  await expect(page.locator('#incTotalBadge')).toHaveText('$500.00');
+  const read = () => page.evaluate(() => db[activeYear].months[0].income);
+  const entries = await read();
+  expect(entries).toEqual([
+    { name: 'Legacy Pay', accountId: 'cpm', amount: 200, recurringRuleId: 'legacy-rule' },
+    { name: 'Legacy Pay', accountId: 'usaa', amount: 300, recurringRuleId: 'legacy-rule' }
+  ]);
+  await page.reload();
+  expect(await read()).toEqual(entries);
+  await expect(page.locator('#incomeBody button')).not.toContainText('Split income');
 });
