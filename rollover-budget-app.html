@@ -954,6 +954,7 @@ let selectedIdx = 0;
 let db = {};
 let budgetAccounts = [];
 let accountService = null;
+let accountBudgetModule = null;
 let accountsBusy = false;
 let accountsMessage = '';
 function accountStatus(message) {
@@ -987,6 +988,7 @@ function renderAccounts() {
 async function initializeAccounts() {
   try {
     accountService = await import('./scripts/account-storage.mjs');
+    accountBudgetModule = await import('./scripts/account-budget.mjs');
     budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
     accountsMessage = '';
     renderAccounts();
@@ -1016,6 +1018,7 @@ async function runAccountAction(action, id, value) {
     }
     budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
     accountStatus('Account changes saved.');
+    render();
   } catch (error) {
     console.error('Account change failed:', error);
     accountStatus(error.message || 'Account changes could not be saved.');
@@ -1276,6 +1279,9 @@ function parseDayNum(dueStr) {
 }
 
 function computeRolling(yrKey) {
+  if (accountBudgetModule && budgetAccounts.length) {
+    return accountBudgetModule.computeAccountBudget(db[yrKey], budgetAccounts);
+  }
   const yearData = db[yrKey];
   if (!yearData) return [];
   const results = [];
