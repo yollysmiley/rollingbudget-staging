@@ -16,9 +16,6 @@ export async function loadOrSeedAccounts(client, userId) {
   return normalizeAccounts(final.data ?? []);
 }
 
-// Phase 1 intentionally does not rewrite legacy year documents. Their CPM/USAA
-// fields remain readable by the deployed UI until the account-aware UI lands.
-
 export async function createAccount(client, userId, accounts, name, id) {
   const normalized = normalizeAccounts([...accounts, { id, name, included: true }]);
   const account = normalized.at(-1);
