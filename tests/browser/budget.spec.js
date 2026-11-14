@@ -242,8 +242,11 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
     await saveDB();
   });
   await page.reload();
-  await expect(page.locator('#incomeBody input.inline-input').first()).toHaveValue('Legacy Pay');
-  await expect(page.locator('#incomeBody input.inline-input').nth(1)).toHaveValue('Legacy Pay');
+  // The rollover summary row has its own numeric input; target income entry rows only.
+  const migratedNames = page.locator('#incomeBody tr:not(.roll-row) input.inline-input:not([type])');
+  await expect(migratedNames).toHaveCount(2);
+  await expect(migratedNames.nth(0)).toHaveValue('Legacy Pay');
+  await expect(migratedNames.nth(1)).toHaveValue('Legacy Pay');
   await expect(page.locator('#incTotalBadge')).toHaveText('$500.00');
   const read = () => page.evaluate(() => db[activeYear].months[0].income);
   const entries = await read();
