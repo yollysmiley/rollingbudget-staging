@@ -664,9 +664,11 @@ async function loadAllYears() {
         // Preserve an unversioned local copy before preferring a timestamped cloud record.
         if (localRecord?.legacy && cloudRecord.updatedAt !== null) {
           const backupKey = storageKey(year) + "_legacy_backup";
-          if (localStorage.getItem(backupKey) === null) {
-            localStorage.setItem(backupKey, JSON.stringify({ data: localRecord.data, backedUpAt: new Date().toISOString(), reason: "Unversioned local data preserved while loading timestamped cloud data." }));
-          }
+          try {
+            if (localStorage.getItem(backupKey) === null) {
+              localStorage.setItem(backupKey, JSON.stringify({ data: localRecord.data, backedUpAt: new Date().toISOString(), reason: "Unversioned local data preserved while loading timestamped cloud data." }));
+            }
+          } catch (backupError) { console.warn("Could not create legacy local budget backup; cloud data remains unchanged.", backupError); }
         }
         const newest = chooseNewestBudget(localRecord, cloudRecord);
         all[year] = newest.data;
