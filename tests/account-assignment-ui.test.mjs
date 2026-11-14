@@ -26,11 +26,11 @@ test('account selectors reject IDs absent from authenticated account list', () =
   assert.match(html, /accountId && !budgetAccounts\.some\(a => a\.id === accountId\)/);
 });
 
-test('mixed legacy income must be split rather than merged into one account', () => {
-  assert.match(html, /async function splitLegacyIncome\(idx\)/);
-  assert.match(html, /Split income/);
-  assert.match(html, /sources\.length > 1/);
-  assert.doesNotMatch(html, /entry\.amount = \(Number\(entry\.cpm\)/);
+test('legacy income migrates before rendering without a manual split action', () => {
+  assert.match(html, /async function migrateLoadedIncome\(\)/);
+  assert.match(html, /await migrateLoadedIncome\(\)/);
+  assert.doesNotMatch(html, /function splitLegacyIncome\(/);
+  assert.doesNotMatch(html, /Split income/);
 });
 test('account selection is shown for every recurring category', () => {
   assert.match(html, /function toggleRecFields\(\)\{document\.querySelectorAll/);
