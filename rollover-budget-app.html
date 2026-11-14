@@ -360,6 +360,16 @@
     .add-row input, .add-row select { background: #ffffff; border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 8px; font-size: 0.82rem; font-family: inherit; }
     .add-row input:focus, .add-row select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 
+    /* Desktop income entry follows the table column order; mobile has its own stacked layout. */
+    .add-row.income-add-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; align-items: end; gap: 10px; }
+    .income-add-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .income-add-field > span { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+    .income-add-field input, .income-add-field select { width: 100%; min-width: 0; }
+    @media (max-width: 768px) {
+      .add-row.income-add-row { grid-template-columns: 1fr; }
+      .income-add-field input, .income-add-field select, .income-add-button { min-height: 44px; width: 100%; }
+    }
+
     /* Modal / Auth Overlays */
     .modal-backdrop {
       position: fixed; inset: 0; background: rgba(24, 19, 38, 0.45); backdrop-filter: blur(4px);
@@ -739,13 +749,11 @@
         </thead>
         <tbody id="incomeBody"></tbody>
       </table>
-      <div class="add-row">
-        <input type="text" id="newIncName" placeholder="Income source" style="flex:1;min-width:130px" />
-        
-        
-        <label>Account <select id="newIncAccount" data-new-entry-account aria-label="Account for new income"></select></label>
-        <input type="number" step="0.01" id="newIncAmount" placeholder="Amount $" style="width:95px" />
-        <button class="primary" onclick="addIncome()">Add</button>
+      <div class="add-row income-add-row">
+        <label class="income-add-field"><span>Source</span><input type="text" id="newIncName" placeholder="Income source" /></label>
+        <label class="income-add-field"><span>Amount</span><input type="number" step="0.01" id="newIncAmount" placeholder="$0.00" /></label>
+        <label class="income-add-field"><span>Account</span><select id="newIncAccount" data-new-entry-account aria-label="Account for new income"></select></label>
+        <button class="primary income-add-button" onclick="addIncome()">Add</button>
       </div>
     </div>
 
@@ -1028,7 +1036,7 @@ async function initializeAccounts() {
     accountService = await import('./scripts/account-storage.mjs');
     accountBudgetModule = await import('./scripts/account-budget.mjs');
     accountMigrationModule = await import('./scripts/account-model.mjs');
-    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id, db);
     await migrateLoadedIncome();
     accountsMessage = '';
     renderAccounts();
@@ -1367,13 +1375,12 @@ function accountOptions(selectedId, unassigned = true) {
   return blank + budgetAccounts.map(account => '<option value="' + esc(account.id) + '"' + (account.id === selectedId ? ' selected' : '') + '>' + esc(account.name) + (account.included ? '' : ' (excluded)') + '</option>').join('');
 }
 function accountPicker(type, idx, accountId) {
-  return '<label>Account <select aria-label="Account for ' + esc(type) + ' entry" onchange="editEntryAccount(&quot;' + type + '&quot;,' + idx + ',this.value)">' + accountOptions(accountId) + '</select></label>';
+  return '<select aria-label="Account for ' + esc(type) + ' entry" onchange="editEntryAccount(&quot;' + type + '&quot;,' + idx + ',this.value)">' + accountOptions(accountId) + '</select>';
 }
 async function editEntryAccount(type, idx, accountId) {
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
   const entry = db[activeYear].months[selectedIdx][type]?.[idx];
   if (!entry) return;
-  if (type === 'income' && !accountId) return;
   entry.accountId = accountId || null;
   await saveDB(); render();
 }
@@ -1603,8 +1610,8 @@ async function addIncome() {
   if (!name) return;
   const accountId = document.getElementById("newIncAccount").value;
   const amount = parseFloat(document.getElementById("newIncAmount").value) || 0;
-  if (!accountId || !budgetAccounts.some(account => account.id === accountId)) return;
-  db[activeYear].months[selectedIdx].income.push({ name, accountId, amount });
+  if (accountId && !budgetAccounts.some(account => account.id === accountId)) return;
+  db[activeYear].months[selectedIdx].income.push({ name, accountId: accountId || null, amount });
   document.getElementById("newIncName").value = ""; document.getElementById("newIncAmount").value = "";
   await saveDB(); render();
 }

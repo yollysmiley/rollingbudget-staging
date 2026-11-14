@@ -21,6 +21,29 @@ export function normalizeAccounts(accounts) {
   });
 }
 
+export function requiredLegacyAccounts(yearDocuments = {}) {
+  const required = new Set();
+  for (const year of Object.values(yearDocuments)) {
+    for (const month of year?.months ?? []) {
+      for (const entry of month.income ?? []) {
+        for (const id of ['cpm', 'usaa']) {
+          if ((Number(entry[id]) || 0) !== 0 || entry.accountId === id) required.add(id);
+        }
+      }
+      for (const type of ['fixed', 'variable', 'creditCards', 'loans']) {
+        for (const entry of month[type] ?? []) {
+          if (entry.accountId === 'cpm' || entry.accountId === 'usaa') required.add(entry.accountId);
+        }
+      }
+    }
+    for (const rule of year?.recurringRules ?? []) {
+      const id = rule.accountId || rule.acct;
+      if (id === 'cpm' || id === 'usaa') required.add(id);
+    }
+  }
+  return LEGACY_ACCOUNTS.filter(account => required.has(account.id));
+}
+
 export function migrateLegacyIncome(income, accounts = LEGACY_ACCOUNTS) {
   if (!Array.isArray(income)) throw new TypeError('Income must be an array');
   return income.flatMap(entry => {
@@ -30,8 +53,7 @@ export function migrateLegacyIncome(income, accounts = LEGACY_ACCOUNTS) {
     if (!sources.length) {
       const { cpm, usaa, ...rest } = entry;
       const fallback = ['cpm', 'usaa'].find(id => accounts.some(account => account.id === id));
-      if (!fallback) throw new Error('Missing legacy income account for zero-value entry');
-      return [{ ...rest, amount: 0, accountId: fallback }];
+      return [{ ...rest, amount: 0, accountId: fallback || null }];
     }
     return sources.map(id => {
       const { cpm, usaa, ...rest } = entry;

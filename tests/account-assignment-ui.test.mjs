@@ -15,7 +15,7 @@ test('income keeps historical values and offers only account-based new income', 
   assert.doesNotMatch(html, /id="newIncCpm"/);
   assert.doesNotMatch(html, /id="newIncUsaa"/);
   assert.match(html, /id="newIncAmount"/);
-  assert.match(html, /income\.push\(\{ name, accountId, amount \}\)/);
+  assert.match(html, /income\.push\(\{ name, accountId: accountId \|\| null, amount \}\)/);
 });
 test('recurring rule items carry account identity across categories', () => {
   assert.match(html, /const accountId = r\.accountId \|\| r\.acct \|\| null/);
@@ -38,4 +38,12 @@ test('account selection is shown for every recurring category', () => {
 });
 test('secondary authenticated load initializes accounts before rendering', () => {
   assert.match(html, /await loadAllYears\(\);\s*if \(currentUser\) await initializeAccounts\(\);\s*render\(\);/);
+});
+
+test('income form uses column-aligned labels and a distinct stacked mobile layout', () => {
+  assert.match(html, /class="add-row income-add-row"/);
+  for (const field of ['Source', 'Amount', 'Account']) assert.ok(html.includes('<span>' + field + '</span>'));
+  assert.match(html, /\.add-row\.income-add-row \{ display: grid/);
+  assert.match(html, /\.add-row\.income-add-row \{ grid-template-columns: 1fr/);
+  assert.doesNotMatch(html, /<label>Account <select id="newIncAccount"/);
 });

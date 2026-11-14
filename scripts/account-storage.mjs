@@ -1,13 +1,14 @@
-import { LEGACY_ACCOUNTS, normalizeAccounts, canRemoveAccount } from './account-model.mjs';
+import { requiredLegacyAccounts, normalizeAccounts, canRemoveAccount } from './account-model.mjs';
 
-// Seed only when the authenticated user has no account rows. Never overwrite edits.
-export async function loadOrSeedAccounts(client, userId) {
+// Only backfill legacy accounts supported by actual budget references.
+export async function loadOrSeedAccounts(client, userId, yearDocuments = {}) {
   if (!client || !userId) throw new Error('Authenticated client and user ID required');
   const table = client.from('budget_accounts');
   const initial = await table.select('id,name,included').eq('user_id', userId);
   if (initial.error) throw initial.error;
-  if (initial.data?.length) return normalizeAccounts(initial.data);
-  const seed = LEGACY_ACCOUNTS.map(account => ({ ...account, user_id: userId }));
+  const existing = normalizeAccounts(initial.data ?? []);
+  const seed = requiredLegacyAccounts(yearDocuments).filter(account => !existing.some(item => item.id === account.id)).map(account => ({ ...account, user_id: userId }));
+  if (!seed.length) return existing;
   // Upsert with ignoreDuplicates protects against concurrent first loads.
   const inserted = await table.upsert(seed, { onConflict: 'user_id,id', ignoreDuplicates: true });
   if (inserted.error) throw inserted.error;
@@ -36,7 +37,6 @@ export async function updateAccount(client, userId, accounts, id, patch) {
 
 export async function deleteAccount(client, userId, accounts, id, years) {
   if (!accounts.some(item => item.id === id)) throw new Error('Account not found');
-  if (accounts.length <= 1) throw new Error('Keep at least one account');
   if (!canRemoveAccount(id, years)) throw new Error('Reassign existing budget entries and recurring rules before removing this account');
   const { data, error } = await client.from('budget_accounts').delete().eq('user_id', userId).eq('id', id).select('id');
   if (error) throw error;

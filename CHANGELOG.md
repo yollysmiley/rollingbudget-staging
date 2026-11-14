@@ -1,4 +1,5 @@
 ## Unreleased
+- Staging: seed legacy accounts only when referenced by budget data; allow empty catalogs and unassigned income, and align desktop/mobile income-entry fields. Added regression tests.
 - Harden account migration against missing legacy accounts and local cache failures; enable editable account-linked income amounts and add regression coverage.
 
 - Strengthen legacy-income migration browser regression by asserting both editable income rows render after reload; preserve account split, totals, metadata and idempotency checks.
