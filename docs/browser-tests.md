@@ -15,3 +15,8 @@ The recurring-rules manager has separate desktop table and mobile card layouts. 
 ## Recurring manager navigation regression
 
 Desktop and mobile browser tests verify the manager has no Back to budget control and the app header remains visible. Mobile acceptance coverage opens the manager and navigates to Plan, Settings, and Overview through the sidebar without a page refresh.
+
+
+## Email confirmation page
+
+The confirmation page is built as a separate static route and tested on desktop and mobile Chromium. Browser tests stub the Supabase client to cover successful session detection and invalid or expired links without contacting the staging Auth API or creating real users. Live email delivery and a real inbox confirmation still require a staging smoke test.
