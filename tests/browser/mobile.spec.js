@@ -46,7 +46,8 @@ test('mobile navigation switches between Overview and Plan', async ({ page }) =>
 });
 
 test('mobile plan cards can be collapsed and expanded individually', async ({ page }) => {
-  await page.locator('[data-mobile-tab="plan"]').click();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
   const incomeCard = page.locator('.main-grid .card').filter({ has: page.locator('#incomeBody') });
   const toggle = incomeCard.locator('.mobile-card-toggle');
 
