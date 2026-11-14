@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { loadOrSeedAccounts } from '../scripts/account-storage.mjs';
+
+function mockClient(initial = []) {
+  const rows = [...initial];
+  let writes = 0;
+  const table = {
+    select() { return { eq() { return Promise.resolve({ data: rows.map(({ user_id, ...rest }) => rest), error: null }); } }; },
+    async upsert(items, opts) {
+      writes++;
+      assert.equal(opts.onConflict, 'user_id,id');
+      assert.equal(opts.ignoreDuplicates, true);
+      for (const item of items) if (!rows.some(x => x.id === item.id && x.user_id === item.user_id)) rows.push(item);
+      return { error: null };
+    }
+  };
+  return { client: { from(name) { assert.equal(name, 'budget_accounts'); return table; } }, rows, get writes() { return writes; } };
+}
+
+test('initializes CPM and USAA only for the authenticated user', async () => {
+  const mock = mockClient();
+  const accounts = await loadOrSeedAccounts(mock.client, 'user-1');
+  assert.deepEqual(accounts.map(x => x.id), ['cpm', 'usaa']);
+  assert.ok(mock.rows.every(x => x.user_id === 'user-1'));
+  assert.equal(mock.writes, 1);
+});
+
+test('repeated initialization preserves user-renamed and excluded accounts', async () => {
+  const mock = mockClient([{ id: 'cpm', name: 'Checking', included: false, user_id: 'user-1' }]);
+  assert.deepEqual(await loadOrSeedAccounts(mock.client, 'user-1'), [{ id: 'cpm', name: 'Checking', included: false }]);
+  assert.equal(mock.writes, 0);
+});
+
+test('does not seed if account lookup fails or authentication is absent', async () => {
+  await assert.rejects(() => loadOrSeedAccounts(null, null), /Authenticated/);
+  const client = { from() { return { select() { return { eq: async () => ({ error: new Error('offline') }) }; } }; } };
+  await assert.rejects(() => loadOrSeedAccounts(client, 'user-1'), /offline/);
+});
+
+test('migration does not change existing year documents or income totals', async () => {
+  const legacy = { months: [{ income: [{ name: 'Salary', cpm: 120, usaa: 80 }] }] };
+  const snapshot = structuredClone(legacy);
+  await loadOrSeedAccounts(mockClient().client, 'user-1');
+  assert.deepEqual(legacy, snapshot);
+  assert.equal(legacy.months[0].income[0].cpm + legacy.months[0].income[0].usaa, 200);
+});
