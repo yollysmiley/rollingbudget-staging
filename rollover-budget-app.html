@@ -597,6 +597,15 @@
       .mobile-bottom-nav { display:none !important; }
     }
   </style>
+<style>
+  .desktop-settings-panel { max-width:1100px; margin:28px auto; padding:0 24px; }
+  .desktop-settings-panel[hidden] { display:none !important; }
+  .desktop-settings-card { padding:22px; margin:16px 0; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
+  .desktop-settings-card h3 { margin:0 0 12px; }
+  .desktop-settings-card .controls { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+  body.desktop-settings-open > .container { display:none; }
+  @media (max-width:768px) { .desktop-settings-panel { display:none !important; } }
+</style>
 </head>
 <body>
 <style id="authGateStyle">html:not(.budget-authenticated) body > :not(#authGateScreen):not(script){visibility:hidden!important}#authGateScreen{position:fixed;inset:0;z-index:99999;background:#f8f7fc;color:#17152b;display:grid;place-items:center;font-family:Inter,system-ui,sans-serif;padding:24px}html.budget-authenticated #authGateScreen{display:none}#authGateScreen section{max-width:440px;text-align:center}#authGateScreen a{color:#7c3aed;font-weight:700}</style>
@@ -617,22 +626,12 @@
       </div>
     </div>
     <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
-    <div class="controls">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
-        <select id="activeYearSelect" onchange="switchYear(this.value)">
-          <option value="2026">2026 (Active Budget)</option>
-          <option value="2027">2027 (Planning Mode)</option>
-        </select>
-      </div>
-      <button onclick="createNewYear()">+ New Year</button>
-      <label class="toggle-pill" title="Auto-cascade surplus into next month">
-        <input type="checkbox" id="autoRollToggle" checked />
-        <span>Auto-Cascade</span>
-      </label>
-      <button class="primary" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+    <div class="controls desktop-header-actions">
+      <button type="button" id="desktopBudgetButton" onclick="setDesktopSettings(false)" hidden>Budget Overview</button>
+      <button type="button" id="desktopSettingsButton" onclick="setDesktopSettings(true)" aria-expanded="false" aria-controls="desktopSettingsPanel">Settings</button>
       <button id="authBtn" onclick="handleAuthClick()">Sign In</button>
     </div>
+
   </div>
 </header>
 
@@ -654,6 +653,31 @@
   </section>
 </aside>
 
+<section id="desktopSettingsPanel" class="desktop-settings-panel" aria-label="Desktop settings" hidden>
+  <h2>Settings</h2>
+  <div class="desktop-settings-card">
+    <h3>Accounts</h3>
+    <p>Account management will be available when the Dynamic Account Management feature is implemented.</p>
+  </div>
+  <div class="desktop-settings-card">
+    <h3>Year Management, Auto-Cascade &amp; Recurring Rules</h3>
+    <div class="controls" id="budgetSettingsControls">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
+        <select id="activeYearSelect" onchange="switchYear(this.value)">
+          <option value="2026">2026 (Active Budget)</option>
+          <option value="2027">2027 (Planning Mode)</option>
+        </select>
+      </div>
+      <button onclick="createNewYear()">+ New Year</button>
+      <label class="toggle-pill" title="Auto-cascade surplus into next month">
+        <input type="checkbox" id="autoRollToggle" checked />
+        <span>Auto-Cascade</span>
+      </label>
+      <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+    </div>
+  </div>
+</section>
 <div class="container">
   <!-- 12-Month Rolling Timeline -->
   <div class="rolling-strip" id="rollingStrip"></div>
@@ -1587,16 +1611,30 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
-function syncMobileSettingsControls() {
-  const controls = document.querySelector("header .controls");
-  const mount = document.getElementById("mobileSettingsControls");
-  if (!controls || !mount) return;
-  const mobile = window.matchMedia("(max-width: 768px)").matches;
-  const recurringButton = controls.querySelector("button[onclick='openRecurringModal()']");
-  const movable = Array.from(controls.children).filter(node => node.id !== "authBtn" && node !== recurringButton);
-  if (mobile) movable.forEach(node => mount.appendChild(node));
-  else movable.forEach(node => controls.insertBefore(node, recurringButton || document.getElementById("authBtn")));
+function setDesktopSettings(open) {
+  const enabled = Boolean(open) && !window.matchMedia("(max-width: 768px)").matches;
+  document.body.classList.toggle("desktop-settings-open", enabled);
+  const panel = document.getElementById("desktopSettingsPanel");
+  const settings = document.getElementById("desktopSettingsButton");
+  const budget = document.getElementById("desktopBudgetButton");
+  if (panel) panel.hidden = !enabled;
+  if (settings) settings.setAttribute("aria-expanded", String(enabled));
+  if (budget) budget.hidden = !enabled;
 }
+function syncMobileSettingsControls() {
+  const controls = document.getElementById("budgetSettingsControls");
+  const mobileMount = document.getElementById("mobileSettingsControls");
+  if (!controls || !mobileMount) return;
+  const mobile = window.matchMedia("(max-width: 768px)").matches;
+  const movable = Array.from(controls.children).filter(node => node.dataset.setting !== "recurring");
+  if (mobile) {
+    movable.forEach(node => mobileMount.appendChild(node));
+    setDesktopSettings(false);
+  } else {
+    movable.forEach(node => controls.appendChild(node));
+  }
+}
+
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
   closeRecurringModal();
