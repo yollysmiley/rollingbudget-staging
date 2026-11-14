@@ -27,7 +27,7 @@ jobs:
       - name: Build redesigned UI with staging-only configuration
         run: node scripts/build-staging.mjs
       - name: Run redesigned UI build and rendering regression tests
-        run: node --test tests/empty-budget-state.test.mjs tests/security-rendering.test.mjs tests/auth-confirmation-page.test.mjs
+        run: node --test tests/empty-budget-state.test.mjs tests/security-rendering.test.mjs tests/auth-confirmation-page.test.mjs tests/auth-confirmation-page.test.mjs
       - name: Run desktop and mobile acceptance tests
         run: npm run test:e2e
       - name: Retain browser reports and failure evidence
