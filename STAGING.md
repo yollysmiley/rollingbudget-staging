@@ -16,6 +16,12 @@ Legacy Release 2 records remain in `public.budget_data`. The redesigned UI does 
 
 No production budget records, browser backups, credentials, or policies are copied. Staging uses synthetic data only.
 
+## Database security
+
+The staging migration `20261114192802_harden_public_default_privileges.sql` restricts default table, sequence, and function grants for objects created by the `postgres` migration role in the exposed `public` schema. Future objects require explicit grants to client roles, and newly created functions do not inherit PUBLIC EXECUTE. Existing object grants and row-level policies are unchanged. The migration does not change budget rows or either budget table.
+
+The staging project has owner-scoped SELECT, INSERT, UPDATE, and DELETE policies on both `budget_data` and `budget_ui_years`. UPDATE policies include both USING and WITH CHECK. Verify the applied defaults and effective table grants with [verify-default-privileges.sql](supabase/verification/verify-default-privileges.sql).
+
 ## Validation
 
 The browser acceptance suite in `tests/browser/budget.spec.js` targets the redesigned UI. Previous Release 2 security and cross-account test evidence applies to the previous application and is not evidence that the redesigned UI has passed equivalent live cloud tests. Run the new UI's browser suite and verify the migration and authenticated cloud sync in the staging project before relying on cloud persistence.
