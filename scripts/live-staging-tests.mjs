@@ -15,6 +15,7 @@ const year = 2199;
 const sessions = [];
 const created = [];
 let failures = 0;
+let setupStep = 'initialization';
 
 async function request(path, { token, method = 'GET', body } = {}) {
   const headers = { apikey: key, 'Content-Type': 'application/json' };
@@ -32,8 +33,9 @@ async function request(path, { token, method = 'GET', body } = {}) {
   return { status: response.status, ok: response.ok, data };
 }
 
-function success(result) {
-  assert(result.ok, 'Unexpected HTTP status ' + result.status);
+function success(result, operation = 'Staging API request') {
+  assert(result.ok, operation + ' failed (HTTP ' + result.status +
+    (result.data?.code ? ', code ' + result.data.code : '') + ')');
 }
 function denied(result) {
   assert(
@@ -65,6 +67,7 @@ async function check(name, action) {
 
 try {
   for (const account of ['A', 'B']) {
+    setupStep = 'sign in test account ' + account;
     const result = await request('/auth/v1/token?grant_type=password', {
       method: 'POST',
       body: {
@@ -77,20 +80,23 @@ try {
     sessions.push(result.data);
   }
 
+  setupStep = 'validate distinct test identities';
   assert.notEqual(sessions[0].user.id, sessions[1].user.id, 'Two distinct staging test accounts are required');
-  for (const session of sessions) {
+  for (const [index, session] of sessions.entries()) {
+    setupStep = 'check reserved year 2199 for test account ' + index;
     const existing = await rows(session);
     assert.equal(existing.length, 0, 'Reserved integration year 2199 must be empty; no existing data will be overwritten');
   }
 
   for (const [index, session] of sessions.entries()) {
+    setupStep = 'create synthetic year 2199 fixture for test account ' + index;
     const budget = { integrationRun: run, owner: index, months: [] };
     const result = await request('/rest/v1/budget_ui_years', {
       token: session.access_token,
       method: 'POST',
       body: { user_id: session.user.id, year, budget_data: budget, updated_at: new Date().toISOString() }
     });
-    success(result);
+    success(result, 'Create year 2199 fixture for test account ' + index);
     assert.equal(result.data?.[0]?.user_id, session.user.id);
     assert.equal(result.data?.[0]?.year, year);
     created.push({ session });
@@ -198,9 +204,9 @@ try {
       assert([401, 403].includes(result.status));
     });
   }
-} catch {
+} catch (error) {
   failures++;
-  console.error('FAIL setup or fixture creation; sensitive response details suppressed');
+  console.error('FAIL setup at ' + setupStep + ': ' + (error?.message || 'unknown setup error'));
 } finally {
   for (const { session } of created) {
     await check('cleanup owned synthetic year row', async () => {

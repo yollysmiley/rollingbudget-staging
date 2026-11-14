@@ -35,7 +35,7 @@ test('user-entered strings are HTML-escaped before entering markup', () => {
 });
 
 test('staging migration creates a separate RLS-protected table for the new UI', () => {
-  const migration = readFileSync(new URL('../supabase/migrations/20261113010000_create_budget_ui_years.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../supabase/migrations/20261114184318_create_budget_ui_years.sql', import.meta.url), 'utf8');
   assert.ok(migration.includes('CREATE TABLE public.budget_ui_years'));
   assert.ok(migration.includes('PRIMARY KEY (user_id, year)'));
   assert.ok(migration.includes('ENABLE ROW LEVEL SECURITY'));

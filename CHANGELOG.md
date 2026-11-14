@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Improved live staging integration setup diagnostics to identify the failing stage and safe HTTP status/code without logging credentials, tokens, or response payloads.
+
 - Added a desktop-only Back to Overview control to the Recurring Rules Manager and fixed Auto-Cascade label contrast in the dark header; retained the mobile sidebar navigation and added desktop/mobile regression assertions.
 
 - Added a branded staging password-reset page, routed Forgot Password emails to it, validated recovery sessions before password updates, and added desktop/mobile regression coverage.
