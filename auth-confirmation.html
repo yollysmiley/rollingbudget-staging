@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17152B">
+  <title>Confirm your Rolling Budget email</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { color-scheme: light; --ink:#181326; --muted:#645e78; --line:#e5e1f2; --purple:#7c3aed; --header:#17152B; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:flex; flex-direction:column; background:#f8f7fc; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif; line-height:1.5; -webkit-font-smoothing:antialiased; }
+    header { min-height:82px; display:flex; align-items:center; padding:16px max(22px,calc((100vw - 1120px)/2)); background:var(--header); border-bottom:1px solid #302D4B; color:#fff; }
+    .brand { display:flex; align-items:center; gap:13px; }
+    .mark { display:flex; align-items:flex-end; gap:5px; height:36px; }
+    .mark span { display:block; width:9px; border-radius:3px; background:#8B7CFF; }
+    .mark span:nth-child(1) { height:17px; }
+    .mark span:nth-child(2) { height:26px; }
+    .mark span:nth-child(3) { height:36px; background:#B1A6FF; }
+    .wordmark { font-size:1.18rem; font-weight:750; letter-spacing:-.035em; }
+    .wordmark span { color:#A99CFF; }
+    main { width:min(100% - 32px,520px); margin:auto; padding:48px 0; }
+    .panel { background:#fff; border:1px solid var(--line); border-radius:22px; padding:clamp(24px,5vw,42px); box-shadow:0 16px 40px rgba(24,19,38,.07); text-align:center; }
+    .status-icon { width:58px; height:58px; display:grid; place-items:center; margin:0 auto 18px; border-radius:50%; background:#ecfdf5; color:#047857; font-size:1.7rem; font-weight:800; }
+    .status-icon.error { background:#fef2f2; color:#b91c1c; }
+    h1 { margin:0 0 10px; font-size:clamp(1.45rem,5vw,1.9rem); line-height:1.2; letter-spacing:-.035em; }
+    p { margin:0 auto 24px; max-width:390px; color:var(--muted); font-size:.98rem; }
+    .primary { display:inline-flex; min-height:48px; align-items:center; justify-content:center; width:100%; padding:12px 18px; border:1px solid #6d28d9; border-radius:11px; background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; font:700 .95rem inherit; text-decoration:none; box-shadow:0 4px 12px rgba(124,58,237,.2); }
+    .primary:focus-visible { outline:3px solid rgba(139,124,255,.55); outline-offset:3px; }
+    .support { margin-top:18px; font-size:.84rem; }
+    .support a { color:#6554C0; font-weight:700; }
+    footer { padding:18px 16px; text-align:center; color:#827b91; font-size:.78rem; }
+    @media(max-width:600px) {
+      header { min-height:72px; padding:13px 18px; }
+      .mark { gap:4px; height:32px; }
+      .mark span { width:8px; }
+      .mark span:nth-child(1) { height:15px; }
+      .mark span:nth-child(2) { height:23px; }
+      .mark span:nth-child(3) { height:32px; }
+      .wordmark { font-size:1.04rem; }
+      main { width:calc(100% - 24px); padding:28px 0; }
+      .panel { border-radius:18px; padding:28px 20px; }
+      .primary { min-height:48px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand" aria-label="Rolling Budget">
+      <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="wordmark">Rolling <span>Budget</span></div>
+    </div>
+  </header>
+  <main>
+    <section class="panel" aria-labelledby="statusTitle">
+      <div id="statusIcon" class="status-icon" aria-hidden="true">✓</div>
+      <h1 id="statusTitle">Confirming your email…</h1>
+      <p id="statusMessage" role="status" aria-live="polite">Please wait while we finish setting up your Rolling Budget account.</p>
+      <a id="continueLink" class="primary" href="./rollover-budget-app.html" hidden>Continue to Rolling Budget</a>
+      <p id="supportMessage" class="support" hidden>Need another confirmation email? <a href="./rollover-budget-app.html">Return to sign in</a> and request a new link.</p>
+    </section>
+  </main>
+  <footer>Plan smarter. Grow stronger.</footer>
+  <script>
+    const SUPABASE_URL = "YOUR_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+    const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";
+    const icon = document.getElementById("statusIcon");
+    const title = document.getElementById("statusTitle");
+    const message = document.getElementById("statusMessage");
+    const continueLink = document.getElementById("continueLink");
+    const supportMessage = document.getElementById("supportMessage");
+
+    function showFailure() {
+      icon.textContent = "!";
+      icon.classList.add("error");
+      title.textContent = "This link is invalid or has expired";
+      message.textContent = "For your security, confirmation links can only be used once and may expire. Return to Rolling Budget and request a new confirmation email.";
+      supportMessage.hidden = false;
+    }
+
+    async function confirmEmail() {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const query = new URLSearchParams(window.location.search);
+      const authError = hash.get("error") || hash.get("error_code") || query.get("error") || query.get("error_code");
+      if (authError) {
+        showFailure();
+        return;
+      }
+      if (!window.supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY || !STAGING_STORAGE_PREFIX) {
+        title.textContent = "We couldn't confirm your email";
+        message.textContent = "Account confirmation is temporarily unavailable. Please try again in a moment.";
+        showFailure();
+        return;
+      }
+      try {
+        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: { storageKey: STAGING_STORAGE_PREFIX + "_auth" }
+        });
+        const { data, error } = await client.auth.getSession();
+        if (error || !data?.session) {
+          showFailure();
+          return;
+        }
+        icon.textContent = "✓";
+        title.textContent = "Your email is confirmed";
+        message.textContent = "Your Rolling Budget account is ready. Continue to sign in and start planning with confidence.";
+        continueLink.hidden = false;
+      } catch (error) {
+        showFailure();
+      }
+    }
+
+    confirmEmail();
+  </script>
+</body>
+</html>
