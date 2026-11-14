@@ -916,6 +916,10 @@ function validYearData(value) {
   return value && typeof value === "object" && Array.isArray(value.months) && value.months.length === 12 &&
     value.months.every(m => m && typeof m === "object" && ["income", "fixed", "variable", "creditCards", "loans"].every(k => Array.isArray(m[k])));
 }
+function validBudgetState(value) {
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    Object.entries(value).every(([year, budget]) => /^\\d{4}$/.test(year) && validYearData(budget));
+}
 async function initApp() {
   if (supabaseClient) {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -976,30 +980,34 @@ async function loadAllYears() {
   }
   if (supabaseClient && currentUser) {
     try {
-      const { data, error } = await supabaseClient.from("budget_ui_years").select("year,budget_data,updated_at").eq("user_id", currentUser.id);
+      const { data: row, error } = await supabaseClient.from("budget_data")
+        .select("state,updated_at")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
       if (error) throw error;
-      for (const row of data || []) {
-        const year = String(row.year);
-        if (!validYearData(row.budget_data)) continue;
+      const cloudState = row?.state;
+      if (cloudState && validBudgetState(cloudState)) {
         const cloudTime = row.updated_at ? Date.parse(row.updated_at) : NaN;
-        const cloudRecord = { data: row.budget_data, updatedAt: Number.isFinite(cloudTime) ? cloudTime : null, legacy: false };
-        const localRecord = localRecords[year];
-        // Preserve an unversioned local copy before preferring a timestamped cloud record.
-        if (localRecord?.legacy && cloudRecord.updatedAt !== null) {
-          const backupKey = storageKey(year) + "_legacy_backup";
-          try {
-            if (localStorage.getItem(backupKey) === null) {
-              localStorage.setItem(backupKey, JSON.stringify({ data: localRecord.data, backedUpAt: new Date().toISOString(), reason: "Unversioned local data preserved while loading timestamped cloud data." }));
-            }
-          } catch (backupError) { console.warn("Could not create legacy local budget backup; cloud data remains unchanged.", backupError); }
+        for (const [year, budget] of Object.entries(cloudState)) {
+          const cloudRecord = { data: budget, updatedAt: Number.isFinite(cloudTime) ? cloudTime : null, legacy: false };
+          const localRecord = localRecords[year];
+          if (localRecord?.legacy && cloudRecord.updatedAt !== null) {
+            const backupKey = storageKey(year) + "_legacy_backup";
+            try {
+              if (localStorage.getItem(backupKey) === null) {
+                localStorage.setItem(backupKey, JSON.stringify({ data: localRecord.data, backedUpAt: new Date().toISOString(), reason: "Unversioned local data preserved while loading timestamped cloud data." }));
+              }
+            } catch (backupError) { console.warn("Could not create legacy local budget backup; cloud data remains unchanged.", backupError); }
+          }
+          const newest = chooseNewestBudget(localRecord, cloudRecord);
+          all[year] = newest.data;
+          if (newest === cloudRecord) {
+            try { localStorage.setItem(storageKey(year), JSON.stringify({ data: cloudRecord.data, updatedAt: row.updated_at })); }
+            catch (storageError) { console.warn("Could not cache cloud budget locally:", storageError); }
+          }
         }
-        const newest = chooseNewestBudget(localRecord, cloudRecord);
-        all[year] = newest.data;
-        // Normalize the chosen copy to the timestamped envelope so future loads compare versions.
-        if (newest === cloudRecord) {
-          try { localStorage.setItem(storageKey(year), JSON.stringify({ data: cloudRecord.data, updatedAt: row.updated_at })); }
-          catch (storageError) { console.warn("Could not cache cloud budget locally:", storageError); }
-        }
+      } else if (row?.state && Object.keys(row.state).length) {
+        console.warn("Cloud budget document has an unsupported state shape; local data was retained.");
       }
     } catch (error) { console.error("Cloud load error; local data was retained:", error); }
   }
@@ -1013,12 +1021,11 @@ async function saveDB() {
   catch (error) { console.error("Local save error:", error); alert("Could not save this budget in browser storage. Your changes may not persist."); return; }
   if (supabaseClient && currentUser) {
     try {
-      const { error } = await supabaseClient.from("budget_ui_years").upsert({
+      const { error } = await supabaseClient.from("budget_data").upsert({
         user_id: currentUser.id,
-        year: Number(activeYear),
-        budget_data: currentYearData,
+        state: db,
         updated_at: updatedAt
-      }, { onConflict: "user_id,year" });
+      }, { onConflict: "user_id" });
       if (error) throw error;
     } catch(error) { console.error("Cloud sync error; local copy was retained:", error); }
   }
