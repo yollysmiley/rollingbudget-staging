@@ -232,7 +232,7 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   const page = await open(context, a, 'LOGOUT-A');
 
   await page.locator('#authBtn').click();
-  await expect(page).toHaveURL(new RegExp('/
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
   await expect(page.locator('#incomeBody')).toHaveCount(0);
   uiLoggedOutOwners.add(a.user.id);
