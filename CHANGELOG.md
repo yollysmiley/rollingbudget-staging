@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened staging PostgreSQL default privileges for objects created by the `postgres` migration role in the exposed `public` schema. New tables, sequences, and functions no longer grant access to client roles by default; new functions no longer inherit PUBLIC EXECUTE. Existing table grants, row policies, and budget records are unchanged. Added migration and regression coverage.
+
 - Improved live staging integration setup diagnostics to identify the failing stage and safe HTTP status/code without logging credentials, tokens, or response payloads.
 
 - Added a desktop-only Back to Overview control to the Recurring Rules Manager and fixed Auto-Cascade label contrast in the dark header; retained the mobile sidebar navigation and added desktop/mobile regression assertions.
