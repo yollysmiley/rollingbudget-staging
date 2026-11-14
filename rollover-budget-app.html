@@ -1460,7 +1460,8 @@ async function submitAuth() {
       return;
     }
     if (isSignUpMode) {
-      const { error } = await supabaseClient.auth.signUp({ email, password });
+      const emailRedirectTo = new URL("./auth-confirmation.html", window.location.href).href;
+      const { error } = await supabaseClient.auth.signUp({ email, password, options: { emailRedirectTo } });
       if (error) throw error;
       setAuthMessage("Check your inbox for a confirmation link to finish creating your account.", "success");
     } else {
