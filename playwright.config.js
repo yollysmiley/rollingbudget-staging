@@ -21,12 +21,12 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testIgnore: '**/mobile.spec.js',
+      testIgnore: '**/mobile*.spec.js',
       use: { ...devices['Desktop Chrome'] }
     },
     {
       name: 'mobile',
-      testMatch: '**/mobile.spec.js',
+      testMatch: '**/mobile*.spec.js',
       use: { ...devices['iPhone 13'], browserName: 'chromium' }
     }
   ]
