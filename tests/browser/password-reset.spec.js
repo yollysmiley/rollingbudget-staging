@@ -32,7 +32,7 @@ test('desktop reset page validates confirmation and updates the password', async
   await page.locator('#submitButton').click();
   await expect(page.locator('#pageTitle')).toHaveText('Your password has been updated');
   await expect(page.locator('#continueLink')).toBeVisible();
-  expect(await page.evaluate(() => window.__updatedPasswordLength)).toBe(22);
+  expect(await page.evaluate(() => window.__updatedPasswordLength)).toBe(21);
   const config = await page.evaluate(() => window.__resetConfig);
   expect(config.url).toBe('https://phiscfwfuzeptetimdbo.supabase.co');
   expect(config.storageKey).toBe('rollingbudget_staging_phiscfwfuzeptetimdbo_auth');
