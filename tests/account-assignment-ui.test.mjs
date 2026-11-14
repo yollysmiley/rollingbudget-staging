@@ -11,9 +11,9 @@ test('each expense and debt entry supports account reassignment', () => {
     assert.match(html, new RegExp('id="'+prefix+'Account" data-new-entry-account'));
   }
 });
-test('income keeps legacy columns and offers new account amount', () => {
-  assert.match(html, /id="newIncCpm"/);
-  assert.match(html, /id="newIncUsaa"/);
+test('income keeps historical values and offers only account-based new income', () => {
+  assert.doesNotMatch(html, /id="newIncCpm"/);
+  assert.doesNotMatch(html, /id="newIncUsaa"/);
   assert.match(html, /id="newIncAmount"/);
   assert.match(html, /income\.push\(\{ name, accountId, amount \}\)/);
 });
@@ -24,4 +24,18 @@ test('recurring rule items carry account identity across categories', () => {
 });
 test('account selectors reject IDs absent from authenticated account list', () => {
   assert.match(html, /accountId && !budgetAccounts\.some\(a => a\.id === accountId\)/);
+});
+
+test('mixed legacy income must be split rather than merged into one account', () => {
+  assert.match(html, /async function splitLegacyIncome\(idx\)/);
+  assert.match(html, /Split income/);
+  assert.match(html, /sources\.length > 1/);
+  assert.doesNotMatch(html, /entry\.amount = \(Number\(entry\.cpm\)/);
+});
+test('account selection is shown for every recurring category', () => {
+  assert.match(html, /function toggleRecFields\(\)\{document\.querySelectorAll/);
+  assert.match(html, /group\.style\.display="grid"/);
+});
+test('secondary authenticated load initializes accounts before rendering', () => {
+  assert.match(html, /await loadAllYears\(\);\s*if \(currentUser\) await initializeAccounts\(\);\s*render\(\);/);
 });
