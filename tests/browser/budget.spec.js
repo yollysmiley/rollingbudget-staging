@@ -189,8 +189,17 @@ test('brand guidelines document the approved logo, palette, and typography', asy
 });
 
 test('desktop sign-out revokes access and returns to public homepage', async ({ page }) => {
+  page.once('dialog', dialog => dialog.accept());
   await page.locator('#authBtn').click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
   await expect(page.locator('#incomeBody')).toHaveCount(0);
+});
+
+test('cancelling desktop sign-out keeps the authenticated budget visible', async ({ page }) => {
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#authBtn').click();
+  await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
+  await expect(page.locator('#authBtn')).toHaveText('Sign Out');
+  await expect(page.locator('#incTotalBadge')).toBeVisible();
 });

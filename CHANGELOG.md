@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed browser sign-out regression tests to explicitly accept native confirmation dialogs and added desktop/mobile coverage for cancelling sign-out.
+
 - Fixed the simulated auth client to persist sign-out state across page navigation, preventing the public homepage from immediately re-authenticating after logout.
 
 - Updated remaining signed-out browser assertions for authenticated owner-scoped storage, account status, and desktop/mobile sign-out navigation.

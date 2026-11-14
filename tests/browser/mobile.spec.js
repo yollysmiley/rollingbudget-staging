@@ -88,6 +88,7 @@ test('mobile sign-out returns to public homepage without exposing budget', async
   const signOut = page.locator('#mobileAuthBtn');
   await expect(signOut).toBeVisible();
   await expect(signOut).toHaveText('Sign Out');
+  page.once('dialog', dialog => dialog.accept());
   await signOut.click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
@@ -171,4 +172,12 @@ test('mobile header matches the approved email branding and preserves menu and s
   await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign Out');
   await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(23, 21, 43)');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+test('cancelling mobile sign-out keeps the authenticated budget visible', async ({ page }) => {
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#mobileAuthBtn').click();
+  await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
+  await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign Out');
+  await expect(page.locator('#mobileOverview')).toBeVisible();
 });
