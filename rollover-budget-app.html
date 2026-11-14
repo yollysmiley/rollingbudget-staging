@@ -561,7 +561,7 @@ let supabaseClient = null;
 let currentUser = null;
 let isSignUpMode = false;
 
-if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && window.supabase) {
+if (SUPABASE_URL && window.supabase) {
   supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { storageKey: STAGING_STORAGE_PREFIX + "_auth" } });
 }
 
