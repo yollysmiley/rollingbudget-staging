@@ -1,9 +1,14 @@
 # rollingbudget-staging
+
 Isolated staging frontend for Rollover Budget Pro. Synthetic test data only; production remains in yollysmiley/rollingbudget.
 
 ## Brand standards
 
 See [Rolling Budget Brand Guidelines](docs/BRAND_GUIDELINES.md) for the approved logo, colors, typography, authentication treatment, and responsive brand usage.
+
+## Database security
+
+The staging migration `20261114192802_harden_public_default_privileges.sql` restricts default grants for future objects created by the `postgres` migration role in the exposed `public` schema. New tables, sequences, and functions require explicit grants; new functions do not inherit PUBLIC EXECUTE. Existing access is not changed. See [the staging guide](STAGING.md#database-security) and [verification SQL](supabase/verification/verify-default-privileges.sql).
 
 ## Email confirmation
 
