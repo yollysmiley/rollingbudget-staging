@@ -17,7 +17,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/rollover-budget-app.html');
   await expect(page).toHaveTitle(/STAGING/);
   await expect(page.locator('body')).toContainText('STAGING ONLY');
-  await expect(page.locator('#incomeBody')).toBeVisible();
+  // An empty tbody has no visible box. Assert the containing desktop card instead.
+  await expect(page.locator('.main-grid .card').first()).toBeVisible();
+  await expect(page.locator('#incTotalBadge')).toBeVisible();
   // Wait for initApp() to finish its async storage load and first render before interacting.
   await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
 });

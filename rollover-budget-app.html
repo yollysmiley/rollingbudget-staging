@@ -348,6 +348,90 @@
       .card.mobile-collapsed > :not(.card-header) { display: revert; }
     }
 
+
+    /* Mobile-only overview and navigation. Desktop markup and behavior remain unchanged. */
+    .mobile-overview,.mobile-bottom-nav { display:none; }
+    @media (max-width:768px) {
+      body { padding-bottom:104px; }
+      header { position:relative; }
+      .mobile-overview { display:block; margin:0 0 18px; }
+      body.mobile-tab-overview #rollingStrip,
+      body.mobile-tab-overview #midMonthBanner,
+      body.mobile-tab-overview #kpiGrid,
+      body.mobile-tab-overview #flowBarWrap,
+      body.mobile-tab-overview .mobile-card-tools,
+      body.mobile-tab-overview .main-grid { display:none !important; }
+      body.mobile-tab-plan #mobileOverview { display:none; }
+      body.mobile-tab-plan #rollingStrip { display:flex; }
+      body.mobile-tab-plan #midMonthBanner,
+      body.mobile-tab-plan #kpiGrid,
+      body.mobile-tab-plan #flowBarWrap { display:none !important; }
+      body.mobile-tab-plan .mobile-card-tools { display:flex; }
+      body.mobile-tab-plan .main-grid { display:grid; }
+      .mobile-overview-hero {
+        border-radius:26px; padding:22px 20px 20px; color:#fff;
+        background:linear-gradient(135deg,#352052 0%,#57318a 58%,#7040b2 100%);
+        box-shadow:0 14px 32px rgba(75,42,120,.18); margin-bottom:22px;
+      }
+      .mobile-overview-eyebrow { color:#dfd0ff; font-size:.78rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+      .mobile-overview-balance { font-size:2.45rem; line-height:1.15; font-weight:850; letter-spacing:-.04em; margin:14px 0 5px; font-variant-numeric:tabular-nums; }
+      .mobile-overview-caption { color:#e6dcf4; font-size:.96rem; }
+      .mobile-overview-stats { border-top:1px solid rgba(255,255,255,.2); margin-top:20px; padding-top:16px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+      .mobile-overview-stat span { display:block; color:#d9c9ee; font-size:.72rem; margin-bottom:4px; }
+      .mobile-overview-stat strong { display:block; font-size:1.02rem; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+      .mobile-section-heading { display:flex; justify-content:space-between; align-items:center; margin:0 4px 12px; gap:8px; }
+      .mobile-section-heading strong { font-size:1.05rem; }
+      .mobile-section-heading span { font-size:.78rem; color:var(--muted); }
+      .mobile-snapshot-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+      .mobile-snapshot-card { background:#fff; border:1px solid var(--border); border-radius:20px; padding:15px 14px; min-width:0; box-shadow:var(--shadow-sm); }
+      .mobile-snapshot-card span { display:block; font-size:.7rem; letter-spacing:.08em; font-weight:800; color:var(--muted); text-transform:uppercase; }
+      .mobile-snapshot-card strong { display:block; font-size:1.55rem; letter-spacing:-.03em; margin:7px 0 3px; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+      .mobile-snapshot-card small { color:var(--muted); font-size:.76rem; }
+      .mobile-allocation { background:#fff; border:1px solid var(--border); border-radius:20px; padding:16px; box-shadow:var(--shadow-sm); }
+      .mobile-allocation-head { display:flex; justify-content:space-between; gap:8px; font-size:.84rem; font-weight:750; margin-bottom:12px; }
+      .mobile-allocation-bar { display:flex; height:13px; border-radius:99px; overflow:hidden; background:#eeeaf6; }
+      .mobile-allocation-legend { display:flex; flex-wrap:wrap; gap:9px 13px; color:var(--muted); font-size:.73rem; margin-top:12px; }
+      .mobile-allocation-legend span { display:flex; align-items:center; gap:5px; }
+      .mobile-allocation-legend i { width:9px;height:9px;border-radius:50%;display:inline-block; }
+      .mobile-bottom-nav { display:grid; grid-template-columns:repeat(4,1fr); position:fixed; bottom:0;left:0;right:0; z-index:30; padding:10px 8px max(12px,env(safe-area-inset-bottom)); background:rgba(255,255,255,.96); border-top:1px solid var(--border); backdrop-filter:blur(14px); }
+      .mobile-bottom-nav button { border:0; box-shadow:none; background:transparent; color:#8b849b; display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px 2px; font-size:.72rem; font-weight:600; }
+      .mobile-bottom-nav button span { font-size:1.35rem; line-height:1.2; }
+      .mobile-bottom-nav button.active { color:var(--accent); font-weight:800; }
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) #mobileOverview,
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) #rollingStrip,
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) #midMonthBanner,
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) #kpiGrid,
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) #flowBarWrap,
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) .mobile-card-tools,
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) .main-grid { display:none !important; }
+      body:not(.mobile-tab-overview):not(.mobile-tab-plan) .mobile-bottom-nav { display:grid; }
+      .mobile-bottom-nav { display:grid; }
+      .mobile-tab-plan .mobile-bottom-nav { display:grid; }
+      .mobile-card-tools { margin-top:8px; }
+      .mobile-card-toggle { min-width:34px; width:34px; height:34px; padding:0; font-size:0; border-radius:50%; }
+      .mobile-card-toggle:after { content:"⌄"; font-size:1.15rem; }
+      .card.mobile-collapsed .mobile-card-toggle:after { content:"⌃"; }
+      .card-header { min-height:82px; padding:14px 15px; }
+      .card-header h2 { font-size:1rem; }
+      .card-header .badge { display:none; }
+      .card table { display:block; overflow-x:auto; }
+      .card th,.card td { white-space:nowrap; }
+    }
+
+
+    .mobile-auth-button { display:none; }
+    @media (max-width:768px) {
+      .header-top { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+      .mobile-auth-button {
+        display:inline-flex; align-items:center; justify-content:center;
+        min-height:40px; padding:9px 13px; border-radius:11px;
+        background:var(--accent); color:#fff; border:1px solid var(--accent);
+        font-size:.8rem; font-weight:750; white-space:nowrap; box-shadow:0 4px 12px rgba(124,58,237,.2);
+      }
+      .mobile-auth-button:hover { background:var(--accent-hover); color:#fff; }
+      .controls { grid-column:1 / -1; }
+    }
+
   </style>
 </head>
 <body>
@@ -361,6 +445,7 @@
         <p id="userStatusSub">Multi-Year & Mid-Month Financial Tracker</p>
       </div>
     </div>
+    <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
     <div class="controls">
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
@@ -393,6 +478,13 @@
   <!-- Cash Allocation Bar -->
   <div class="flow-bar-wrap" id="flowBarWrap"></div>
 
+  <section id="mobileOverview" class="mobile-overview" aria-label="Monthly budget overview"></section>
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <button class="active" data-mobile-tab="overview" onclick="setMobileTab('overview')"><span>⌂</span>Overview</button>
+    <button data-mobile-tab="plan" onclick="setMobileTab('plan')"><span>▦</span>Plan</button>
+    <button data-mobile-tab="activity" onclick="setMobileTab('activity')"><span>↕</span>Activity</button>
+    <button data-mobile-tab="settings" onclick="setMobileTab('settings')"><span>⚙</span>Settings</button>
+  </nav>
   <!-- Main Tables -->
   <div class="mobile-card-tools"><button type="button" id="toggleAllCards" onclick="toggleAllMobileCards()">Collapse all cards</button></div>
   <div class="main-grid">
@@ -665,6 +757,8 @@ async function initApp() {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUser = session?.user || null;
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
+      const mobileAuthBtn = document.getElementById("mobileAuthBtn");
+      if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
       document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
       setTimeout(async () => {
         await loadAllYears();
@@ -859,13 +953,48 @@ function computeRolling(yrKey) {
 function render() {
   const yearData = db[activeYear];
   if (!yearData) return;
-  document.getElementById("autoRollToggle").checked = yearData.autoCascade;
-  document.getElementById("activeYearSelect").value = activeYear;
-
+  // Compute the selected month before rendering either desktop or mobile views.
   const computed = computeRolling(activeYear);
   const m = yearData.months[selectedIdx];
   const c = computed[selectedIdx];
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
+  document.getElementById("autoRollToggle").checked = yearData.autoCascade;
+  const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
+  const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
+  document.getElementById("mobileOverview").innerHTML = `
+    <div class="mobile-overview-hero">
+      <div class="mobile-overview-eyebrow">${esc(m.name)} ${activeYear} Overview</div>
+      <div class="mobile-overview-balance">${fmt(c.endingRollover)}</div>
+      <div class="mobile-overview-caption">Projected rollover into next month</div>
+      <div class="mobile-overview-stats">
+        <div class="mobile-overview-stat"><span>Cash available</span><strong>${fmt(c.totalAvailable)}</strong></div>
+        <div class="mobile-overview-stat"><span>Planned outflow</span><strong>${fmt(c.totalOutflow)}</strong></div>
+        <div class="mobile-overview-stat"><span>Monthly net</span><strong class="${c.netMonthlyChange >= 0 ? "pos" : "neg"}">${c.netMonthlyChange >= 0 ? "+" : ""}${fmt(c.netMonthlyChange)}</strong></div>
+      </div>
+    </div>
+    <div class="mobile-section-heading"><strong>Monthly snapshot</strong><span>Updated just now</span></div>
+    <div class="mobile-snapshot-grid">
+      <div class="mobile-snapshot-card"><span>Income</span><strong>${fmt(c.newIncome)}</strong><small>Across all accounts</small></div>
+      <div class="mobile-snapshot-card"><span>Fixed bills</span><strong>${fmt(c.fixedTotal)}</strong><small>Recurring expenses</small></div>
+      <div class="mobile-snapshot-card"><span>Variable spend</span><strong>${fmt(c.varTotal)}</strong><small>Flexible spending</small></div>
+      <div class="mobile-snapshot-card"><span>Debt payments</span><strong>${fmt(c.ccTotal + c.loanTotal)}</strong><small>Cards and loans</small></div>
+    </div>
+    <div class="mobile-allocation">
+      <div class="mobile-allocation-head"><span>Cash allocation</span><strong>${committed.toFixed(0)}% committed</strong></div>
+      <div class="mobile-allocation-bar">
+        <div class="seg-fixed" style="width:${(c.fixedTotal/mobileBase)*100}%"></div>
+        <div class="seg-var" style="width:${(c.varTotal/mobileBase)*100}%"></div>
+        <div class="seg-cc" style="width:${(c.ccTotal/mobileBase)*100}%"></div>
+        <div class="seg-loan" style="width:${(c.loanTotal/mobileBase)*100}%"></div>
+        <div class="seg-left" style="width:${Math.max(0,(c.endingRollover/mobileBase)*100)}%"></div>
+      </div>
+      <div class="mobile-allocation-legend">
+        <span><i class="seg-fixed"></i>Fixed</span><span><i class="seg-var"></i>Variable</span><span><i class="seg-cc"></i>Debt</span><span><i class="seg-left"></i>Remaining</span>
+      </div>
+    </div>`;
+  if (!document.body.dataset.mobileTabInitialized) { setMobileTab("overview"); document.body.dataset.mobileTabInitialized = "true"; }
+
+  document.getElementById("activeYearSelect").value = activeYear;
 
   document.getElementById("rollingStrip").innerHTML = yearData.months.map((mo, idx) => {
     const co = computed[idx];
@@ -1186,6 +1315,18 @@ async function deleteRecurringRule(idx) {
   await saveDB(); render();
 }
 
+
+
+function setMobileTab(tab) {
+  document.body.classList.remove("mobile-tab-overview","mobile-tab-plan","mobile-tab-activity","mobile-tab-settings");
+  document.body.classList.add("mobile-tab-" + tab);
+  document.querySelectorAll(".mobile-bottom-nav button").forEach(button => {
+    const active = button.dataset.mobileTab === tab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  if (tab === "plan") updateMobileCardToggleAllLabel();
+}
 
 function toggleMobileCard(button) {
   const card = button.closest(".card");
