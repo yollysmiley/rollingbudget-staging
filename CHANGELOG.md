@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Updated desktop and mobile browser acceptance tests to use an isolated simulated signed-in Supabase client, while separately asserting public homepage behavior and anonymous app redirects.
+
 - Added a public responsive Rolling Budget homepage and an authenticated app entry at `/app/`. Unauthenticated app visitors are redirected to the homepage and sign-out clears the rendered budget. The legacy app URL remains guarded for compatibility.
 
 - Serialized staging cloud saves per account and year using immutable budget snapshots to prevent earlier edits overwriting later ones. Show an accessible warning when cloud sync fails while preserving local data; added ordering and failure regression tests and strengthened authenticated save assertions.

@@ -1,7 +1,9 @@
+import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await mockSignedInBudget(page);
   await page.route('https://**/rest/v1/**', route => route.abort());
   await page.route('https://**/auth/v1/**', route => route.abort());
   await page.addInitScript(() => {
@@ -15,7 +17,8 @@ test.beforeEach(async ({ page }) => {
       sessionStorage.setItem('__budget_test_storage_cleaned', '1');
     }
   });
-  await page.goto('/rollover-budget-app.html');
+  await page.goto('/app/');
+  await expectAuthenticatedBudget(page);
   await expect(page).toHaveTitle(/STAGING/);
   await expect(page.locator('body')).toContainText('STAGING ONLY');
   // An empty tbody has no visible box. Assert the containing desktop card instead.
