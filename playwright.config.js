@@ -27,7 +27,7 @@ export default defineConfig({
     {
       name: 'mobile',
       testMatch: '**/mobile.spec.js',
-      use: { ...devices['iPhone 13'] }
+      use: { ...devices['iPhone 13'], browserName: 'chromium' }
     }
   ]
 });
