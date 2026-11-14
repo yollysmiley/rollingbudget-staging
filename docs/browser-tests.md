@@ -10,3 +10,8 @@ Local usage: npm install; npx playwright install chromium; build dist with the p
 ## Recurring Rules Manager coverage
 
 The recurring-rules manager has separate desktop table and mobile card layouts. Browser coverage verifies frequency-based month placement, disabling newly generated entries, preserving legacy manually stored budget entries when a legacy rule is disabled, mobile layout visibility, and narrow-viewport overflow.
+
+
+## Recurring manager navigation regression
+
+Desktop and mobile browser tests verify the manager has no Back to budget control and the app header remains visible. Mobile acceptance coverage opens the manager and navigates to Plan, Settings, and Overview through the sidebar without a page refresh.

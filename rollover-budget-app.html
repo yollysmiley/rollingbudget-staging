@@ -435,7 +435,7 @@
 
     /* Recurring Rules Manager: separate desktop table and mobile card views */
     .recurring-manager-page{display:none;max-width:1400px;margin:28px auto;padding:0 24px}
-    body.recurring-manager-open .container{display:none!important}
+    body.recurring-manager-open .container > *{display:none!important}
     body.recurring-manager-open .recurring-manager-page{display:block}
     .recurring-manager-shell{display:grid;gap:20px}
     .recurring-manager-heading{display:flex;justify-content:space-between;align-items:center;gap:18px}
@@ -732,7 +732,7 @@
 
 <section id="recurringManagerPage" class="recurring-manager-page" aria-label="Recurring Rules Manager">
 <div class="recurring-manager-shell">
-<div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" onclick="closeRecurringModal()">Back to budget</button></div>
+<div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div></div>
 <div id="recurringDesktopView" class="recurring-desktop-view">
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
@@ -1352,6 +1352,7 @@ function syncMobileSettingsControls() {
 }
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
+  closeRecurringModal();
   document.body.classList.remove("mobile-tab-overview","mobile-tab-plan","mobile-tab-activity","mobile-tab-settings");
   document.body.classList.add("mobile-tab-" + tab);
   document.querySelectorAll(".mobile-sidebar-nav button").forEach(button => {
