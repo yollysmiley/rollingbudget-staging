@@ -433,6 +433,45 @@
     }
 
 
+    /* Recurring Rules Manager: separate desktop table and mobile card views */
+    .recurring-manager-page{display:none;max-width:1400px;margin:28px auto;padding:0 24px}
+    body.recurring-manager-open .container{display:none!important}
+    body.recurring-manager-open .recurring-manager-page{display:block}
+    .recurring-manager-shell{display:grid;gap:20px}
+    .recurring-manager-heading{display:flex;justify-content:space-between;align-items:center;gap:18px}
+    .recurring-manager-heading h2{font-size:1.7rem;letter-spacing:-.035em;margin:3px 0 5px}
+    .recurring-manager-heading p,.recurring-panel-heading p{color:var(--muted);font-size:.86rem}
+    .recurring-eyebrow{color:var(--accent)!important;font-size:.7rem!important;font-weight:800;letter-spacing:.1em}
+    .recurring-desktop-view{display:grid;gap:18px}.recurring-mobile-view{display:none}
+    .recurring-panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px;min-width:0}
+    .recurring-panel-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+    .recurring-panel-heading h3,.recurring-mobile-section h3{font-size:1rem;font-weight:800}
+    .recurring-table-wrap{width:100%;overflow-x:auto}.recurring-table{min-width:720px}.recurring-table td{vertical-align:middle}
+    .recurring-status{display:inline-flex;padding:4px 9px;border-radius:99px;font-size:.72rem;font-weight:800;background:var(--green-bg);color:var(--green)}
+    .recurring-status.disabled{background:#f1f0f4;color:var(--muted)}
+    .recurring-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .recurring-form-grid label,.recurring-mobile-form label{display:grid;gap:6px;color:var(--muted);font-size:.73rem;font-weight:800;text-transform:uppercase;letter-spacing:.035em;min-width:0}
+    .recurring-form-grid input,.recurring-form-grid select,.recurring-mobile-form input,.recurring-mobile-form select{width:100%;min-width:0;min-height:42px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:#faf9fe;color:var(--text);font-family:inherit;font-size:.86rem;font-weight:600;text-transform:none;letter-spacing:normal}
+    .recurring-form-actions{display:flex;justify-content:flex-end;margin-top:16px}
+    @media(max-width:768px){
+      .recurring-manager-page{margin:16px auto 28px;padding:0 12px}
+      .recurring-manager-heading{align-items:flex-start;flex-direction:column}
+      .recurring-manager-heading h2{font-size:1.35rem}
+      .recurring-manager-heading>button{width:100%;min-height:44px}
+      .recurring-desktop-view{display:none}.recurring-mobile-view{display:grid;gap:14px}
+      .recurring-mobile-section{min-width:0;padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--panel);box-shadow:var(--shadow-sm)}
+      .recurring-mobile-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+      .recurring-mobile-heading p,.recurring-mobile-add>p{color:var(--muted);font-size:.78rem;margin-top:3px}
+      .recurring-mobile-rules{display:grid;gap:10px}
+      .recurring-rule-card{border:1px solid var(--border);border-radius:13px;padding:13px;min-width:0}
+      .recurring-rule-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+      .recurring-rule-card h4{font-size:.92rem;overflow-wrap:anywhere}
+      .recurring-rule-card-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;color:var(--muted);font-size:.75rem}
+      .recurring-rule-card-meta strong{display:block;color:var(--text);font-size:.83rem;overflow-wrap:anywhere}
+      .recurring-rule-card button{width:100%;min-height:42px}
+      .recurring-mobile-form{display:grid;gap:12px;margin-top:14px}
+      .recurring-mobile-add-button{width:100%;min-height:46px;margin-top:14px}
+    }
     /* Distinct mobile navigation and settings layout */
     .mobile-menu-button,.mobile-sidebar,.mobile-sidebar-backdrop,.mobile-settings-panel { display:none; }
     @media (max-width:768px) {
@@ -691,64 +730,29 @@
   </div>
 </div>
 
-<!-- Recurring Rules Manager Modal -->
-<div class="modal-backdrop" id="recurringModal">
-  <div class="modal">
-    <h3>Recurring Rules Manager</h3>
-    <p>Manage or create recurring income and expenses for <strong><span id="modalYearLabel"></span></strong>.</p>
-    
-    <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:16px;">
-      <h4 style="font-size:0.85rem; margin-bottom:8px; font-weight:700;">Active Recurring Rules in this Year:</h4>
-      <div id="rulesListContainer" style="max-height:160px; overflow-y:auto; font-size:0.82rem;"></div>
-    </div>
-
-    <h4 style="font-size:0.88rem; margin-bottom:8px; font-weight:700;">+ Add New Recurring Rule</h4>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px;">
-      <div class="form-group">
-        <label>Category</label>
-        <select id="recCategory" onchange="toggleRecFields()">
-          <option value="fixed">Fixed Expense</option>
-          <option value="variable">Variable Expense</option>
-          <option value="income">Income</option>
-          <option value="loan">Loan Payment</option>
-          <option value="cc">Credit Card Payment</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Name</label>
-        <input type="text" id="recName" placeholder="e.g. Mortgage or Salary" />
-      </div>
-      <div class="form-group">
-        <label>Amount ($)</label>
-        <input type="number" step="0.01" id="recAmount" placeholder="0.00" />
-      </div>
-      <div class="form-group" id="recAccountGroup" style="display:none">
-        <label>Deposit Account</label>
-        <select id="recAccount">
-          <option value="cpm">CPM Federal</option>
-          <option value="usaa">USAA</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Due Day</label>
-        <input type="text" id="recDue" placeholder="e.g. 1st or 15th" />
-      </div>
-      <div class="form-group">
-        <label>Start Month</label>
-        <select id="recStart"></select>
-      </div>
-      <div class="form-group">
-        <label>End Month</label>
-        <select id="recEnd"></select>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button onclick="closeRecurringModal()">Close</button>
-      <button class="primary" onclick="applyRecurringRule()">Apply & Push</button>
-    </div>
-  </div>
+<section id="recurringManagerPage" class="recurring-manager-page" aria-label="Recurring Rules Manager">
+<div class="recurring-manager-shell">
+<header class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" onclick="closeRecurringModal()">Back to budget</button></header>
+<div id="recurringDesktopView" class="recurring-desktop-view">
+<section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
+<section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
+<label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
+<label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
+<label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
+<label data-rec-account-group>Deposit account<select data-rec-field="account"><option value="cpm">CPM Federal</option><option value="usaa">USAA</option></select></label>
+<label>Due day<input data-rec-field="due" type="text" placeholder="e.g. 1st or 15th"></label>
+<label>Start month<select data-rec-field="startMonth"></select></label>
+<label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><div class="recurring-form-actions"><button class="primary" type="button" onclick="addRecurringRule('desktop')">Add rule</button></div></section>
 </div>
-
+<div id="recurringMobileView" class="recurring-mobile-view"><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
+<label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
+<label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
+<label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
+<label data-rec-account-group>Deposit account<select data-rec-field="account"><option value="cpm">CPM Federal</option><option value="usaa">USAA</option></select></label>
+<label>Due day<input data-rec-field="due" type="text" placeholder="e.g. 1st or 15th"></label>
+<label>Start month<select data-rec-field="startMonth"></select></label>
+<label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><button class="primary recurring-mobile-add-button" type="button" onclick="addRecurringRule('mobile')">Add rule</button></section></div>
+</div></section>
 <script>
 // --- CLOUD CONFIGURATION ---
 // Replace with your backend URL and Anon Key when deploying
@@ -1288,77 +1292,44 @@ async function submitAuth() {
   }
 }
 
-/* Recurring Rules Manager Modal */
-function openRecurringModal() {
-  document.getElementById("modalYearLabel").textContent = activeYear;
-  const start = document.getElementById("recStart");
-  const end = document.getElementById("recEnd");
-  const opts = db[activeYear].months.map((m, i) => `<option value="${i}">${esc(m.name)}</option>`).join("");
-  start.innerHTML = opts; end.innerHTML = opts;
-  start.value = 0; end.value = 11;
-  
-  renderRulesList();
-  document.getElementById("recurringModal").classList.add("open");
+/* Recurring Rules Manager */
+const RECURRING_FREQUENCIES={monthly:{label:"Monthly",interval:1},"every-2-months":{label:"Every 2 months",interval:2},quarterly:{label:"Quarterly",interval:3},"every-6-months":{label:"Every 6 months",interval:6},annually:{label:"Annually",interval:12}};
+function openRecurringModal(){
+  document.getElementById("recurringYearLabel").textContent=activeYear;
+  document.querySelectorAll("[data-rec-field='startMonth']").forEach(select=>{select.innerHTML=db[activeYear].months.map((m,i)=>`<option value="${i}">${esc(m.name)}</option>`).join("");select.value="0";});
+  document.querySelectorAll("[data-recurring-form]").forEach(form=>{form.querySelector("[data-rec-field='category']").value="fixed";form.querySelector("[data-rec-field='frequency']").value="monthly";});
+  toggleRecFields();renderRulesList();document.body.classList.add("recurring-manager-open");
 }
-
-function closeRecurringModal() { document.getElementById("recurringModal").classList.remove("open"); }
-function toggleRecFields() {
-  document.getElementById("recAccountGroup").style.display = document.getElementById("recCategory").value === "income" ? "block" : "none";
+function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
+function toggleRecFields(source){const category=source?.value||"fixed";document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display=category==="income"?"grid":"none");}
+function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.frequency]?.label||"Monthly (legacy)";}
+function renderRulesList(){
+  const rules=db[activeYear].recurringRules||[],count=`${rules.length} rule${rules.length===1?"":"s"}`;
+  document.getElementById("desktopRuleCount").textContent=count;document.getElementById("mobileRuleCount").textContent=count;
+  if(!rules.length){document.getElementById("desktopRulesList").innerHTML='<tr><td colspan="7">No recurring rules yet. Add your first rule below.</td></tr>';document.getElementById("mobileRulesList").innerHTML='<p>No recurring rules yet. Add your first rule below.</p>';return;}
+  const startOf=rule=>Number.isInteger(rule.startMonth)?rule.startMonth:(Number.isInteger(rule.start)?rule.start:0);
+  document.getElementById("desktopRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<tr><td><strong>${esc(r.name)}</strong><div>${esc(r.due||"Due day not set")}</div></td><td>${esc(String(r.cat||"").toUpperCase())}</td><td>${fmt(r.amount)}</td><td>${esc(recurringRuleFrequency(r))}</td><td>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</td><td><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable":"Enable"}</button></td></tr>`;}).join("");
+  document.getElementById("mobileRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(r.name)}</h4><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(String(r.cat||"").toUpperCase())}</strong></div><div>Amount<strong>${fmt(r.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(r))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable rule":"Enable rule"}</button></article>`;}).join("");
 }
-
-function renderRulesList() {
-  const container = document.getElementById("rulesListContainer");
-  const rules = db[activeYear].recurringRules || [];
-  if (rules.length === 0) {
-    container.innerHTML = `<p style="color:var(--muted); font-style:italic;">No active recurring rules saved for ${esc(activeYear)}.</p>`;
-    return;
-  }
-  container.innerHTML = rules.map((r, idx) => `
-    <div style="display:flex; justify-content:space-between; align-items:center; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px;">
-      <div>
-        <strong>${esc(r.name)}</strong> (${esc(r.cat).toUpperCase()}) — <strong>${fmt(r.amount)}</strong> (Due: ${esc(r.due || "1st")})
-      </div>
-      <button class="danger" style="padding:3px 8px; font-size:0.75rem;" onclick="deleteRecurringRule(${idx})">Delete</button>
-    </div>
-  `).join("");
+function recurringRuleItem(r){if(r.cat==="income")return{name:r.name,cpm:r.acct==="cpm"?r.amount:0,usaa:r.acct==="usaa"?r.amount:0,recurringRuleId:r.id};if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,recurringRuleId:r.id};if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,recurringRuleId:r.id};if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,recurringRuleId:r.id};return null;}
+function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
+async function addRecurringRule(view){
+  const form=document.querySelector(`[data-recurring-form="${view}"]`);if(!form)return;const get=f=>form.querySelector(`[data-rec-field="${f}"]`).value;
+  const cat=get("category"),name=get("name").trim(),amount=Number.parseFloat(get("amount")),due=get("due").trim(),acct=get("account"),startMonth=Number.parseInt(get("startMonth"),10),frequency=get("frequency");
+  if(!name||!Number.isFinite(amount)||amount<0||!Number.isInteger(startMonth)||!RECURRING_FREQUENCIES[frequency])return;
+  if(!db[activeYear].recurringRules)db[activeYear].recurringRules=[];
+  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
+  const item=recurringRuleItem(rule);for(const i of recurringRuleTargetMonths(rule)){const m=db[activeYear].months[i],list=cat==="income"?m.income:cat==="fixed"||cat==="variable"?m[cat]:cat==="loan"?m.loans:m.creditCards;if(item&&list)list.push({...item});}
+  form.querySelectorAll("input").forEach(input=>input.value="");form.querySelector("[data-rec-field='startMonth']").value="0";form.querySelector("[data-rec-field='frequency']").value="monthly";
+  await saveDB();render();renderRulesList();
 }
-
-async function applyRecurringRule() {
-  const cat = document.getElementById("recCategory").value;
-  const name = document.getElementById("recName").value.trim();
-  const amount = parseFloat(document.getElementById("recAmount").value) || 0;
-  const due = document.getElementById("recDue").value.trim();
-  const acct = document.getElementById("recAccount").value;
-  const start = parseInt(document.getElementById("recStart").value, 10);
-  const end = parseInt(document.getElementById("recEnd").value, 10);
-  if (!name || start > end) return;
-
-  if (!db[activeYear].recurringRules) db[activeYear].recurringRules = [];
-  db[activeYear].recurringRules.push({ id: Date.now(), cat, name, amount, due, acct, start, end });
-
-  for (let i = start; i <= end; i++) {
-    const mo = db[activeYear].months[i];
-    if (cat === "income") mo.income.push({ name, cpm: acct === "cpm" ? amount : 0, usaa: acct === "usaa" ? amount : 0 });
-    else if (cat === "fixed" || cat === "variable") mo[cat].push({ name, due, amount });
-    else if (cat === "loan") mo.loans.push({ name, due, balance: 0, apr: 0, payment: amount });
-    else if (cat === "cc") mo.creditCards.push({ name, due, statement: 0, apr: 0, payment: amount });
-  }
-
-  document.getElementById("recName").value = "";
-  document.getElementById("recAmount").value = "";
-  document.getElementById("recDue").value = "";
-  renderRulesList();
-  await saveDB(); render();
+async function toggleRecurringRule(index){
+  const r=db[activeYear].recurringRules?.[index];if(!r)return;r.active=r.active===false;
+  if(!r.active&&r.id){for(const m of db[activeYear].months){for(const list of [m.income,m.fixed,m.variable,m.loans,m.creditCards])for(let i=list.length-1;i>=0;i--)if(list[i].recurringRuleId===r.id)list.splice(i,1);}}
+  else if(r.active&&r.frequency){const item=recurringRuleItem(r);for(const i of recurringRuleTargetMonths(r)){const m=db[activeYear].months[i],list=r.cat==="income"?m.income:r.cat==="fixed"||r.cat==="variable"?m[r.cat]:r.cat==="loan"?m.loans:m.creditCards;if(item&&list&&!list.some(x=>x.recurringRuleId===r.id))list.push({...item});}}
+  await saveDB();render();renderRulesList();
 }
-
-async function deleteRecurringRule(idx) {
-  if (!confirm("Delete this recurring rule definition?")) return;
-  db[activeYear].recurringRules.splice(idx, 1);
-  renderRulesList();
-  await saveDB(); render();
-}
-
-
+async function deleteRecurringRule(index){const rules=db[activeYear].recurringRules||[];if(!rules[index])return;rules.splice(index,1);await saveDB();render();renderRulesList();}
 
 function toggleMobileSidebar(open) {
   const sidebar = document.getElementById("mobileSidebar");
