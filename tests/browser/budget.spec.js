@@ -91,7 +91,7 @@ test('recurring manager applies quarterly rules and disabling removes generated 
   await form.locator('[data-rec-field="amount"]').fill('80');
   await form.locator('[data-rec-field="due"]').fill('10th');
   await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
-  await page.locator('button[onclick="addRecurringRule(\\'desktop\\')"]').click();
+  await page.getByRole('button',{name:'Add rule'}).first().click();
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly');
   const occurrences=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
