@@ -599,6 +599,8 @@
   </style>
 </head>
 <body>
+<style id="authGateStyle">html:not(.budget-authenticated) body > :not(#authGateScreen):not(script){visibility:hidden!important}#authGateScreen{position:fixed;inset:0;z-index:99999;background:#f8f7fc;color:#17152b;display:grid;place-items:center;font-family:Inter,system-ui,sans-serif;padding:24px}html.budget-authenticated #authGateScreen{display:none}#authGateScreen section{max-width:440px;text-align:center}#authGateScreen a{color:#7c3aed;font-weight:700}</style>
+<div id="authGateScreen" role="status" aria-live="polite"><section><h1>Rolling Budget</h1><p id="authGateMessage">Checking your account…</p><p><a href="../">Return to homepage</a></p></section></div>
 
 <header>
   <div class="header-top">
@@ -917,23 +919,44 @@ function validYearData(value) {
     value.months.every(m => m && typeof m === "object" && ["income", "fixed", "variable", "creditCards", "loans"].every(k => Array.isArray(m[k])));
 }
 async function initApp() {
-  if (supabaseClient) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    currentUser = session?.user || null;
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      currentUser = session?.user || null;
-      document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
-      const mobileAuthBtn = document.getElementById("mobileAuthBtn");
-      if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
-      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Plan smarter. Grow stronger.";
+  const gateMessage = document.getElementById("authGateMessage");
+  const home = new URL("../", window.location.href).href;
+  if (!supabaseClient) {
+    gateMessage.textContent = "Sign in is temporarily unavailable. Please try again later.";
+    return;
+  }
+  const { data: { user }, error } = await supabaseClient.auth.getUser();
+  if (error || !user) {
+    window.location.replace(home);
+    return;
+  }
+  currentUser = user;
+  document.documentElement.classList.add("budget-authenticated");
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_OUT" || !session?.user) {
+      currentUser = null;
+      db = {};
+      document.documentElement.classList.remove("budget-authenticated");
+      window.location.replace(home);
+      return;
+    }
+    if (session.user.id !== currentUser?.id) {
+      currentUser = session.user;
       setTimeout(async () => {
+        const verified = await supabaseClient.auth.getUser();
+        if (verified.error || verified.data.user?.id !== session.user.id) {
+          document.documentElement.classList.remove("budget-authenticated");
+          window.location.replace(home);
+          return;
+        }
         await loadAllYears();
         render();
       }, 0);
-    });
-  }
-  document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
-  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Plan smarter. Grow stronger.";
+    }
+  });
+  document.getElementById("authBtn").textContent = "Sign Out";
+  document.getElementById("mobileAuthBtn").textContent = "Sign Out";
+  document.getElementById("userStatusSub").textContent = "Logged in as " + currentUser.email;
   await loadAllYears();
   render();
 }
