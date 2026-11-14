@@ -1,4 +1,7 @@
 ## Unreleased
+
+- Align live authenticated income persistence acceptance with account-linked `amount` and `accountId` fields, asserting both Supabase persistence and fresh-context restoration while retaining legacy fixture migration coverage.
+- Reduce staging CI duplication by running live safety unit tests in the primary build only, cancel superseded PR builds without cancelling main deployments, and retain Playwright reports on failure rather than every successful run. Required `build` and `validate` checks remain unchanged; live credentialed workflow remains isolated.
 - Staging: seed legacy accounts only when referenced by budget data; allow empty catalogs and unassigned income, and align desktop/mobile income-entry fields. Added regression tests.
 - Harden account migration against missing legacy accounts and local cache failures; enable editable account-linked income amounts and add regression coverage.
 
