@@ -67,5 +67,12 @@ assert.ok(!homeHtml.includes('YOUR_SUPABASE_') && !homeHtml.includes('YOUR_STAGI
 writeFileSync('dist/index.html', homeHtml);
 mkdirSync('dist/app', { recursive: true });
 writeFileSync('dist/app/index.html', html);
+for (const path of ['account-model.mjs', 'account-storage.mjs']) {
+  const source = readFileSync(new URL('./' + path, import.meta.url));
+  mkdirSync('dist/scripts', { recursive: true });
+  mkdirSync('dist/app/scripts', { recursive: true });
+  writeFileSync('dist/scripts/' + path, source);
+  writeFileSync('dist/app/scripts/' + path, source);
+}
 writeFileSync('dist/.nojekyll', '');
 console.log('Built the redesigned staging UI from rollover-budget-app.html for', config.projectRef);
