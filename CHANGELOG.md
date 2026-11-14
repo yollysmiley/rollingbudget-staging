@@ -1,4 +1,6 @@
 ## Unreleased
+- Phase 1 account storage: added user-scoped `budget_accounts` SQL migration with RLS, idempotent legacy account initialization helpers, and regression tests. Existing year documents remain untouched until the account-aware UI is ready. Staging database application is pending verification.
+
 
 - Added isolated account-model helpers and unit tests for legacy income migration, exclusion totals, and referenced-account removal safeguards. Not yet integrated into the budget UI or cloud persistence.
 
