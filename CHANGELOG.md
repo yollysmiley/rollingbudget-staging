@@ -1,3 +1,7 @@
+## Unreleased
+
+- Staging draft PR #31: moved desktop year selection, New Year, Auto-Cascade and Recurring Rules controls into a Settings view; added navigation contract tests. Dynamic account management remains unimplemented.
+
 # Changelog
 
 ## Unreleased
