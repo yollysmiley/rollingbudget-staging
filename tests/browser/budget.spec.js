@@ -48,7 +48,7 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
   await expect(page.locator('#incomeBody')).toContainText('SAVE-RELOAD-TEST');
   await page.reload();
   await expect(page.locator('#incomeBody input[type="text"]').first()).toHaveValue('SAVE-RELOAD-TEST');
-  await expect(page.locator('#incomeBody input[type="number"]').first()).toHaveValue('2713.45');
+  await expect(page.locator('#incomeBody tr:not(.roll-row) input[type="number"]').first()).toHaveValue('2713.45');
   await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
 });
 
