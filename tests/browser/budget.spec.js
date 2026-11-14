@@ -96,8 +96,16 @@ test('recurring rule applies to the selected months', async ({ page }) => {
   await expect(page.locator('#fixedBody input:not([type])')).toHaveCount(0);
 });
 
-test('year switching and narrow viewport remain usable', async ({ page }) => {
+test('year switching in mobile Settings and narrow viewport remain usable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+
+  // On mobile, year controls live in the slide-out Settings panel rather than the header.
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
+
   await page.locator('#activeYearSelect').selectOption('2027');
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
   const size = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
