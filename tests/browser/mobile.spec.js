@@ -118,7 +118,8 @@ test('mobile sidebar exposes core pages and year management without burying recu
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
   await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
-  await expect(page.locator('#activeYearSelect')).toBeHidden();
+  await expect(page.locator('#mobileSettingsPanel #activeYearSelect')).toHaveCount(0);
+  await expect(page.locator('#mobileSidebar #activeYearSelect')).toHaveCount(1);
   await expect(page.locator('#authBtn')).toBeHidden();
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
 });
