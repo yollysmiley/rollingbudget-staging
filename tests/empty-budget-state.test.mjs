@@ -10,7 +10,7 @@ test('staging build uses the redesigned UI and isolated staging project', () => 
   assert.ok(html.includes('const STAGING_STORAGE_PREFIX = "rollingbudget_staging_phiscfwfuzeptetimdbo"'));
   assert.ok(html.includes('const SUPABASE_URL = "https://phiscfwfuzeptetimdbo.supabase.co"'));
   assert.ok(html.includes('const BASELINE_2026 = {'));
-  assert.doesNotMatch(html, /4015\\.79|3498\\.73|1050\\.86|Yolande Pay|Planet Home Lending/);
+  assert.doesNotMatch(html, /4015[.]79|3498[.]73|1050[.]86|Yolande Pay|Planet Home Lending/);
 });
 
 test('new UI preserves browser data and uses account-scoped local storage', () => {
