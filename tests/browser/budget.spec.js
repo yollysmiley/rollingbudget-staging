@@ -109,7 +109,7 @@ test('legacy recurring rules remain visible and disabling preserves existing bud
   await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
   await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
   await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  await expect(page.locator('#fixedBody')).toContainText('Legacy Rent');
+  await expect(page.locator('#fixedBody input:not([type])').first()).toHaveValue('Legacy Rent');
 });
 
 test('year switching in mobile Settings and narrow viewport remain usable', async ({ page }) => {
