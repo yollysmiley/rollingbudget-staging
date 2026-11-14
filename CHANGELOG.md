@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Strengthen legacy-income migration browser regression by asserting both editable income rows render after reload; preserve account split, totals, metadata and idempotency checks.
+
 - Automatically migrate legacy CPM/USAA income to account-linked entries after authenticated data loading; preserve source amounts and metadata, create a pre-migration local backup, and skip already-migrated records. Removed manual Split Income UI and updated Playwright and unit regression tests.
 
 - Phase 3 acceptance corrections: safeguard mixed-source legacy income with explicit splitting, simplify new income account assignment, show account selection for all recurring rule types, and initialize accounts on authenticated refresh. Added regression coverage.
