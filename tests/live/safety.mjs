@@ -25,3 +25,9 @@ export async function verifiedCleanupSession(account, signIn) {
 export function shouldLogoutOriginalSession(uiLoggedOutOwners, userId) {
   return !uiLoggedOutOwners.has(userId);
 }
+
+export function assertOwnedAccountFixture(row, id, userId, run) {
+  if (row?.id !== id || row?.user_id !== userId || row?.name !== 'Integration account ' + run) {
+    throw new Error('Account fixture ownership mismatch; refusing cleanup');
+  }
+}
