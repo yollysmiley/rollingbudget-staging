@@ -38,7 +38,7 @@ replaceConfirmationOnce('const SUPABASE_URL = "YOUR_SUPABASE_URL";', 'const SUPA
 replaceConfirmationOnce('const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";', 'const SUPABASE_ANON_KEY = ' + JSON.stringify(config.publishableKey) + ';', 'Confirmation publishable key');
 replaceConfirmationOnce('const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";', 'const STAGING_STORAGE_PREFIX = ' + JSON.stringify(config.storagePrefix) + ';', 'Confirmation storage namespace');
 replaceConfirmationOnce('<title>Confirm your Rolling Budget email</title>', '<title>STAGING - Confirm your Rolling Budget email</title>', 'Confirmation page title');
-replaceConfirmationOnce('<body>', '<body>\\n  <aside role="note" style="padding:10px;text-align:center;background:#fff3cd;color:#332701;border-bottom:2px solid #946200;font-weight:700">STAGING ONLY — isolated from production — ' + config.projectRef + '</aside>', 'Confirmation staging banner');
+replaceConfirmationOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-align:center;background:#fff3cd;color:#332701;border-bottom:2px solid #946200;font-weight:700">STAGING ONLY — isolated from production — ' + config.projectRef + '</aside>', 'Confirmation staging banner');
 assert.ok(!confirmationHtml.includes('YOUR_SUPABASE_'), 'Confirmation page has an unconfigured Supabase placeholder');
 assert.ok(!confirmationHtml.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Confirmation page has an unconfigured storage placeholder');
 mkdirSync('dist', { recursive: true });
