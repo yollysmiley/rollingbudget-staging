@@ -64,3 +64,8 @@ test('account removal blocks referenced entries and recurring rules', async () =
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [{ fixed: [{ accountId: 'cpm' }] }] } }), /Reassign/);
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [], recurringRules: [{ acct: 'cpm' }] } }), /Reassign/);
 });
+
+test('last account cannot be removed because initialization seeds an empty catalog', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', [{ id: 'custom', name: 'Custom', included: true }], 'custom', {}), /at least one/);
+});
