@@ -44,7 +44,6 @@ assert.ok(!confirmationHtml.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Confirmati
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/rollover-budget-app.html', html);
 writeFileSync('dist/auth-confirmation.html', confirmationHtml);
-writeFileSync('dist/rollover-budget-app.html', html);
 writeFileSync('dist/index.html', '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=rollover-budget-app.html"><title>Staging budget</title></head><body><a href="rollover-budget-app.html">Open staging budget</a></body></html>\n');
 writeFileSync('dist/.nojekyll', '');
 console.log('Built the redesigned staging UI from rollover-budget-app.html for', config.projectRef);
