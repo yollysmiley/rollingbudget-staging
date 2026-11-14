@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Avoid attempting a second logout of a browser-revoked Supabase session in the live authenticated test teardown. Keep owner-verified fixture cleanup, and report the failing teardown phase without exposing tokens or budget data. Added regression coverage.
+
 - Fixed live authenticated browser fixture cleanup after UI logout by signing in again with the dedicated test account, verifying the original owner, deleting only rows marked by the current test run, and signing out the cleanup session. Added regression coverage for identity mismatches.
 
 - Corrected authenticated browser regression tests to target the CPM income field explicitly and verify logout removes signed-in account data without assuming all baseline table inputs disappear.

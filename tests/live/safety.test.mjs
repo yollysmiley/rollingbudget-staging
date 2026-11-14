@@ -42,3 +42,11 @@ test('fixture cleanup reauthenticates and verifies the exact owner before deleti
     user: { id: 'owner-a' }
   })), /identity mismatch/);
 });
+
+test('UI-revoked session is not signed out again during cleanup', async () => {
+  const { shouldLogoutOriginalSession } = await import('./safety.mjs');
+  const loggedOut = new Set(['owner-a']);
+  assert.equal(shouldLogoutOriginalSession(loggedOut, 'owner-a'), false);
+  assert.equal(shouldLogoutOriginalSession(loggedOut, 'owner-b'), true);
+  assert.equal(shouldLogoutOriginalSession(new Set(), 'owner-a'), true);
+});

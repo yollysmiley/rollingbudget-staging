@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { requiredSettings, logoutAccepted, verifiedCleanupSession } from './safety.mjs';
+import { requiredSettings, logoutAccepted, verifiedCleanupSession, shouldLogoutOriginalSession } from './safety.mjs';
 
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
 const YEAR = 2026;
 const RUN = randomUUID();
 let settings;
 let accounts = [];
+let uiLoggedOutOwners;
 
 async function request(path, session, method = 'GET', body) {
   const response = await fetch(URL + path, {
@@ -135,6 +136,7 @@ async function cleanup(account, letter) {
 
 test.beforeEach(async () => {
   accounts = [];
+  uiLoggedOutOwners = new Set();
   settings = requiredSettings(process.env);
   for (const letter of ['A', 'B']) {
     const result = await fetch(URL + '/auth/v1/token?grant_type=password', {
@@ -160,15 +162,18 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
-  let failed = false;
+  const failures = [];
   for (const [index, account] of accounts.entries()) {
-    try { await cleanup(account, index === 0 ? 'A' : 'B'); } catch { failed = true; }
-    try {
-      const result = await request('/auth/v1/logout?scope=local', account, 'POST');
-      if (!logoutAccepted(result.status, result.data)) failed = true;
-    } catch { failed = true; }
+    try { await cleanup(account, index === 0 ? 'A' : 'B'); }
+    catch { failures.push('fixture cleanup for account ' + index); }
+    if (shouldLogoutOriginalSession(uiLoggedOutOwners, account.user.id)) {
+      try {
+        const result = await request('/auth/v1/logout?scope=local', account, 'POST');
+        if (!logoutAccepted(result.status, result.data)) failures.push('original session logout for account ' + index + ' (HTTP ' + result.status + ')');
+      } catch { failures.push('original session logout for account ' + index); }
+    }
   }
-  if (failed) throw new Error('Staging cleanup failed; inspect only the dedicated test-year fixtures before rerunning');
+  if (failures.length) throw new Error('Staging cleanup failed at: ' + failures.join('; '));
 });
 
 test('authenticated cloud save survives a fresh browser context', async ({ browser, context }) => {
@@ -219,6 +224,7 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   await page.locator('#authBtn').click();
   await expect.poll(() => page.evaluate(() => currentUser === null)).toBe(true);
   await expect(page.locator('#authBtn')).toHaveText('Sign In');
+  uiLoggedOutOwners.add(a.user.id);
   await expect.poll(() => page.evaluate(() =>
     db['2026']?.months?.[0]?.income?.some(item => item.name === 'LOGOUT-A') ?? false
   )).toBe(false);
