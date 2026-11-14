@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { requiredSettings, logoutAccepted } from './safety.mjs';
+import { requiredSettings, logoutAccepted, verifiedCleanupSession } from './safety.mjs';
 
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
 const YEAR = 2026;
@@ -102,16 +102,35 @@ async function open(context, account, label) {
   return page;
 }
 
-async function cleanup(account) {
-  const existing = await rows(account);
+async function cleanup(account, letter) {
+  // UI logout revokes the original access token; obtain a new owner-verified session for fixture cleanup.
+  const owner = await verifiedCleanupSession(account, async () => {
+    const response = await fetch(URL + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { apikey: settings.STAGING_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: settings['STAGING_TEST_' + letter + '_EMAIL'],
+        password: settings['STAGING_TEST_' + letter + '_PASSWORD']
+      }),
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!response.ok) throw new Error('Fixture cleanup sign-in failed (HTTP ' + response.status + ')');
+    return response.json();
+  });
+  try {
+  const existing = await rows(owner);
   if (existing.length) {
     const row = existing[0];
     if (row.budget_data?.integrationRun !== RUN) {
       throw new Error('Refusing to clean a staging budget row not created by this test run');
     }
-    await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, account, 'DELETE');
+    await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, owner, 'DELETE');
   }
-  expect(await rows(account)).toHaveLength(0);
+  expect(await rows(owner)).toHaveLength(0);
+  } finally {
+    const result = await request('/auth/v1/logout?scope=local', owner, 'POST');
+    if (!logoutAccepted(result.status, result.data)) throw new Error('Cleanup session logout failed');
+  }
 }
 
 test.beforeEach(async () => {
@@ -142,8 +161,8 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   let failed = false;
-  for (const account of accounts) {
-    try { await cleanup(account); } catch { failed = true; }
+  for (const [index, account] of accounts.entries()) {
+    try { await cleanup(account, index === 0 ? 'A' : 'B'); } catch { failed = true; }
     try {
       const result = await request('/auth/v1/logout?scope=local', account, 'POST');
       if (!logoutAccepted(result.status, result.data)) failed = true;

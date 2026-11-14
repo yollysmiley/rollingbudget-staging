@@ -13,3 +13,11 @@ export function assertOwnedFixture(row, id, userId, run) {
 export async function withDownload(download, action) {
   try { return await action(download); } finally { await download.delete(); }
 }
+
+export async function verifiedCleanupSession(account, signIn) {
+  const session = await signIn();
+  if (!session?.access_token || session.user?.id !== account.user?.id) {
+    throw new Error('Cleanup session identity mismatch; refusing fixture deletion');
+  }
+  return session;
+}
