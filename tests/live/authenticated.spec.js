@@ -5,6 +5,7 @@ import { requiredSettings, logoutAccepted, verifiedCleanupSession, shouldLogoutO
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
 const YEAR = 2026;
 const RUN = randomUUID();
+const FIXTURE_ACCOUNT_ID = 'integration-' + RUN;
 let settings;
 let accounts = [];
 let uiLoggedOutOwners;
@@ -52,7 +53,7 @@ function fixture(label) {
       code: name.slice(0, 3).toUpperCase(),
       name,
       recordedLeftover: 0,
-      income: index === 0 ? [{ name: label, cpm: 100, usaa: 0 }] : [],
+      income: index === 0 ? [{ name: label, amount: 100, accountId: FIXTURE_ACCOUNT_ID }] : [],
       fixed: [],
       variable: [],
       creditCards: [],
@@ -62,6 +63,10 @@ function fixture(label) {
 }
 
 async function seed(account, label) {
+  const inserted = await api('/rest/v1/budget_accounts', account, 'POST', {
+    id: FIXTURE_ACCOUNT_ID, user_id: account.user.id, name: 'Integration account ' + RUN, included: true
+  });
+  expect(inserted[0].id).toBe(FIXTURE_ACCOUNT_ID);
   const result = await api('/rest/v1/budget_ui_years', account, 'POST', {
     user_id: account.user.id,
     year: YEAR,
@@ -137,6 +142,8 @@ async function cleanup(account, letter) {
     await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, owner, 'DELETE');
   }
   expect(await rows(owner)).toHaveLength(0);
+  // Delete only this run's dedicated account, after its budget references are gone.
+  await api('/rest/v1/budget_accounts?user_id=eq.' + encodeURIComponent(owner.user.id) + '&id=eq.' + encodeURIComponent(FIXTURE_ACCOUNT_ID), owner, 'DELETE');
   } finally {
     const result = await request('/auth/v1/logout?scope=local', owner, 'POST');
     if (!logoutAccepted(result.status, result.data)) throw new Error('Cleanup session logout failed');
@@ -195,7 +202,7 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   await name.press('Tab');
   const amount = page.locator('#incomeBody tr:not(.roll-row) input[aria-label="Income amount"]');
   await expect(amount).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.accountId)).toBe('cpm');
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.accountId)).toBe(FIXTURE_ACCOUNT_ID);
   await amount.fill('4321.25');
   await amount.press('Tab');
   await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.amount)).toBe(4321.25);
