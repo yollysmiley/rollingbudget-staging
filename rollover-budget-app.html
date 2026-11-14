@@ -1449,7 +1449,8 @@ async function submitAuth() {
   }
   try {
     if (isPasswordResetMode) {
-      const { error } = await supabaseClient.auth.resetPasswordForEmail(email);
+      const redirectTo = new URL("./reset-password.html", window.location.href).href;
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
       setAuthMessage("If an account exists for this email, a password reset link will be sent.", "success");
       return;
