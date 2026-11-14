@@ -744,6 +744,8 @@
         <input type="text" id="newIncName" placeholder="Income source" style="flex:1;min-width:130px" />
         <input type="number" step="0.01" id="newIncCpm" placeholder="CPM $" style="width:95px" />
         <input type="number" step="0.01" id="newIncUsaa" placeholder="USAA $" style="width:95px" />
+        <label>Account <select id="newIncAccount" data-new-entry-account aria-label="Account for new income"></select></label>
+        <input type="number" step="0.01" id="newIncAmount" placeholder="Amount $" style="width:95px" />
         <button class="primary" onclick="addIncome()">Add</button>
       </div>
     </div>
@@ -1336,6 +1338,11 @@ async function editEntryAccount(type, idx, accountId) {
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
   const entry = db[activeYear].months[selectedIdx][type]?.[idx];
   if (!entry) return;
+  if (type === 'income' && accountId && !entry.accountId) {
+    entry.amount = (Number(entry.cpm) || 0) + (Number(entry.usaa) || 0);
+    delete entry.cpm; delete entry.usaa;
+  }
+  if (type === 'income' && !accountId && entry.accountId) return;
   entry.accountId = accountId || null;
   await saveDB(); render();
 }
@@ -1491,10 +1498,10 @@ function render() {
   incHtml += m.income.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editInc(${idx}, 'name', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" onchange="editInc(${idx}, 'cpm', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" onchange="editInc(${idx}, 'usaa', this.value)" /></td>
-      <td class="num">${fmt((Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
-      <td><button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" ${item.accountId ? "disabled" : ""} onchange="editInc(${idx}, 'cpm', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" ${item.accountId ? "disabled" : ""} onchange="editInc(${idx}, 'usaa', this.value)" /></td>
+      <td class="num">${fmt(item.accountId ? item.amount : (Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
+      <td>${accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
   `).join("");
   document.getElementById("incomeBody").innerHTML = incHtml;
@@ -1567,8 +1574,11 @@ async function addIncome() {
   const cpm = parseFloat(document.getElementById("newIncCpm").value) || 0;
   const usaa = parseFloat(document.getElementById("newIncUsaa").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].income.push({ name, cpm, usaa });
-  document.getElementById("newIncName").value = ""; document.getElementById("newIncCpm").value = ""; document.getElementById("newIncUsaa").value = "";
+  const accountId = document.getElementById("newIncAccount").value;
+  const amount = parseFloat(document.getElementById("newIncAmount").value) || 0;
+  if (accountId) db[activeYear].months[selectedIdx].income.push({ name, accountId, amount });
+  else db[activeYear].months[selectedIdx].income.push({ name, cpm, usaa });
+  document.getElementById("newIncName").value = ""; document.getElementById("newIncCpm").value = ""; document.getElementById("newIncUsaa").value = ""; document.getElementById("newIncAmount").value = "";
   await saveDB(); render();
 }
 async function editExp(type, idx, f, v) { db[activeYear].months[selectedIdx][type][idx][f] = f==='amount'?parseFloat(v)||0:v; await saveDB(); render(); }
@@ -1714,6 +1724,7 @@ async function submitAuth() {
 /* Recurring Rules Manager */
 const RECURRING_FREQUENCIES={monthly:{label:"Monthly",interval:1},"every-2-months":{label:"Every 2 months",interval:2},quarterly:{label:"Quarterly",interval:3},"every-6-months":{label:"Every 6 months",interval:6},annually:{label:"Annually",interval:12}};
 function openRecurringModal(){
+  refreshAccountSelectors();
   document.getElementById("recurringYearLabel").textContent=activeYear;
   document.querySelectorAll("[data-rec-field='startMonth']").forEach(select=>{select.innerHTML=db[activeYear].months.map((m,i)=>`<option value="${i}">${esc(m.name)}</option>`).join("");select.value="0";});
   document.querySelectorAll("[data-recurring-form]").forEach(form=>{form.querySelector("[data-rec-field='category']").value="fixed";form.querySelector("[data-rec-field='frequency']").value="monthly";});
@@ -1730,14 +1741,21 @@ function renderRulesList(){
   document.getElementById("desktopRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<tr><td><strong>${esc(r.name)}</strong><div>${esc(r.due||"Due day not set")}</div></td><td>${esc(String(r.cat||"").toUpperCase())}</td><td>${fmt(r.amount)}</td><td>${esc(recurringRuleFrequency(r))}</td><td>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</td><td><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable":"Enable"}</button></td></tr>`;}).join("");
   document.getElementById("mobileRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(r.name)}</h4><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(String(r.cat||"").toUpperCase())}</strong></div><div>Amount<strong>${fmt(r.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(r))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable rule":"Enable rule"}</button></article>`;}).join("");
 }
-function recurringRuleItem(r){if(r.cat==="income")return{name:r.name,cpm:r.acct==="cpm"?r.amount:0,usaa:r.acct==="usaa"?r.amount:0,recurringRuleId:r.id};if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,recurringRuleId:r.id};if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,recurringRuleId:r.id};if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,recurringRuleId:r.id};return null;}
+function recurringRuleItem(r){
+  const accountId = r.accountId || r.acct || null;
+  if(r.cat==="income")return {name:r.name,accountId,amount:r.amount,recurringRuleId:r.id};
+  if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  return null;
+}
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
 async function addRecurringRule(view){
   const form=document.querySelector(`[data-recurring-form="${view}"]`);if(!form)return;const get=f=>form.querySelector(`[data-rec-field="${f}"]`).value;
   const cat=get("category"),name=get("name").trim(),amount=Number.parseFloat(get("amount")),due=get("due").trim(),acct=get("account"),startMonth=Number.parseInt(get("startMonth"),10),frequency=get("frequency");
   if(!name||!Number.isFinite(amount)||amount<0||!Number.isInteger(startMonth)||!RECURRING_FREQUENCIES[frequency])return;
   if(!db[activeYear].recurringRules)db[activeYear].recurringRules=[];
-  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
+  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,accountId:acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
   const item=recurringRuleItem(rule);for(const i of recurringRuleTargetMonths(rule)){const m=db[activeYear].months[i],list=cat==="income"?m.income:cat==="fixed"||cat==="variable"?m[cat]:cat==="loan"?m.loans:m.creditCards;if(item&&list)list.push({...item});}
   form.querySelectorAll("input").forEach(input=>input.value="");form.querySelector("[data-rec-field='startMonth']").value="0";form.querySelector("[data-rec-field='frequency']").value="monthly";
   await saveDB();render();renderRulesList();
