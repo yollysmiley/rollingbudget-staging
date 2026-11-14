@@ -15,9 +15,10 @@ export async function mockSignedInBudget(page) {
             onAuthStateChange(callback) { listener = callback; return { data: { subscription: { unsubscribe() {} } } }; },
             async signOut() { sessionStorage.setItem('__mock_signed_out', '1'); if (listener) listener('SIGNED_OUT', null); return { error: null }; }
           },
-          from() {
+          from(table) {
             const chain = {
-              select() { return chain; }, eq() { return Promise.resolve({ data: [], error: null }); },
+              select() { return chain; },
+              eq() { return Promise.resolve({ data: table === 'budget_accounts' ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [], error: null }); },
               upsert() { return Promise.resolve({ data: [], error: null }); }
             };
             return chain;

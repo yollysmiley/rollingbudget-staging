@@ -1,3 +1,22 @@
+## Unreleased
+- Harden account migration against missing legacy accounts and local cache failures; enable editable account-linked income amounts and add regression coverage.
+
+- Strengthen legacy-income migration browser regression by asserting both editable income rows render after reload; preserve account split, totals, metadata and idempotency checks.
+
+- Automatically migrate legacy CPM/USAA income to account-linked entries after authenticated data loading; preserve source amounts and metadata, create a pre-migration local backup, and skip already-migrated records. Removed manual Split Income UI and updated Playwright and unit regression tests.
+
+- Phase 3 acceptance corrections: safeguard mixed-source legacy income with explicit splitting, simplify new income account assignment, show account selection for all recurring rule types, and initialize accounts on authenticated refresh. Added regression coverage.
+
+- Phase 3 (in progress): introduced account-aware rolling totals and exclusion handling, including legacy CPM/USAA income compatibility and regression tests. Dynamic transaction account selectors and recurring-rule migration are still pending.
+
+- Phase 2 Accounts Manager: distinct desktop and mobile Settings interfaces, authenticated account CRUD, guarded deletion, bundled browser account modules, and regression tests. Account inclusion affects totals only after the account-aware budgeting phase.
+- Phase 1 account storage: added user-scoped `budget_accounts` SQL migration with RLS, idempotent legacy account initialization helpers, and regression tests. Existing year documents remain untouched until the account-aware UI is ready. Staging database application is pending verification.
+
+
+- Added isolated account-model helpers and unit tests for legacy income migration, exclusion totals, and referenced-account removal safeguards. Not yet integrated into the budget UI or cloud persistence.
+
+- Staging draft PR #31: moved desktop year selection, New Year, Auto-Cascade and Recurring Rules controls into a Settings view; added navigation contract tests. Dynamic account management remains unimplemented.
+
 # Changelog
 
 ## Unreleased

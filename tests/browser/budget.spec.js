@@ -40,8 +40,8 @@ test('new budget UI starts empty and renders the redesigned dashboard', async ({
 
 test('income and expenses recalculate the rollover', async ({ page }) => {
   await page.locator('#newIncName').fill('Paycheck');
-  await page.locator('#newIncCpm').fill('3000');
-  await page.locator('#newIncUsaa').fill('0');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('3000');
   await page.locator('button[onclick="addIncome()"]').click();
   await expect(page.locator('#incTotalBadge')).toHaveText('$3,000.00');
 
@@ -55,18 +55,20 @@ test('income and expenses recalculate the rollover', async ({ page }) => {
 
 test('new UI saves and restores the guest budget after reload', async ({ page }) => {
   await page.locator('#newIncName').fill('SAVE-RELOAD-TEST');
-  await page.locator('#newIncCpm').fill('2713.45');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('2713.45');
   await page.locator('button[onclick="addIncome()"]').click();
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
   await page.reload();
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
-  await expect(page.locator('#incomeBody tr:not(.roll-row) input[type="number"]').first()).toHaveValue('2713.45');
+  await expect(page.locator('#incomeBody input[aria-label="Income amount"]').first()).toHaveValue('2713.45');
   await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
 });
 
 test('authenticated storage is owner-scoped and existing browser keys are preserved', async ({ page }) => {
   await page.locator('#newIncName').fill('Stored');
-  await page.locator('#newIncCpm').fill('10');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('10');
   await page.locator('button[onclick="addIncome()"]').click();
   const result = await page.evaluate(() => Object.keys(localStorage));
   expect(result.some(key => key.startsWith('rollingbudget_staging_phiscfwfuzeptetimdbo_browser-test-owner_budget_'))).toBe(true);
@@ -84,7 +86,9 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
 });
 
 test('desktop recurring manager provides a route back to the budget overview', async ({ page }) => {
-  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('header')).toBeVisible();
   const backButton = page.getByRole('button', { name: '← Back to Overview' });
@@ -92,12 +96,38 @@ test('desktop recurring manager provides a route back to the budget overview', a
   await expect(page.locator('.toggle-pill')).toHaveCSS('color', 'rgb(24, 19, 38)');
   await backButton.click();
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
+  await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('.main-grid')).toBeVisible();
-  await expect(page.locator('button[onclick="openRecurringModal()"]')).toBeVisible();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+});
+
+test('desktop Settings contains year, cascade and recurring controls and returns to overview', async ({ page }) => {
+  await expect(page.locator('#desktopSettingsButton')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await expect(page.locator('.main-grid')).toBeHidden();
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
+  await expect(page.locator('#autoRollToggle')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="createNewYear()"]')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await page.locator('#activeYearSelect').selectOption('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await page.locator('#desktopBudgetButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
+  await expect(page.locator('.main-grid')).toBeVisible();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
 test('recurring manager applies quarterly rules and disabling removes generated items', async ({ page }) => {
-  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringDesktopView')).toBeVisible();
   const form=page.locator('[data-recurring-form="desktop"]');
@@ -118,7 +148,9 @@ test('recurring manager applies quarterly rules and disabling removes generated 
 
 test('legacy recurring rules remain visible and disabling preserves existing budget entries', async ({ page }) => {
   await page.evaluate(async()=>{db[activeYear].recurringRules=[{id:123,cat:'fixed',name:'Legacy Rent',amount:900,due:'1st',start:0,end:11}];db[activeYear].months[0].fixed.push({name:'Legacy Rent',due:'1st',amount:900});await saveDB();});
-  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#desktopRulesList')).toContainText('Legacy Rent');
   await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
   await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
@@ -202,4 +234,42 @@ test('cancelling desktop sign-out keeps the authenticated budget visible', async
   await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
   await expect(page.locator('#authBtn')).toHaveText('Sign Out');
   await expect(page.locator('#incTotalBadge')).toBeVisible();
+});
+
+test('legacy mixed income migrates automatically once and survives reload', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].months[0].income = [{ name: 'Legacy Pay', cpm: 200, usaa: 300, recurringRuleId: 'legacy-rule' }];
+    await saveDB();
+  });
+  await page.reload();
+  // The rollover summary row has its own numeric input; target income entry rows only.
+  const migratedNames = page.locator('#incomeBody tr:not(.roll-row) input.inline-input:not([type])');
+  await expect(migratedNames).toHaveCount(2);
+  await expect(migratedNames.nth(0)).toHaveValue('Legacy Pay');
+  await expect(migratedNames.nth(1)).toHaveValue('Legacy Pay');
+  await expect(page.locator('#incTotalBadge')).toHaveText('$500.00');
+  const read = () => page.evaluate(() => db[activeYear].months[0].income);
+  const entries = await read();
+  expect(entries).toEqual([
+    { name: 'Legacy Pay', accountId: 'cpm', amount: 200, recurringRuleId: 'legacy-rule' },
+    { name: 'Legacy Pay', accountId: 'usaa', amount: 300, recurringRuleId: 'legacy-rule' }
+  ]);
+  await page.reload();
+  expect(await read()).toEqual(entries);
+  await expect(page.locator('#incomeBody button', { hasText: 'Split income' })).toHaveCount(0);
+});
+
+test('account-based income amount can be edited and persists after reload', async ({ page }) => {
+  await page.locator('#newIncName').fill('Edited Pay');
+  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAmount').fill('200');
+  await page.locator('button[onclick="addIncome()"]').click();
+  const amount = page.locator('#incomeBody input[aria-label="Income amount"]').first();
+  await amount.fill('350');
+  await amount.press('Tab');
+  await expect(page.locator('#incTotalBadge')).toHaveText('$350.00');
+  await page.reload();
+  await expect(page.locator('#incomeBody input[aria-label="Income amount"]').first()).toHaveValue('350');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });

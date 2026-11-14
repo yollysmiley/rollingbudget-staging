@@ -597,6 +597,24 @@
       .mobile-bottom-nav { display:none !important; }
     }
   </style>
+<style>
+  .desktop-settings-panel { max-width:1100px; margin:28px auto; padding:0 24px; }
+  .desktop-settings-panel[hidden] { display:none !important; }
+  .desktop-settings-card { padding:22px; margin:16px 0; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
+  .desktop-settings-card h3 { margin:0 0 12px; }
+  .account-manager-list { display:grid; gap:10px; margin:14px 0; }
+  .account-manager-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+  .account-manager-row strong { overflow-wrap:anywhere; }
+  .account-manager-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .account-manager-actions button { min-height:40px; }
+  .account-manager-form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px; }
+  .account-manager-form input { min-height:42px; flex:1; min-width:160px; padding:9px; border:1px solid var(--border); border-radius:9px; }
+  .account-manager-status { color:var(--muted); font-size:.85rem; margin-top:10px; }
+  @media(max-width:768px) { .account-manager-row { flex-direction:column; align-items:stretch; } .account-manager-actions button { flex:1; } }
+  .desktop-settings-card .controls { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+  body.desktop-settings-open > .container { display:none; }
+  @media (max-width:768px) { .desktop-settings-panel { display:none !important; } }
+</style>
 </head>
 <body>
 <style id="authGateStyle">html:not(.budget-authenticated) body > :not(#authGateScreen):not(script){visibility:hidden!important}#authGateScreen{position:fixed;inset:0;z-index:99999;background:#f8f7fc;color:#17152b;display:grid;place-items:center;font-family:Inter,system-ui,sans-serif;padding:24px}html.budget-authenticated #authGateScreen{display:none}#authGateScreen section{max-width:440px;text-align:center}#authGateScreen a{color:#7c3aed;font-weight:700}</style>
@@ -617,22 +635,12 @@
       </div>
     </div>
     <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
-    <div class="controls">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
-        <select id="activeYearSelect" onchange="switchYear(this.value)">
-          <option value="2026">2026 (Active Budget)</option>
-          <option value="2027">2027 (Planning Mode)</option>
-        </select>
-      </div>
-      <button onclick="createNewYear()">+ New Year</button>
-      <label class="toggle-pill" title="Auto-cascade surplus into next month">
-        <input type="checkbox" id="autoRollToggle" checked />
-        <span>Auto-Cascade</span>
-      </label>
-      <button class="primary" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+    <div class="controls desktop-header-actions">
+      <button type="button" id="desktopBudgetButton" onclick="setDesktopSettings(false)" hidden>Budget Overview</button>
+      <button type="button" id="desktopSettingsButton" onclick="setDesktopSettings(true)" aria-expanded="false" aria-controls="desktopSettingsPanel">Settings</button>
       <button id="authBtn" onclick="handleAuthClick()">Sign In</button>
     </div>
+
   </div>
 </header>
 
@@ -654,6 +662,32 @@
   </section>
 </aside>
 
+<section id="desktopSettingsPanel" class="desktop-settings-panel" aria-label="Desktop settings" hidden>
+  <h2>Settings</h2>
+  <div class="desktop-settings-card">
+    <h3>Accounts</h3>
+    <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
+    <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
+  </div>
+  <div class="desktop-settings-card">
+    <h3>Year Management, Auto-Cascade &amp; Recurring Rules</h3>
+    <div class="controls" id="budgetSettingsControls">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
+        <select id="activeYearSelect" onchange="switchYear(this.value)">
+          <option value="2026">2026 (Active Budget)</option>
+          <option value="2027">2027 (Planning Mode)</option>
+        </select>
+      </div>
+      <button onclick="createNewYear()">+ New Year</button>
+      <label class="toggle-pill" title="Auto-cascade surplus into next month">
+        <input type="checkbox" id="autoRollToggle" checked />
+        <span>Auto-Cascade</span>
+      </label>
+      <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+    </div>
+  </div>
+</section>
 <div class="container">
   <!-- 12-Month Rolling Timeline -->
   <div class="rolling-strip" id="rollingStrip"></div>
@@ -671,11 +705,19 @@
   <section id="mobileSettingsPanel" class="mobile-settings-panel" aria-label="Settings">
     <h2>Settings</h2>
     <p style="color:var(--muted);font-size:.86rem;margin:8px 0 16px">Manage your Rolling Budget account and application preferences.</p>
+    <div class="card" style="padding:16px;box-shadow:none;margin-bottom:12px">
+      <h3 style="font-size:.95rem;margin-bottom:8px">Accounts Manager</h3>
+      <div id="mobileSettingsAccounts" class="account-manager"></div>
+    </div>
     <div class="card" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Account & cloud sync</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
       <button type="button" class="primary" onclick="handleAuthClick()">Manage Account</button>
     </div>
+  </section>
+  <section class="mobile-settings-panel" id="mobileAccountsManagerPanel" aria-label="Mobile Accounts Manager" style="display:none">
+    <h3>Accounts</h3>
+    <div id="mobileAccountsManager" class="account-manager"></div>
   </section>
   <!-- Main Tables -->
   <div class="mobile-card-tools"><button type="button" id="toggleAllCards" onclick="toggleAllMobileCards()">Collapse all cards</button></div>
@@ -690,9 +732,8 @@
         <thead>
           <tr>
             <th>Source</th>
-            <th class="num">CPM Federal</th>
-            <th class="num">USAA</th>
-            <th class="num">Total</th>
+            <th class="num">Amount</th>
+            <th>Account</th>
             <th style="width:34px"></th>
           </tr>
         </thead>
@@ -700,8 +741,10 @@
       </table>
       <div class="add-row">
         <input type="text" id="newIncName" placeholder="Income source" style="flex:1;min-width:130px" />
-        <input type="number" step="0.01" id="newIncCpm" placeholder="CPM $" style="width:95px" />
-        <input type="number" step="0.01" id="newIncUsaa" placeholder="USAA $" style="width:95px" />
+        
+        
+        <label>Account <select id="newIncAccount" data-new-entry-account aria-label="Account for new income"></select></label>
+        <input type="number" step="0.01" id="newIncAmount" placeholder="Amount $" style="width:95px" />
         <button class="primary" onclick="addIncome()">Add</button>
       </div>
     </div>
@@ -727,6 +770,7 @@
         <input type="text" id="newFixName" placeholder="Fixed bill name" style="flex:1;min-width:130px" />
         <input type="text" id="newFixDue" placeholder="Due (e.g. 5th)" style="width:95px" />
         <input type="number" step="0.01" id="newFixAmt" placeholder="Amount $" style="width:95px" />
+        <label>Account <select id="newFixAccount" data-new-entry-account aria-label="Account for new newFix"></select></label>
         <button class="primary" onclick="addExpense('fixed')">Add</button>
       </div>
     </div>
@@ -752,6 +796,7 @@
         <input type="text" id="newVarName" placeholder="Variable expense" style="flex:1;min-width:130px" />
         <input type="text" id="newVarDue" placeholder="Due" style="width:95px" />
         <input type="number" step="0.01" id="newVarAmt" placeholder="Amount $" style="width:95px" />
+        <label>Account <select id="newVarAccount" data-new-entry-account aria-label="Account for new newVar"></select></label>
         <button class="primary" onclick="addExpense('variable')">Add</button>
       </div>
     </div>
@@ -780,6 +825,7 @@
         <input type="text" id="newLoanDue" placeholder="Due" style="width:65px" />
         <input type="number" step="0.01" id="newLoanBal" placeholder="Balance $" style="width:90px" />
         <input type="number" step="0.01" id="newLoanPay" placeholder="Pay $" style="width:85px" />
+        <label>Account <select id="newLoanAccount" data-new-entry-account aria-label="Account for new newLoan"></select></label>
         <button class="primary" onclick="addLoan()">Add</button>
       </div>
     </div>
@@ -809,6 +855,7 @@
         <input type="number" step="0.01" id="newCcStmt" placeholder="Statement $" style="width:110px" />
         <input type="number" step="0.01" id="newCcApr" placeholder="APR/Min" style="width:95px" />
         <input type="number" step="0.01" id="newCcPay" placeholder="Payment $" style="width:110px" />
+        <label>Account <select id="newCcAccount" data-new-entry-account aria-label="Account for new newCc"></select></label>
         <button class="primary" onclick="addCC()">Add</button>
       </div>
     </div>
@@ -859,7 +906,7 @@
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
 <label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
-<label data-rec-account-group>Deposit account<select data-rec-field="account"><option value="cpm">CPM Federal</option><option value="usaa">USAA</option></select></label>
+<label data-rec-account-group>Account<select data-rec-field="account"><option value="cpm">CPM Federal</option><option value="usaa">USAA</option></select></label>
 <label>Due day<input data-rec-field="due" type="text" placeholder="e.g. 1st or 15th"></label>
 <label>Start month<select data-rec-field="startMonth"></select></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><div class="recurring-form-actions"><button class="primary" type="button" onclick="addRecurringRule('desktop')">Add rule</button></div></section>
@@ -910,6 +957,140 @@ const BASELINE_2026 = {
 let activeYear = "2026";
 let selectedIdx = 0;
 let db = {};
+let budgetAccounts = [];
+let accountService = null;
+let accountBudgetModule = null;
+let accountsBusy = false;
+let accountsMessage = '';
+function accountStatus(message) {
+  accountsMessage = message;
+  for (const id of ['desktopAccountsStatus', 'mobileAccountsStatus']) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = message;
+  }
+}
+function renderAccounts() {
+  const markup = budgetAccounts.map(account => `
+    <div class="account-manager-row" data-account-id="${esc(account.id)}">
+      <strong>${esc(account.name)}</strong>
+      <div class="account-manager-actions">
+        <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Included</label>
+        <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Rename</button>
+        <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
+      </div>
+    </div>`).join('');
+  for (const [target, suffix] of [['desktopAccountsManager','desktop'], ['mobileSettingsAccounts','mobile']]) {
+    const el = document.getElementById(target);
+    if (!el) continue;
+    el.innerHTML = `<div class="account-manager-list">${markup || '<p>No accounts yet.</p>'}</div>
+      <form class="account-manager-form" data-account-form>
+        <input type="text" name="accountName" maxlength="120" placeholder="New account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}>
+        <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
+      </form>
+      <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite">${esc(accountsMessage)}</p>`;
+  }
+}
+let accountMigrationModule = null;
+async function migrateLoadedIncome() {
+  if (!currentUser || !accountMigrationModule || !budgetAccounts.length) return;
+  const owner = currentUser.id;
+  for (const [year, original] of Object.entries(db)) {
+    const migrated = accountMigrationModule.migrateLegacyYear(original, budgetAccounts);
+    if (!migrated.changed) continue;
+    const backupKey = storageKey(year) + '_pre_income_migration';
+    // Never overwrite the original backup, including on later sign-ins.
+    if (localStorage.getItem(backupKey) === null) {
+      localStorage.setItem(backupKey, JSON.stringify({ data: original, backedUpAt: new Date().toISOString() }));
+    }
+    const updatedAt = new Date().toISOString();
+    const snapshot = migrated.year;
+    // Persist the account-based version before displaying it; keep the original in memory on failure.
+    if (supabaseClient) {
+      await queueCloudSave(owner + ':' + year, async () => {
+        const { error } = await supabaseClient.from('budget_ui_years').upsert({
+          user_id: owner, year: Number(year), budget_data: snapshot, updated_at: updatedAt
+        }, { onConflict: 'user_id,year' });
+        if (error) throw error;
+      });
+    }
+    if (currentUser?.id !== owner) return;
+    db[year] = snapshot;
+    try {
+      localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+    } catch (storageError) {
+      // Cloud is authoritative after a successful upsert; reload can recover it.
+      console.warn('Migrated income saved to cloud but local cache could not be updated', storageError);
+    }
+  }
+}
+async function initializeAccounts() {
+  try {
+    accountService = await import('./scripts/account-storage.mjs');
+    accountBudgetModule = await import('./scripts/account-budget.mjs');
+    accountMigrationModule = await import('./scripts/account-model.mjs');
+    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    await migrateLoadedIncome();
+    accountsMessage = '';
+    renderAccounts();
+  } catch (error) {
+    console.error('Accounts could not be loaded or income migrated:', error);
+    renderAccounts();
+    accountStatus('Could not load accounts. Please retry by refreshing the page.');
+  }
+}
+async function runAccountAction(action, id, value) {
+  if (accountsBusy || !accountService || !currentUser) return;
+  accountsBusy = true;
+  accountsMessage = '';
+  renderAccounts();
+  try {
+    if (action === 'create') {
+      const name = String(value || '').trim();
+      if (!name) throw new Error('Enter an account name');
+      const accountId = 'account-' + crypto.randomUUID();
+      await accountService.createAccount(supabaseClient, currentUser.id, budgetAccounts, name, accountId);
+    } else if (action === 'rename') {
+      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { name: value });
+    } else if (action === 'included') {
+      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { included: value });
+    } else if (action === 'remove') {
+      await accountService.deleteAccount(supabaseClient, currentUser.id, budgetAccounts, id, db);
+    }
+    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    accountStatus('Account changes saved.');
+    render();
+  } catch (error) {
+    console.error('Account change failed:', error);
+    accountStatus(error.message || 'Account changes could not be saved.');
+  } finally {
+    accountsBusy = false;
+    renderAccounts();
+  }
+}
+document.addEventListener('submit', event => {
+  const form = event.target.closest('[data-account-form]');
+  if (!form) return;
+  event.preventDefault();
+  const name = form.elements.accountName.value;
+  void runAccountAction('create', null, name);
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-account-action]');
+  if (!button || accountsBusy) return;
+  const id = button.dataset.accountId;
+  const account = budgetAccounts.find(item => item.id === id);
+  if (!account) return;
+  if (button.dataset.accountAction === 'rename') {
+    const name = prompt('Account name:', account.name);
+    if (name !== null) void runAccountAction('rename', id, name.trim());
+  } else if (button.dataset.accountAction === 'remove') {
+    if (confirm('Remove ' + account.name + '? This cannot be undone.')) void runAccountAction('remove', id);
+  }
+});
+document.addEventListener('change', event => {
+  const input = event.target.closest('[data-account-action="included"]');
+  if (input) void runAccountAction('included', input.dataset.accountId, input.checked);
+});
 
 function storageKey(year) {
   return STAGING_STORAGE_PREFIX + "_" + (currentUser?.id || "guest") + "_budget_" + year;
@@ -950,6 +1131,7 @@ async function initApp() {
           return;
         }
         await loadAllYears();
+        if (currentUser) await initializeAccounts();
         render();
       }, 0);
     }
@@ -958,6 +1140,7 @@ async function initApp() {
   document.getElementById("mobileAuthBtn").textContent = "Sign Out";
   document.getElementById("userStatusSub").textContent = "Logged in as " + currentUser.email;
   await loadAllYears();
+  await initializeAccounts();
   render();
 }
 function parseLocalBudgetRecord(raw) {
@@ -1137,6 +1320,9 @@ function parseDayNum(dueStr) {
 }
 
 function computeRolling(yrKey) {
+  if (accountBudgetModule && budgetAccounts.length) {
+    return accountBudgetModule.computeAccountBudget(db[yrKey], budgetAccounts);
+  }
   const yearData = db[yrKey];
   if (!yearData) return [];
   const results = [];
@@ -1175,6 +1361,26 @@ function computeRolling(yrKey) {
   return results;
 }
 
+
+function accountOptions(selectedId, unassigned = true) {
+  const blank = unassigned ? '<option value="">Unassigned (included)</option>' : '';
+  return blank + budgetAccounts.map(account => '<option value="' + esc(account.id) + '"' + (account.id === selectedId ? ' selected' : '') + '>' + esc(account.name) + (account.included ? '' : ' (excluded)') + '</option>').join('');
+}
+function accountPicker(type, idx, accountId) {
+  return '<label>Account <select aria-label="Account for ' + esc(type) + ' entry" onchange="editEntryAccount(&quot;' + type + '&quot;,' + idx + ',this.value)">' + accountOptions(accountId) + '</select></label>';
+}
+async function editEntryAccount(type, idx, accountId) {
+  if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
+  const entry = db[activeYear].months[selectedIdx][type]?.[idx];
+  if (!entry) return;
+  if (type === 'income' && !accountId) return;
+  entry.accountId = accountId || null;
+  await saveDB(); render();
+}
+function refreshAccountSelectors() {
+  document.querySelectorAll('[data-new-entry-account]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior); });
+  document.querySelectorAll('[data-rec-field="account"]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior, false); });
+}
 function render() {
   const yearData = db[activeYear];
   if (!yearData) return;
@@ -1184,6 +1390,7 @@ function render() {
   const c = computed[selectedIdx];
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade;
+  refreshAccountSelectors();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
   document.getElementById("mobileOverview").innerHTML = `
@@ -1314,18 +1521,15 @@ function render() {
           ? `<input class="inline-input num" type="number" step="0.01" value="${c.startLeftover.toFixed(2)}" onchange="updateStartLeftover(this.value)" />`
           : `<span class="purple-text"><strong>${fmt(c.startLeftover)}</strong></span>`}
       </td>
-      <td class="num">—</td>
-      <td class="num purple-text"><strong>${fmt(c.startLeftover)}</strong></td>
+      <td>—</td>
       <td></td>
     </tr>
   `;
   incHtml += m.income.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editInc(${idx}, 'name', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" onchange="editInc(${idx}, 'cpm', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" onchange="editInc(${idx}, 'usaa', this.value)" /></td>
-      <td class="num">${fmt((Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
-      <td><button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
+      <td class="num"><input class="inline-input num" aria-label="Income amount" type="number" step="0.01" value="${Number(item.amount ?? ((Number(item.cpm)||0)+(Number(item.usaa)||0))) || 0}" ${item.accountId ? '' : 'disabled title="Legacy income awaiting migration"'} onchange="editInc(${idx}, 'amount', this.value)" /></td>
+      <td>${accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
   `).join("");
   document.getElementById("incomeBody").innerHTML = incHtml;
@@ -1336,6 +1540,7 @@ function render() {
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('fixed', ${idx}, 'due', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
+      <td>${accountPicker("fixed", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('fixed', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1346,6 +1551,7 @@ function render() {
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('variable', ${idx}, 'due', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
+      <td>${accountPicker("variable", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('variable', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1358,6 +1564,7 @@ function render() {
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.balance) || 0}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
       <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
+      <td>${accountPicker("loans", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('loans', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1371,6 +1578,7 @@ function render() {
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.statement) || 0}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
+      <td>${accountPicker("creditCards", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('creditCards', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1391,11 +1599,13 @@ async function updateStartLeftover(val) {
 async function editInc(idx, f, v) { db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
 async function addIncome() {
   const name = document.getElementById("newIncName").value.trim();
-  const cpm = parseFloat(document.getElementById("newIncCpm").value) || 0;
-  const usaa = parseFloat(document.getElementById("newIncUsaa").value) || 0;
+
   if (!name) return;
-  db[activeYear].months[selectedIdx].income.push({ name, cpm, usaa });
-  document.getElementById("newIncName").value = ""; document.getElementById("newIncCpm").value = ""; document.getElementById("newIncUsaa").value = "";
+  const accountId = document.getElementById("newIncAccount").value;
+  const amount = parseFloat(document.getElementById("newIncAmount").value) || 0;
+  if (!accountId || !budgetAccounts.some(account => account.id === accountId)) return;
+  db[activeYear].months[selectedIdx].income.push({ name, accountId, amount });
+  document.getElementById("newIncName").value = ""; document.getElementById("newIncAmount").value = "";
   await saveDB(); render();
 }
 async function editExp(type, idx, f, v) { db[activeYear].months[selectedIdx][type][idx][f] = f==='amount'?parseFloat(v)||0:v; await saveDB(); render(); }
@@ -1405,7 +1615,7 @@ async function addExpense(type) {
   const due = document.getElementById(p + 'Due').value.trim();
   const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx][type].push({ name, due, amount });
+  db[activeYear].months[selectedIdx][type].push({ name, due, amount, accountId: document.getElementById(p + 'Account').value || null });
   document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
   await saveDB(); render();
 }
@@ -1416,7 +1626,7 @@ async function addLoan() {
   const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
   const payment = parseFloat(document.getElementById("newLoanPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment });
+  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment, accountId: document.getElementById('newLoanAccount').value || null });
   ['newLoanName','newLoanDue','newLoanBal','newLoanPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
@@ -1428,7 +1638,7 @@ async function addCC() {
   const apr = parseFloat(document.getElementById("newCcApr").value) || 0;
   const payment = parseFloat(document.getElementById("newCcPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment });
+  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment, accountId: document.getElementById('newCcAccount').value || null });
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
@@ -1541,13 +1751,14 @@ async function submitAuth() {
 /* Recurring Rules Manager */
 const RECURRING_FREQUENCIES={monthly:{label:"Monthly",interval:1},"every-2-months":{label:"Every 2 months",interval:2},quarterly:{label:"Quarterly",interval:3},"every-6-months":{label:"Every 6 months",interval:6},annually:{label:"Annually",interval:12}};
 function openRecurringModal(){
+  refreshAccountSelectors();
   document.getElementById("recurringYearLabel").textContent=activeYear;
   document.querySelectorAll("[data-rec-field='startMonth']").forEach(select=>{select.innerHTML=db[activeYear].months.map((m,i)=>`<option value="${i}">${esc(m.name)}</option>`).join("");select.value="0";});
   document.querySelectorAll("[data-recurring-form]").forEach(form=>{form.querySelector("[data-rec-field='category']").value="fixed";form.querySelector("[data-rec-field='frequency']").value="monthly";});
   toggleRecFields();renderRulesList();document.body.classList.add("recurring-manager-open");
 }
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
-function toggleRecFields(source){const category=source?.value||"fixed";document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display=category==="income"?"grid":"none");}
+function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
 function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.frequency]?.label||"Monthly (legacy)";}
 function renderRulesList(){
   const rules=db[activeYear].recurringRules||[],count=`${rules.length} rule${rules.length===1?"":"s"}`;
@@ -1557,14 +1768,21 @@ function renderRulesList(){
   document.getElementById("desktopRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<tr><td><strong>${esc(r.name)}</strong><div>${esc(r.due||"Due day not set")}</div></td><td>${esc(String(r.cat||"").toUpperCase())}</td><td>${fmt(r.amount)}</td><td>${esc(recurringRuleFrequency(r))}</td><td>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</td><td><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable":"Enable"}</button></td></tr>`;}).join("");
   document.getElementById("mobileRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(r.name)}</h4><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(String(r.cat||"").toUpperCase())}</strong></div><div>Amount<strong>${fmt(r.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(r))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable rule":"Enable rule"}</button></article>`;}).join("");
 }
-function recurringRuleItem(r){if(r.cat==="income")return{name:r.name,cpm:r.acct==="cpm"?r.amount:0,usaa:r.acct==="usaa"?r.amount:0,recurringRuleId:r.id};if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,recurringRuleId:r.id};if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,recurringRuleId:r.id};if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,recurringRuleId:r.id};return null;}
+function recurringRuleItem(r){
+  const accountId = r.accountId || r.acct || null;
+  if(r.cat==="income")return {name:r.name,accountId,amount:r.amount,recurringRuleId:r.id};
+  if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  return null;
+}
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
 async function addRecurringRule(view){
   const form=document.querySelector(`[data-recurring-form="${view}"]`);if(!form)return;const get=f=>form.querySelector(`[data-rec-field="${f}"]`).value;
   const cat=get("category"),name=get("name").trim(),amount=Number.parseFloat(get("amount")),due=get("due").trim(),acct=get("account"),startMonth=Number.parseInt(get("startMonth"),10),frequency=get("frequency");
   if(!name||!Number.isFinite(amount)||amount<0||!Number.isInteger(startMonth)||!RECURRING_FREQUENCIES[frequency])return;
   if(!db[activeYear].recurringRules)db[activeYear].recurringRules=[];
-  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
+  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,accountId:acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
   const item=recurringRuleItem(rule);for(const i of recurringRuleTargetMonths(rule)){const m=db[activeYear].months[i],list=cat==="income"?m.income:cat==="fixed"||cat==="variable"?m[cat]:cat==="loan"?m.loans:m.creditCards;if(item&&list)list.push({...item});}
   form.querySelectorAll("input").forEach(input=>input.value="");form.querySelector("[data-rec-field='startMonth']").value="0";form.querySelector("[data-rec-field='frequency']").value="monthly";
   await saveDB();render();renderRulesList();
@@ -1587,16 +1805,30 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
-function syncMobileSettingsControls() {
-  const controls = document.querySelector("header .controls");
-  const mount = document.getElementById("mobileSettingsControls");
-  if (!controls || !mount) return;
-  const mobile = window.matchMedia("(max-width: 768px)").matches;
-  const recurringButton = controls.querySelector("button[onclick='openRecurringModal()']");
-  const movable = Array.from(controls.children).filter(node => node.id !== "authBtn" && node !== recurringButton);
-  if (mobile) movable.forEach(node => mount.appendChild(node));
-  else movable.forEach(node => controls.insertBefore(node, recurringButton || document.getElementById("authBtn")));
+function setDesktopSettings(open) {
+  const enabled = Boolean(open) && !window.matchMedia("(max-width: 768px)").matches;
+  document.body.classList.toggle("desktop-settings-open", enabled);
+  const panel = document.getElementById("desktopSettingsPanel");
+  const settings = document.getElementById("desktopSettingsButton");
+  const budget = document.getElementById("desktopBudgetButton");
+  if (panel) panel.hidden = !enabled;
+  if (settings) settings.setAttribute("aria-expanded", String(enabled));
+  if (budget) budget.hidden = !enabled;
 }
+function syncMobileSettingsControls() {
+  const controls = document.getElementById("budgetSettingsControls");
+  const mobileMount = document.getElementById("mobileSettingsControls");
+  if (!controls || !mobileMount) return;
+  const mobile = window.matchMedia("(max-width: 768px)").matches;
+  const movable = Array.from(controls.children).filter(node => node.dataset.setting !== "recurring");
+  if (mobile) {
+    movable.forEach(node => mobileMount.appendChild(node));
+    setDesktopSettings(false);
+  } else {
+    movable.forEach(node => controls.appendChild(node));
+  }
+}
+
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
   closeRecurringModal();
