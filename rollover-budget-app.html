@@ -432,12 +432,44 @@
       .controls { grid-column:1 / -1; }
     }
 
+
+    /* Distinct mobile navigation and settings layout */
+    .mobile-menu-button,.mobile-sidebar,.mobile-sidebar-backdrop,.mobile-settings-panel { display:none; }
+    @media (max-width:768px) {
+      body { padding-bottom:24px !important; }
+      .header-top { grid-template-columns:40px minmax(0,1fr) auto !important; gap:10px; }
+      .mobile-menu-button { display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0; border-radius:11px; font-size:1.25rem; }
+      .title-group { min-width:0; }
+      .title-group h1 { font-size:1rem; line-height:1.2; }
+      .title-group p { display:none; }
+      .mobile-auth-button { grid-column:3; grid-row:1; }
+      .controls { display:none !important; }
+      .mobile-sidebar-backdrop:not([hidden]) { display:block; position:fixed; inset:0; z-index:90; background:rgba(18,12,30,.42); }
+      .mobile-sidebar { display:block; position:fixed; z-index:91; inset:0 auto 0 0; width:min(82vw,310px); padding:calc(18px + env(safe-area-inset-top)) 16px 24px; background:var(--panel); box-shadow:12px 0 36px rgba(20,12,38,.2); transform:translateX(-105%); transition:transform .22s ease; overflow-y:auto; }
+      .mobile-sidebar.open { transform:translateX(0); }
+      .mobile-sidebar-heading { display:flex; align-items:center; justify-content:space-between; padding:4px 2px 18px; border-bottom:1px solid var(--border); font-size:1.05rem; }
+      .mobile-sidebar-heading button { font-size:1.5rem; padding:4px 10px; }
+      .mobile-sidebar-nav { display:grid; gap:7px; padding-top:16px; }
+      .mobile-sidebar-nav button { text-align:left; padding:13px 14px; border:0; box-shadow:none; background:transparent; color:var(--text); border-radius:12px; font-weight:700; }
+      .mobile-sidebar-nav button.active { color:var(--accent); background:var(--accent-soft); }
+      .mobile-settings-panel { display:none; margin:4px 0 20px; padding:18px; border:1px solid var(--border); border-radius:18px; background:var(--panel); }
+      body.mobile-tab-settings #mobileSettingsPanel { display:block; }
+      body.mobile-tab-settings #mobileOverview,body.mobile-tab-settings #rollingStrip,body.mobile-tab-settings #midMonthBanner,body.mobile-tab-settings #kpiGrid,body.mobile-tab-settings #flowBarWrap,body.mobile-tab-settings .mobile-card-tools,body.mobile-tab-settings .main-grid { display:none !important; }
+      #mobileSettingsControls { display:grid; gap:14px; }
+      #mobileSettingsControls > * { display:flex !important; flex-wrap:wrap; align-items:center; gap:10px; }
+      #mobileSettingsControls button,#mobileSettingsControls select { min-height:42px; }
+      #mobileSettingsControls .toggle-pill { justify-content:flex-start; }
+      body.mobile-tab-overview .mobile-overview { display:block; }
+      body.mobile-tab-plan .main-grid { display:grid; }
+      .mobile-bottom-nav { display:none !important; }
+    }
   </style>
 </head>
 <body>
 
 <header>
   <div class="header-top">
+    <button type="button" id="mobileMenuButton" class="mobile-menu-button" aria-label="Open navigation menu" aria-expanded="false" onclick="toggleMobileSidebar(true)">☰</button>
     <div class="title-group">
       <div class="brand-icon">$</div>
       <div>
@@ -465,6 +497,19 @@
   </div>
 </header>
 
+<div id="mobileSidebarBackdrop" class="mobile-sidebar-backdrop" onclick="toggleMobileSidebar(false)" hidden></div>
+<aside id="mobileSidebar" class="mobile-sidebar" aria-label="Mobile navigation" aria-hidden="true">
+  <div class="mobile-sidebar-heading">
+    <strong>Navigation</strong>
+    <button type="button" aria-label="Close navigation menu" onclick="toggleMobileSidebar(false)">×</button>
+  </div>
+  <nav class="mobile-sidebar-nav">
+    <button type="button" data-mobile-tab="overview" onclick="setMobileTab('overview')">Overview</button>
+    <button type="button" data-mobile-tab="plan" onclick="setMobileTab('plan')">Plan</button>
+    <button type="button" data-mobile-tab="settings" onclick="setMobileTab('settings')">Settings</button>
+  </nav>
+</aside>
+
 <div class="container">
   <!-- 12-Month Rolling Timeline -->
   <div class="rolling-strip" id="rollingStrip"></div>
@@ -479,12 +524,10 @@
   <div class="flow-bar-wrap" id="flowBarWrap"></div>
 
   <section id="mobileOverview" class="mobile-overview" aria-label="Monthly budget overview"></section>
-  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-    <button class="active" data-mobile-tab="overview" onclick="setMobileTab('overview')"><span>⌂</span>Overview</button>
-    <button data-mobile-tab="plan" onclick="setMobileTab('plan')"><span>▦</span>Plan</button>
-    <button data-mobile-tab="activity" onclick="setMobileTab('activity')"><span>↕</span>Activity</button>
-    <button data-mobile-tab="settings" onclick="setMobileTab('settings')"><span>⚙</span>Settings</button>
-  </nav>
+  <section id="mobileSettingsPanel" class="mobile-settings-panel" aria-label="Settings">
+    <h2>Settings</h2>
+    <div id="mobileSettingsControls"></div>
+  </section>
   <!-- Main Tables -->
   <div class="mobile-card-tools"><button type="button" id="toggleAllCards" onclick="toggleAllMobileCards()">Collapse all cards</button></div>
   <div class="main-grid">
@@ -1317,14 +1360,35 @@ async function deleteRecurringRule(idx) {
 
 
 
+function toggleMobileSidebar(open) {
+  const sidebar = document.getElementById("mobileSidebar");
+  const backdrop = document.getElementById("mobileSidebarBackdrop");
+  const trigger = document.getElementById("mobileMenuButton");
+  if (!sidebar || !backdrop) return;
+  sidebar.classList.toggle("open", Boolean(open));
+  sidebar.setAttribute("aria-hidden", String(!open));
+  backdrop.hidden = !open;
+  if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
+}
+function syncMobileSettingsControls() {
+  const controls = document.querySelector("header .controls");
+  const mount = document.getElementById("mobileSettingsControls");
+  if (!controls || !mount) return;
+  const mobile = window.matchMedia("(max-width: 768px)").matches;
+  const movable = Array.from(controls.children).filter(node => node.id !== "authBtn");
+  if (mobile) movable.forEach(node => mount.appendChild(node));
+  else movable.forEach(node => controls.insertBefore(node, document.getElementById("authBtn")));
+}
 function setMobileTab(tab) {
+  if (!["overview","plan","settings"].includes(tab)) return;
   document.body.classList.remove("mobile-tab-overview","mobile-tab-plan","mobile-tab-activity","mobile-tab-settings");
   document.body.classList.add("mobile-tab-" + tab);
-  document.querySelectorAll(".mobile-bottom-nav button").forEach(button => {
+  document.querySelectorAll(".mobile-sidebar-nav button").forEach(button => {
     const active = button.dataset.mobileTab === tab;
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
+  toggleMobileSidebar(false);
   if (tab === "plan") updateMobileCardToggleAllLabel();
 }
 
@@ -1357,6 +1421,9 @@ function updateMobileCardToggleAllLabel() {
     ? "Expand all cards" : "Collapse all cards";
 }
 
+window.addEventListener('resize', syncMobileSettingsControls);
+syncMobileSettingsControls();
+setMobileTab('overview');
 initApp();
 </script>
 </body>
