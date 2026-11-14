@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LEGACY_ACCOUNTS, normalizeAccounts, migrateLegacyIncome, migrateLegacyYear, accountIncluded, totalForAccounts, canRemoveAccount } from '../scripts/account-model.mjs';
+import { LEGACY_ACCOUNTS, normalizeAccounts, migrateLegacyIncome, migrateLegacyYear, accountIncluded, totalForAccounts, canRemoveAccount, requiredLegacyAccounts } from '../scripts/account-model.mjs';
 
 test('legacy accounts are present and included by default', () => {
   assert.deepEqual(LEGACY_ACCOUNTS.map(x => x.id), ['cpm', 'usaa']);
@@ -85,6 +85,17 @@ test('migration rejects absent source accounts without modifying original income
   assert.throws(() => migrateLegacyYear(year, [{ id: 'cpm' }]), /Missing legacy income account: usaa/);
   assert.equal(year.months[0].income[0].usaa, 20);
   assert.deepEqual(migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], [{ id: 'usaa' }]), [{ name: 'Zero', amount: 0, accountId: 'usaa' }]);
-  assert.throws(() => migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], []), /Missing legacy income account/);
+  assert.deepEqual(migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], []), [{ name: 'Zero', amount: 0, accountId: null }]);
   assert.equal(canRemoveAccount('cpm', { 2026: { months: [{ income: [{ cpm: 0, usaa: 0 }] }] } }), false);
+});
+
+test('legacy account discovery excludes zero-dollar sources but preserves referenced accounts', () => {
+  assert.deepEqual(requiredLegacyAccounts({}), []);
+  const years = {
+    2024: { months: [{ income: [{ name: 'Old', cpm: 0, usaa: 0 }] }] },
+    2025: { months: [{ income: [{ name: 'Salary', cpm: 40, usaa: 0 }] }] }
+  };
+  assert.deepEqual(requiredLegacyAccounts(years).map(a => a.id), ['cpm']);
+  years[2024].months[0].fixed = [{ accountId: 'usaa', amount: 0 }];
+  assert.deepEqual(requiredLegacyAccounts(years).map(a => a.id), ['cpm', 'usaa']);
 });
