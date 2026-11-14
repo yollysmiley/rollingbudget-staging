@@ -84,7 +84,9 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
 });
 
 test('desktop recurring manager provides a route back to the budget overview', async ({ page }) => {
-  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('header')).toBeVisible();
   const backButton = page.getByRole('button', { name: '← Back to Overview' });
@@ -93,11 +95,36 @@ test('desktop recurring manager provides a route back to the budget overview', a
   await backButton.click();
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
   await expect(page.locator('.main-grid')).toBeVisible();
-  await expect(page.locator('button[onclick="openRecurringModal()"]')).toBeVisible();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+});
+
+test('desktop Settings contains year, cascade and recurring controls and returns to overview', async ({ page }) => {
+  await expect(page.locator('#desktopSettingsButton')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await expect(page.locator('.main-grid')).toBeHidden();
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
+  await expect(page.locator('#autoRollToggle')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="createNewYear()"]')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await page.locator('#activeYearSelect').selectOption('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await page.locator('#desktopBudgetButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
+  await expect(page.locator('.main-grid')).toBeVisible();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
 test('recurring manager applies quarterly rules and disabling removes generated items', async ({ page }) => {
-  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringDesktopView')).toBeVisible();
   const form=page.locator('[data-recurring-form="desktop"]');
@@ -118,7 +145,9 @@ test('recurring manager applies quarterly rules and disabling removes generated 
 
 test('legacy recurring rules remain visible and disabling preserves existing budget entries', async ({ page }) => {
   await page.evaluate(async()=>{db[activeYear].recurringRules=[{id:123,cat:'fixed',name:'Legacy Rent',amount:900,due:'1st',start:0,end:11}];db[activeYear].months[0].fixed.push({name:'Legacy Rent',due:'1st',amount:900});await saveDB();});
-  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#desktopRulesList')).toContainText('Legacy Rent');
   await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
   await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
