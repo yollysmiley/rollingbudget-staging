@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed live authenticated browser fixture cleanup after UI logout by signing in again with the dedicated test account, verifying the original owner, deleting only rows marked by the current test run, and signing out the cleanup session. Added regression coverage for identity mismatches.
+
 - Corrected authenticated browser regression tests to target the CPM income field explicitly and verify logout removes signed-in account data without assuming all baseline table inputs disappear.
 
 - Hardened staging PostgreSQL default privileges for objects created by the `postgres` migration role in the exposed `public` schema. New tables, sequences, and functions no longer grant access to client roles by default; new functions no longer inherit PUBLIC EXECUTE. Existing table grants, row policies, and budget records are unchanged. Added migration and regression coverage.

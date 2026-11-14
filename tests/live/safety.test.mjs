@@ -29,3 +29,16 @@ test('download is deleted even when inspection fails', async () => {
   await assert.rejects(withDownload(file,async()=>{throw new Error('synthetic assertion failure');}));
   assert.equal(deleted,true);
 });
+
+test('fixture cleanup reauthenticates and verifies the exact owner before deletion', async () => {
+  const { verifiedCleanupSession } = await import('./safety.mjs');
+  const account = { user: { id: 'owner-a' }, access_token: 'revoked-original-token' };
+  const fresh = { user: { id: 'owner-a' }, access_token: 'new-token' };
+  assert.equal(await verifiedCleanupSession(account, async () => fresh), fresh);
+  await assert.rejects(verifiedCleanupSession(account, async () => ({
+    user: { id: 'owner-b' }, access_token: 'other-token'
+  })), /identity mismatch/);
+  await assert.rejects(verifiedCleanupSession(account, async () => ({
+    user: { id: 'owner-a' }
+  })), /identity mismatch/);
+});
