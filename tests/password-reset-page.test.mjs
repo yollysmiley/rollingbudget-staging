@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
+const home = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../rollover-budget-app.html', import.meta.url), 'utf8');
 const page = readFileSync(new URL('../reset-password.html', import.meta.url), 'utf8');
 const build = readFileSync(new URL('../scripts/build-staging.mjs', import.meta.url), 'utf8');
@@ -15,7 +16,9 @@ test('reset page uses the isolated staging auth namespace and requires a recover
   assert.match(page, /STAGING_STORAGE_PREFIX \+ "_auth"/);
   assert.match(page, /detectSessionInUrl: true/);
   assert.match(page, /event === "PASSWORD_RECOVERY"/);
-  assert.match(page, /!recoveryEventSeen/);
+  assert.match(page, /if \(!recoveryEventSeen\)/);
+  assert.match(page, /recoveryCheckTimer = setTimeout/);
+  assert.match(page, /auth\.verifyOtp\(\{ token_hash: tokenHash, type: "recovery" \}\)/);
   assert.match(page, /supabaseClient\.auth\.getSession\(\)/);
   assert.match(build, /dist\/reset-password\.html/);
 });
@@ -27,4 +30,12 @@ test('reset page validates passwords and updates only through the authenticated 
   assert.match(page, /Your password has been updated/);
   assert.match(page, /This reset link is invalid or has expired/);
   assert.doesNotMatch(page, /error\.message/);
+});
+
+test('public homepage requires email entry before sending reset request', () => {
+  assert.match(home, /id="accountForgot"/);
+  assert.match(home, /id="accountPasswordField"/);
+  assert.match(home, /\.account-field\[hidden\]\{display:none\}/);
+  assert.match(home, /resetPasswordForEmail\(email,\{redirectTo\}\)/);
+  assert.doesNotMatch(home, /href="reset-password.html"/);
 });

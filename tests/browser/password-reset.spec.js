@@ -47,3 +47,46 @@ test('expired recovery links show a safe error and never expose provider details
   await expect(page.locator('#supportMessage')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('otp_expired');
 });
+
+test('delayed recovery event is not mistaken for an expired link', async ({ page }) => {
+  await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', route => route.fulfill({
+    status: 200, contentType: 'application/javascript',
+    body: `window.supabase = { createClient: () => ({ auth: {
+      onAuthStateChange: callback => { setTimeout(() => callback('PASSWORD_RECOVERY', { user: { id: 'test-user' } }), 150); return { data: { subscription: { unsubscribe() {} } } }; },
+      getSession: async () => ({ data: { session: null }, error: null }),
+      updateUser: async () => ({ error: null })
+    } }) };`
+  }));
+  await page.goto('/reset-password.html?code=delayed-recovery');
+  await expect(page.locator('#resetForm')).toBeVisible();
+  await expect(page.locator('#pageTitle')).toHaveText('Create a new password');
+});
+
+test('recovery token hash is verified before allowing a password change', async ({ page }) => {
+  await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', route => route.fulfill({
+    status: 200, contentType: 'application/javascript',
+    body: `window.supabase = { createClient: () => ({ auth: {
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      verifyOtp: async ({ token_hash, type }) => {
+        window.__verifiedRecovery = { token_hash, type };
+        return { data: { session: { user: { id: 'test-user' } } }, error: null };
+      }
+    } }) };`
+  }));
+  await page.goto('/reset-password.html?token_hash=test-hash&type=recovery');
+  await expect(page.locator('#resetForm')).toBeVisible();
+  expect(await page.evaluate(() => window.__verifiedRecovery)).toEqual({ token_hash: 'test-hash', type: 'recovery' });
+});
+
+test('invalid token hash never enables password changes', async ({ page }) => {
+  await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', route => route.fulfill({
+    status: 200, contentType: 'application/javascript',
+    body: `window.supabase = { createClient: () => ({ auth: {
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      verifyOtp: async () => ({ data: { session: null }, error: { message: 'Invalid token' } })
+    } }) };`
+  }));
+  await page.goto('/reset-password.html?token_hash=bad-hash&type=recovery');
+  await expect(page.locator('#pageTitle')).toHaveText('This reset link is invalid or has expired');
+  await expect(page.locator('#resetForm')).toBeHidden();
+});
