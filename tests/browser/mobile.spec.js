@@ -111,6 +111,33 @@ test('mobile sidebar contains only Overview, Plan and Settings', async ({ page }
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
 });
 
+test('mobile menu navigation exits the recurring manager without refreshing', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.getByRole('button', { name: /Recurring Rules/ }).click();
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to budget' })).toHaveCount(0);
+
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="plan"]').click();
+  await expect(page.locator('#recurringManagerPage')).toBeHidden();
+  await expect(page.locator('.main-grid')).toBeVisible();
+
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+  await expect(page.locator('#recurringManagerPage')).toBeHidden();
+  await page.getByRole('button', { name: /Recurring Rules/ }).click();
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
+
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
+  await expect(page.locator('#recurringManagerPage')).toBeHidden();
+  await expect(page.locator('#mobileOverview')).toBeVisible();
+  await expect(page).not.toHaveURL(/reload/);
+});
+
 test('mobile recurring manager uses its distinct card layout and supports rule creation', async ({ page }) => {
   await page.setViewportSize({width:390,height:844});
   await page.locator('#mobileMenuButton').click();
