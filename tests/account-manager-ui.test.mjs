@@ -18,7 +18,8 @@ test('browser service modules are published to both staging app routes', () => {
   assert.match(build, /dist\/app\/scripts/);
   assert.match(html, /import\('\.\/scripts\/account-storage\.mjs'\)/);
 });
-test('account manager does not modify financial calculations during phase 2', () => {
-  assert.match(html, /const cpmIncome = m\.income\.reduce/);
-  assert.match(html, /const usaaIncome = m\.income\.reduce/);
+test('account-aware budget totals are calculated only after accounts load', () => {
+  assert.match(html, /accountBudgetModule = await import\('\.\/scripts\/account-budget\.mjs'\)/);
+  assert.match(html, /accountBudgetModule\.computeAccountBudget\(db\[yrKey\], budgetAccounts\)/);
+  assert.match(html, /accountStatus\('Account changes saved\.'\);\s*render\(\)/);
 });
