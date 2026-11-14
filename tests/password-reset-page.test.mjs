@@ -35,6 +35,7 @@ test('reset page validates passwords and updates only through the authenticated 
 test('public homepage requires email entry before sending reset request', () => {
   assert.match(home, /id="accountForgot"/);
   assert.match(home, /id="accountPasswordField"/);
+  assert.match(home, /\.account-field\[hidden\]\{display:none\}/);
   assert.match(home, /resetPasswordForEmail\(email,\{redirectTo\}\)/);
   assert.doesNotMatch(home, /href="reset-password.html"/);
 });
