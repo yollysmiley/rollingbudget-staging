@@ -50,3 +50,16 @@ test('UI-revoked session is not signed out again during cleanup', async () => {
   assert.equal(shouldLogoutOriginalSession(loggedOut, 'owner-b'), true);
   assert.equal(shouldLogoutOriginalSession(new Set(), 'owner-a'), true);
 });
+
+test('integration account cleanup refuses other runs, owners, and names', async () => {
+  const { assertOwnedAccountFixture } = await import('./safety.mjs');
+  const row = { id: 'integration-run-1', user_id: 'owner-a', name: 'Integration account run-1' };
+  assert.doesNotThrow(() => assertOwnedAccountFixture(row, 'integration-run-1', 'owner-a', 'run-1'));
+  for (const bad of [
+    [{ ...row, id: 'integration-other' }, 'integration-run-1', 'owner-a', 'run-1'],
+    [{ ...row, user_id: 'owner-b' }, 'integration-run-1', 'owner-a', 'run-1'],
+    [{ ...row, name: 'Personal account' }, 'integration-run-1', 'owner-a', 'run-1'],
+    [row, 'integration-run-1', 'owner-a', 'run-2'],
+    [null, 'integration-run-1', 'owner-a', 'run-1']
+  ]) assert.throws(() => assertOwnedAccountFixture(...bad), /ownership mismatch/);
+});
