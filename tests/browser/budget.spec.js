@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
@@ -170,4 +171,32 @@ test('desktop header uses the approved email branding', async ({ page }) => {
   await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(23, 21, 43)');
   await expect(page.locator('#authBtn')).toBeVisible();
   await expect(page.locator('#authBtn')).toHaveText('Sign In');
+});
+
+
+test('brand guidelines document the approved logo, palette, and typography', async () => {
+  const guidelines = readFileSync(new URL('../../docs/BRAND_GUIDELINES.md', import.meta.url), 'utf8');
+  expect(guidelines).toContain('Plan smarter. Grow stronger.');
+  expect(guidelines).toContain('`#8B7CFF`');
+  expect(guidelines).toContain('`#B1A6FF`');
+  expect(guidelines).toContain('`#17152B`');
+  expect(guidelines).toContain('"Inter"');
+});
+
+test('desktop authentication modal uses the official Rolling Budget mark and clear account copy', async ({ page }) => {
+  await page.locator('#authBtn').click();
+  const modal = page.locator('#authModal');
+  await expect(modal).toHaveClass(/open/);
+  await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
+  await expect(modal.locator('#authModalTitle')).toHaveText('Welcome back!');
+  await expect(modal.locator('#authModalDescription')).toContainText('access your budget across devices');
+  await modal.locator('#authModeLink').click();
+  await expect(modal.locator('#authModalTitle')).toHaveText('Create your account');
+  await expect(modal.locator('#authSubmitBtn')).toHaveText('Create Account');
+  await modal.locator('#authModeLink').click();
+  await modal.locator('#authResetLink').click();
+  await expect(modal.locator('#authModalTitle')).toHaveText('Reset your password');
+  await modal.locator('#authSubmitBtn').click();
+  await expect(modal.locator('#authMessage')).toContainText('Enter your email address');
+  await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
 });
