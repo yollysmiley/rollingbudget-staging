@@ -920,7 +920,7 @@ function validYearData(value) {
 }
 async function initApp() {
   const gateMessage = document.getElementById("authGateMessage");
-  const home = new URL("../", window.location.href).href;
+  const home = window.location.pathname.endsWith("/rollover-budget-app.html") ? new URL("./", window.location.href).href : new URL("../", window.location.href).href;
   if (!supabaseClient) {
     gateMessage.textContent = "Sign in is temporarily unavailable. Please try again later.";
     return;
