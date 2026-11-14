@@ -742,8 +742,8 @@
       </table>
       <div class="add-row">
         <input type="text" id="newIncName" placeholder="Income source" style="flex:1;min-width:130px" />
-        <input type="number" step="0.01" id="newIncCpm" placeholder="CPM $" style="width:95px" />
-        <input type="number" step="0.01" id="newIncUsaa" placeholder="USAA $" style="width:95px" />
+        
+        
         <label>Account <select id="newIncAccount" data-new-entry-account aria-label="Account for new income"></select></label>
         <input type="number" step="0.01" id="newIncAmount" placeholder="Amount $" style="width:95px" />
         <button class="primary" onclick="addIncome()">Add</button>
@@ -907,7 +907,7 @@
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
 <label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
-<label data-rec-account-group>Deposit account<select data-rec-field="account"><option value="cpm">CPM Federal</option><option value="usaa">USAA</option></select></label>
+<label data-rec-account-group>Account<select data-rec-field="account"><option value="cpm">CPM Federal</option><option value="usaa">USAA</option></select></label>
 <label>Due day<input data-rec-field="due" type="text" placeholder="e.g. 1st or 15th"></label>
 <label>Start month<select data-rec-field="startMonth"></select></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><div class="recurring-form-actions"><button class="primary" type="button" onclick="addRecurringRule('desktop')">Add rule</button></div></section>
@@ -1097,6 +1097,7 @@ async function initApp() {
           return;
         }
         await loadAllYears();
+        if (currentUser) await initializeAccounts();
         render();
       }, 0);
     }
@@ -1338,12 +1339,29 @@ async function editEntryAccount(type, idx, accountId) {
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
   const entry = db[activeYear].months[selectedIdx][type]?.[idx];
   if (!entry) return;
-  if (type === 'income' && accountId && !entry.accountId) {
-    entry.amount = (Number(entry.cpm) || 0) + (Number(entry.usaa) || 0);
+  if (type === 'income' && !entry.accountId && (Object.hasOwn(entry, 'cpm') || Object.hasOwn(entry, 'usaa'))) {
+    const sources = ['cpm', 'usaa'].filter(id => (Number(entry[id]) || 0) !== 0);
+    if (sources.length > 1) {
+      alert('This income contains CPM and USAA amounts. Split it into separate account entries before reassigning.');
+      render();
+      return;
+    }
+    entry.amount = Number(entry.cpm) || Number(entry.usaa) || 0;
     delete entry.cpm; delete entry.usaa;
   }
   if (type === 'income' && !accountId && entry.accountId) return;
   entry.accountId = accountId || null;
+  await saveDB(); render();
+}
+async function splitLegacyIncome(idx) {
+  const entries = db[activeYear].months[selectedIdx].income;
+  const entry = entries[idx];
+  if (!entry || entry.accountId) return;
+  const parts = ['cpm', 'usaa'].filter(id => (Number(entry[id]) || 0) !== 0)
+    .map(id => ({ name: entry.name, accountId: id, amount: Number(entry[id]) || 0,
+      ...(entry.recurringRuleId ? { recurringRuleId: entry.recurringRuleId } : {}) }));
+  if (!parts.length) return;
+  entries.splice(idx, 1, ...parts);
   await saveDB(); render();
 }
 function refreshAccountSelectors() {
@@ -1501,7 +1519,7 @@ function render() {
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" ${item.accountId ? "disabled" : ""} onchange="editInc(${idx}, 'cpm', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" ${item.accountId ? "disabled" : ""} onchange="editInc(${idx}, 'usaa', this.value)" /></td>
       <td class="num">${fmt(item.accountId ? item.amount : (Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
-      <td>${accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
+      <td>${!item.accountId && (Number(item.cpm)||0) && (Number(item.usaa)||0) ? '<button type="button" onclick="splitLegacyIncome(' + idx + ')">Split income</button>' : accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
   `).join("");
   document.getElementById("incomeBody").innerHTML = incHtml;
@@ -1571,14 +1589,13 @@ async function updateStartLeftover(val) {
 async function editInc(idx, f, v) { db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
 async function addIncome() {
   const name = document.getElementById("newIncName").value.trim();
-  const cpm = parseFloat(document.getElementById("newIncCpm").value) || 0;
-  const usaa = parseFloat(document.getElementById("newIncUsaa").value) || 0;
+
   if (!name) return;
   const accountId = document.getElementById("newIncAccount").value;
   const amount = parseFloat(document.getElementById("newIncAmount").value) || 0;
-  if (accountId) db[activeYear].months[selectedIdx].income.push({ name, accountId, amount });
-  else db[activeYear].months[selectedIdx].income.push({ name, cpm, usaa });
-  document.getElementById("newIncName").value = ""; document.getElementById("newIncCpm").value = ""; document.getElementById("newIncUsaa").value = ""; document.getElementById("newIncAmount").value = "";
+  if (!accountId || !budgetAccounts.some(account => account.id === accountId)) return;
+  db[activeYear].months[selectedIdx].income.push({ name, accountId, amount });
+  document.getElementById("newIncName").value = ""; document.getElementById("newIncAmount").value = "";
   await saveDB(); render();
 }
 async function editExp(type, idx, f, v) { db[activeYear].months[selectedIdx][type][idx][f] = f==='amount'?parseFloat(v)||0:v; await saveDB(); render(); }
@@ -1731,7 +1748,7 @@ function openRecurringModal(){
   toggleRecFields();renderRulesList();document.body.classList.add("recurring-manager-open");
 }
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
-function toggleRecFields(source){const category=source?.value||"fixed";document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display=category==="income"?"grid":"none");}
+function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
 function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.frequency]?.label||"Monthly (legacy)";}
 function renderRulesList(){
   const rules=db[activeYear].recurringRules||[],count=`${rules.length} rule${rules.length===1?"":"s"}`;
