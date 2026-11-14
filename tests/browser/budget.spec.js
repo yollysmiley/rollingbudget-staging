@@ -193,6 +193,7 @@ test('desktop authentication modal uses the official Rolling Budget mark and cle
   await modal.locator('#authModeLink').click();
   await expect(modal.locator('#authModalTitle')).toHaveText('Create your account');
   await expect(modal.locator('#authSubmitBtn')).toHaveText('Create Account');
+  await modal.locator('#authModeLink').click();
   await modal.locator('#authResetLink').click();
   await expect(modal.locator('#authModalTitle')).toHaveText('Reset your password');
   await modal.locator('#authSubmitBtn').click();
