@@ -101,3 +101,26 @@ test('year switching and narrow viewport remain usable', async ({ page }) => {
   const size = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
   expect(size.content).toBeLessThanOrEqual(size.width + 1);
 });
+
+test('timestamp comparison selects the newest budget copy', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const local = { data: { id: 'local' }, updatedAt: Date.parse('2026-11-13T10:00:00Z') };
+    const newerCloud = { data: { id: 'cloud' }, updatedAt: Date.parse('2026-11-13T11:00:00Z') };
+    const newerLocal = { data: { id: 'local-new' }, updatedAt: Date.parse('2026-11-13T12:00:00Z') };
+    const unversionedLocal = { data: { id: 'legacy-local' }, updatedAt: null, legacy: true };
+    return {
+      cloudWins: chooseNewestBudget(local, newerCloud).data.id,
+      localWins: chooseNewestBudget(newerLocal, newerCloud).data.id,
+      legacyYields: chooseNewestBudget(unversionedLocal, newerCloud).data.id,
+      localOnly: chooseNewestBudget(local, null).data.id,
+      cloudOnly: chooseNewestBudget(null, newerCloud).data.id
+    };
+  });
+  expect(result).toEqual({
+    cloudWins: 'cloud',
+    localWins: 'local-new',
+    legacyYields: 'cloud',
+    localOnly: 'local',
+    cloudOnly: 'cloud'
+  });
+});
