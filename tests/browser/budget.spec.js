@@ -47,9 +47,9 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
   await page.locator('#newIncName').fill('SAVE-RELOAD-TEST');
   await page.locator('#newIncCpm').fill('2713.45');
   await page.locator('button[onclick="addIncome()"]').click();
-  await expect(page.locator('#incomeBody input[type="text"]').first()).toHaveValue('SAVE-RELOAD-TEST');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
   await page.reload();
-  await expect(page.locator('#incomeBody input[type="text"]').first()).toHaveValue('SAVE-RELOAD-TEST');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
   await expect(page.locator('#incomeBody tr:not(.roll-row) input[type="number"]').first()).toHaveValue('2713.45');
   await expect(page.locator('#incTotalBadge')).toHaveText('$2,713.45');
 });
@@ -72,7 +72,7 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
   await page.locator('#newVarDue').fill('4th');
   await page.locator('#newVarAmt').fill('25');
   await page.evaluate(() => addExpense('variable'));
-  await expect(page.locator('#variableBody input[type="text"]').first()).toHaveValue(payload);
+  await expect(page.locator('#variableBody input:not([type])').first()).toHaveValue(payload);
   await expect(page.locator('#variableBody img')).toHaveCount(0);
 });
 
@@ -85,9 +85,9 @@ test('recurring rule applies to the selected months', async ({ page }) => {
   await page.locator('#recEnd').selectOption('1');
   await page.locator('button[onclick="applyRecurringRule()"]').click();
   await expect(page.locator('#rulesListContainer')).toContainText('Internet');
-  await expect(page.locator('#fixedBody input[type="text"]').first()).toHaveValue('Internet');
+  await expect(page.locator('#fixedBody input:not([type])').first()).toHaveValue('Internet');
   await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#fixedBody input[type="text"]')).toHaveCount(0);
+  await expect(page.locator('#fixedBody input:not([type])')).toHaveCount(0);
 });
 
 test('year switching and narrow viewport remain usable', async ({ page }) => {
