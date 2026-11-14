@@ -2,13 +2,14 @@
 
 ## Unreleased
 
+- Improved live staging integration setup diagnostics to identify the failing stage and safe HTTP status/code without logging credentials, tokens, or response payloads.
+
 - Added a desktop-only Back to Overview control to the Recurring Rules Manager and fixed Auto-Cascade label contrast in the dark header; retained the mobile sidebar navigation and added desktop/mobile regression assertions.
 
 - Added a branded staging password-reset page, routed Forgot Password emails to it, validated recovery sessions before password updates, and added desktop/mobile regression coverage.
 - Added a branded staging email-confirmation page, routed new signups to it, and added desktop/mobile coverage for successful, invalid, and expired confirmation links.
 
-- Aligned staging app cloud persistence and live API/browser tests with the current `budget_data` one-document-per-user schema, including the `state` JSONB payload and ownership policies.
-- Improved live integration setup diagnostics to report the failing stage and safe HTTP status/code without logging credentials, tokens, or response payloads.
+- Aligned authenticated staging API and browser integration tests with the current redesigned dashboard and `budget_ui_years` storage table; legacy Release 2 `budget_data` remains untouched.
 - Removed the unused pinned production-repository checkout from the live staging workflow so builds and tests use the exact staging application revision.
 - Replaced obsolete Release 2 browser assertions with coverage for authenticated cloud save/restore, account switching isolation, and logout clearing.
 - Updated live-test documentation to state the reserved fixture years and current test scope.
