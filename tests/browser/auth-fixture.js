@@ -7,12 +7,13 @@ export async function mockSignedInBudget(page) {
       window.supabase = { createClient() {
         const user = { id: 'browser-test-owner', email: 'browser-test@example.invalid' };
         let listener;
+        const activeUser = () => sessionStorage.getItem('__mock_signed_out') === '1' ? null : user;
         return {
           auth: {
-            async getUser() { return { data: { user }, error: null }; },
-            async getSession() { return { data: { session: { user } }, error: null }; },
+            async getUser() { return { data: { user: activeUser() }, error: null }; },
+            async getSession() { return { data: { session: activeUser() ? { user: activeUser() } : null }, error: null }; },
             onAuthStateChange(callback) { listener = callback; return { data: { subscription: { unsubscribe() {} } } }; },
-            async signOut() { if (listener) listener('SIGNED_OUT', null); return { error: null }; }
+            async signOut() { sessionStorage.setItem('__mock_signed_out', '1'); if (listener) listener('SIGNED_OUT', null); return { error: null }; }
           },
           from() {
             const chain = {

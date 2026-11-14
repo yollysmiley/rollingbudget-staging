@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed the simulated auth client to persist sign-out state across page navigation, preventing the public homepage from immediately re-authenticating after logout.
+
 - Updated remaining signed-out browser assertions for authenticated owner-scoped storage, account status, and desktop/mobile sign-out navigation.
 
 - Updated desktop and mobile browser acceptance tests to use an isolated simulated signed-in Supabase client, while separately asserting public homepage behavior and anonymous app redirects.
