@@ -643,7 +643,7 @@ async function saveDB() {
   catch (error) { console.error("Local save error:", error); alert("Could not save this budget in browser storage. Your changes may not persist."); return; }
   if (supabaseClient && currentUser) {
     try {
-      const { error } = await supabaseClient.from("budget_ui_years").upsert({ user_id: currentUser.id, year: Number(activeYear), budget_data: currentYearData }, { onConflict: "user_id,year" });
+      const { error } = await supabaseClient.from("budget_ui_years").upsert({ user_id: currentUser.id, year: Number(activeYear), budget_data: currentYearData, updated_at: new Date().toISOString() }, { onConflict: "user_id,year" });
       if (error) throw error;
     } catch(error) { console.error("Cloud sync error; local copy was retained:", error); }
   }
