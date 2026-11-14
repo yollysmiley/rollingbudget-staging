@@ -99,7 +99,7 @@ test('mobile header exposes Sign In and branded authentication modes', async ({ 
   await expect(modal.locator('#authModalTitle')).toHaveText('Reset your password');
   await expect(modal.locator('#authPasswordGroup')).toBeHidden();
   await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
-  await modal.locator('#authModal button').filter({ hasText: 'Cancel' }).click();
+  await modal.getByRole('button', { name: 'Cancel' }).click();
   await expect(modal).not.toHaveClass(/open/);
 });
 
