@@ -242,7 +242,7 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
     await saveDB();
   });
   await page.reload();
-  await expect(page.locator('#incomeBody')).toContainText('Legacy Pay');
+  await expect(page.locator('#incomeBody input.inline-input').first()).toHaveValue('Legacy Pay');
   await expect(page.locator('#incTotalBadge')).toHaveText('$500.00');
   const read = () => page.evaluate(() => db[activeYear].months[0].income);
   const entries = await read();
