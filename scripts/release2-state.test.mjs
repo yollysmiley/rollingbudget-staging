@@ -46,5 +46,5 @@ vm.runInContext("rb2Account = 'A'; rb2Store.switchAccount('A'); rb2Blocked=false
 await vm.runInContext("rb2Activate('B')",context);
 vm.runInContext("resolveCloud({data:{state:legacy},error:null})",context);
 await vm.runInContext('pending',context);
-assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length',context),0);
+assert.equal(vm.runInContext('state.years[0].months[0].paychecks.length', context),0);
 console.log('PASS: legacy migration, idempotence, deletion, schema recovery, account/guest separation, malformed retention, stale cloud response');

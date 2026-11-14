@@ -1,36 +1,33 @@
 # Staging frontend configuration
 
-Backend: rollingbudget-staging (phiscfwfuzeptetimdbo). Production is not a build target. The publishable key in staging-config.json is browser-safe; never substitute a service-role or secret key.
+Backend: rollingbudget-staging (`phiscfwfuzeptetimdbo`). Production is not a build target. The publishable key in `staging-config.json` is browser-safe; never substitute a service-role or secret key.
 
-The build workflow checks out application source at 3c9277bb5dd3209c603a8fd1e952583970136385 and transforms only its environment configuration, storage keys, title, and staging banner. Source transform mismatches fail the build. No production budget records or browser backups are copied.
+## Application source and deployment
 
-Budget, legacy fallback, theme, and Supabase authentication storage use a staging-specific prefix. This is important because separate GitHub Pages repository paths can share the same origin. No production storage keys are read by the generated application.
+The redesigned application source is `rollover-budget-app.html` in this repository. `scripts/build-staging.mjs` reads that file directly, injects only the staging Supabase URL, publishable key and storage namespace, adds a visible staging banner, and writes the static site to `dist/`. The workflow does not check out or build the pinned production application repository.
 
-## Deployment
+GitHub Pages is enabled with GitHub Actions as the source. Pull requests build and test only; deployment occurs from `main`. The staging site is https://yollysmiley.github.io/rollingbudget-staging/.
 
-GitHub Pages is enabled with GitHub Actions as the source. The workflow builds and deploys on `main` (PRs build only). The live site is https://yollysmiley.github.io/rollingbudget-staging/.
+## Data separation
 
-## Database
+The redesigned UI stores browser data under the account-specific `rollingbudget_staging_phiscfwfuzeptetimdbo_<user-or-guest>_budget_<year>` namespace and uses an isolated Supabase auth storage key.
 
-The staging schema is applied migration `20261029194718_create_staging_budget_data` (see `supabase/migrations/`), with verification queries in `supabase/verification/`. It uses tightened client grants and four ownership RLS policies. Two synthetic test accounts exist for isolation testing; staging uses synthetic data only.
+Legacy Release 2 records remain in `public.budget_data`. The redesigned UI does not read, overwrite, delete, or automatically migrate those records. New UI cloud records use the separate `public.budget_ui_years` table. The migration `20261113010000_create_budget_ui_years.sql` must be applied to the staging Supabase project before authenticated cloud sync is available. Until it is applied, browser-local saving continues and cloud errors are logged; no legacy table is modified.
 
-## Validation status
+No production budget records, browser backups, credentials, or policies are copied. Staging uses synthetic data only.
 
-Release 1 validation evidence, including the safe-rendering browser regression run and the cross-account RLS isolation matrix, is recorded in `docs/release1-validation.md`. Both P0 security items have passing functional evidence in staging. The deferred mobile horizontal overflow (289px at 390px viewport) remains open.
+## Validation
+
+The browser acceptance suite in `tests/browser/budget.spec.js` targets the redesigned UI. Previous Release 2 security and cross-account test evidence applies to the previous application and is not evidence that the redesigned UI has passed equivalent live cloud tests. Run the new UI's browser suite and verify the migration and authenticated cloud sync in the staging project before relying on cloud persistence.
 
 ## Local build
 
-For a local build with Node.js 24, obtain the pinned source revision in a separate local checkout, then run:
+With Node.js 24:
 
 ```sh
-node scripts/build-staging.mjs /path/to/pinned/rollover-budget-app.html
+npm install --no-audit --no-fund
+node scripts/build-staging.mjs
+python3 -m http.server 4173 --directory dist
 ```
 
-Serve dist using a local static server. Use synthetic budgets only. This build is not a security boundary against malicious code.
-
-## Remaining gates
-
-- Production database backup and demonstrated recovery.
-- Browser-backup restore test in an isolated, cloud-disabled environment.
-- Production grant tightening (including client TRUNCATE) via a separately approved change.
-- Do not use production authentication credentials or copy production user data.
+Use synthetic budgets only. The build is not a security boundary against malicious code.

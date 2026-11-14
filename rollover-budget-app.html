@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Year Rolling Budget & Planning Manager</title>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #f8f7fc;
+      --panel: #ffffff;
+      --panel-2: #f3f0fa;
+      --border: #e5e1f2;
+      --text: #181326;
+      --muted: #645e78;
+      --accent: #7c3aed;
+      --accent-hover: #6d28d9;
+      --accent-soft: #ede9fe;
+      --accent-glow: rgba(124, 58, 237, 0.14);
+      --green: #059669;
+      --green-bg: #ecfdf5;
+      --red: #dc2626;
+      --red-bg: #fef2f2;
+      --amber: #d97706;
+      --amber-bg: #fffbeb;
+      --shadow-sm: 0 1px 3px rgba(24, 19, 38, 0.04), 0 1px 2px rgba(24, 19, 38, 0.03);
+      --shadow-md: 0 10px 25px -5px rgba(124, 58, 237, 0.08), 0 4px 10px -2px rgba(24, 19, 38, 0.04);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 64px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      background: rgba(255, 255, 255, 0.86);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .header-top {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.05rem;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.28);
+      flex-shrink: 0;
+    }
+
+    .title-group h1 { font-size: 1.18rem; font-weight: 800; letter-spacing: -0.025em; }
+    .title-group p { font-size: 0.8rem; color: var(--muted); }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    select, button, input[type="email"], input[type="password"] {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 9px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      box-shadow: var(--shadow-sm);
+      font-family: inherit;
+    }
+
+    select:focus, button:hover, input:focus {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--panel-2);
+      outline: none;
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+      color: #ffffff;
+      border-color: #6d28d9;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+    }
+    button.primary:hover {
+      background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%);
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    button.danger:hover { border-color: #fca5a5; color: var(--red); background: var(--red-bg); }
+
+    .toggle-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 9px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+    }
+    .toggle-pill input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+    .container { max-width: 1400px; margin: 22px auto; padding: 0 24px; }
+
+    /* Rolling Strip */
+    .rolling-strip {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(98px, 1fr));
+      gap: 9px;
+      overflow-x: auto;
+      padding: 2px 2px 10px 2px;
+      margin-bottom: 20px;
+    }
+
+    .month-pill {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 10px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      box-shadow: var(--shadow-sm);
+    }
+    .month-pill:hover { border-color: #c4b5fd; transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .month-pill.active {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, #faf7ff 0%, #f3edff 100%);
+      box-shadow: 0 0 0 2px var(--accent-glow), var(--shadow-md);
+    }
+    .month-pill .m-name { font-size: 0.74rem; font-weight: 700; color: var(--muted); }
+    .month-pill.active .m-name { color: var(--accent); }
+    .month-pill .m-roll { font-size: 0.92rem; font-weight: 800; margin-top: 5px; color: var(--green); font-variant-numeric: tabular-nums; }
+    .month-pill .m-roll.neg { color: var(--red); }
+    .month-pill .m-sub { font-size: 0.69rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+    /* Mid-Month 15th Payday Snapshot Banner */
+    .mid-month-banner {
+      background: linear-gradient(135deg, #f5f0ff 0%, #ede9fe 100%);
+      border: 1px solid #c4b5fd;
+      border-radius: 14px;
+      padding: 16px 22px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .mm-title { font-size: 0.88rem; font-weight: 800; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+    .mm-stats { display: flex; flex-wrap: wrap; gap: 24px; font-size: 0.82rem; }
+    .mm-stat-item span { color: var(--muted); display: block; font-size: 0.72rem; text-transform: uppercase; font-weight: 700; }
+    .mm-stat-item strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+    /* KPI Summary Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .kpi-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-card.highlight { background: linear-gradient(135deg, #ffffff 0%, #f5f0ff 100%); border-color: #c4b5fd; box-shadow: var(--shadow-md); }
+    .kpi-label { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+    .kpi-val { font-size: 1.62rem; font-weight: 800; margin-top: 6px; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+    .kpi-foot { font-size: 0.77rem; color: var(--muted); margin-top: 5px; }
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+    .warn { color: var(--amber); }
+    .purple-text { color: var(--accent); }
+
+    /* Visual Bar */
+    .flow-bar-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px; margin-bottom: 22px; box-shadow: var(--shadow-sm); }
+    .flow-bar-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.84rem; margin-bottom: 10px; color: var(--muted); }
+    .flow-bar { height: 12px; background: #ede9fe; border-radius: 999px; overflow: hidden; display: flex; gap: 2px; }
+    .seg-fixed { background: #7c3aed; }
+    .seg-var { background: #f59e0b; }
+    .seg-cc { background: #ef4444; }
+    .seg-loan { background: #a855f7; }
+    .seg-left { background: #10b981; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    /* Main Grid */
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 1024px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm); }
+    .card.full { grid-column: 1 / -1; }
+
+    .card-header {
+      padding: 14px 18px;
+      background: #fcfbff;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .card-header h2 { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 9px; }
+
+    .badge {
+      font-size: 0.74rem;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th, td { padding: 9px 14px; border-bottom: 1px solid #f1eef9; text-align: left; }
+    th { font-size: 0.71rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: #faf9fe; font-weight: 700; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #faf8ff; }
+    .roll-row td { background: #f5f0ff !important; border-bottom: 1px solid #e4dbfb; }
+
+    .inline-input { background: transparent; border: 1px solid transparent; color: var(--text); font-size: 0.84rem; padding: 4px 7px; border-radius: 6px; width: 100%; font-family: inherit; }
+    .inline-input:hover { background: #f5f3ff; border-color: #ddd6fe; }
+    .inline-input:focus { background: #ffffff; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); outline: none; }
+    .inline-input.num { text-align: right; width: 94px; }
+    .inline-input.sm { width: 66px; }
+
+    .del-btn { background: transparent; border: none; color: #9ca3af; padding: 3px 7px; font-size: 1rem; border-radius: 6px; cursor: pointer; }
+    .del-btn:hover { color: var(--red); background: var(--red-bg); }
+
+    .add-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; background: #faf9fe; border-top: 1px solid var(--border); }
+    .add-row input, .add-row select { background: #ffffff; border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 8px; font-size: 0.82rem; font-family: inherit; }
+    .add-row input:focus, .add-row select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+    /* Modal / Auth Overlays */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(24, 19, 38, 0.45); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+      max-width: 500px; width: 100%; padding: 24px; box-shadow: 0 20px 40px rgba(24, 19, 38, 0.18);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal h3 { font-size: 1.15rem; font-weight: 800; margin-bottom: 6px; }
+    .modal p { font-size: 0.83rem; color: var(--muted); margin-bottom: 16px; }
+    .form-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 0.74rem; color: var(--muted); margin-bottom: 5px; font-weight: 700; text-transform: uppercase; }
+    .form-group input, .form-group select { width: 100%; background: #faf9fe; border: 1px solid var(--border); color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 0.85rem; font-family: inherit; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="title-group">
+      <div class="brand-icon">$</div>
+      <div>
+        <h1>Multi-Year Rolling Budget & Planning</h1>
+        <p id="userStatusSub">Multi-Year & Mid-Month Financial Tracker</p>
+      </div>
+    </div>
+    <div class="controls">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
+        <select id="activeYearSelect" onchange="switchYear(this.value)">
+          <option value="2026">2026 (Active Budget)</option>
+          <option value="2027">2027 (Planning Mode)</option>
+        </select>
+      </div>
+      <button onclick="createNewYear()">+ New Year</button>
+      <label class="toggle-pill" title="Auto-cascade surplus into next month">
+        <input type="checkbox" id="autoRollToggle" checked />
+        <span>Auto-Cascade</span>
+      </label>
+      <button class="primary" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+      <button id="authBtn" onclick="handleAuthClick()">Sign In</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <!-- 12-Month Rolling Timeline -->
+  <div class="rolling-strip" id="rollingStrip"></div>
+
+  <!-- Mid-Month 15th Payday Snapshot Banner -->
+  <div class="mid-month-banner" id="midMonthBanner"></div>
+
+  <!-- Top KPIs -->
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- Cash Allocation Bar -->
+  <div class="flow-bar-wrap" id="flowBarWrap"></div>
+
+  <!-- Main Tables -->
+  <div class="main-grid">
+    <!-- INCOME -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Income & Starting Rollover <span class="badge" id="incTotalBadge">$0.00</span></h2>
+        <span style="font-size:0.76rem;color:var(--muted);font-weight:600" id="acctSplitLabel"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th class="num">CPM Federal</th>
+            <th class="num">USAA</th>
+            <th class="num">Total</th>
+            <th style="width:34px"></th>
+          </tr>
+        </thead>
+        <tbody id="incomeBody"></tbody>
+      </table>
+      <div class="add-row">
+        <input type="text" id="newIncName" placeholder="Income source" style="flex:1;min-width:130px" />
+        <input type="number" step="0.01" id="newIncCpm" placeholder="CPM $" style="width:95px" />
+        <input type="number" step="0.01" id="newIncUsaa" placeholder="USAA $" style="width:95px" />
+        <button class="primary" onclick="addIncome()">Add</button>
+      </div>
+    </div>
+
+    <!-- FIXED EXPENSES -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Fixed Expenses <span class="badge" id="fixTotalBadge">$0.00</span></h2>
+        <span style="font-size:0.76rem;color:var(--muted)">Recurring bills & mortgages</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Expense</th>
+            <th>Due</th>
+            <th class="num">Amount</th>
+            <th style="width:34px"></th>
+          </tr>
+        </thead>
+        <tbody id="fixedBody"></tbody>
+      </table>
+      <div class="add-row">
+        <input type="text" id="newFixName" placeholder="Fixed bill name" style="flex:1;min-width:130px" />
+        <input type="text" id="newFixDue" placeholder="Due (e.g. 5th)" style="width:95px" />
+        <input type="number" step="0.01" id="newFixAmt" placeholder="Amount $" style="width:95px" />
+        <button class="primary" onclick="addExpense('fixed')">Add</button>
+      </div>
+    </div>
+
+    <!-- VARIABLE EXPENSES -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Variable & One-Time Expenses <span class="badge" id="varTotalBadge">$0.00</span></h2>
+        <span style="font-size:0.76rem;color:var(--muted)">Utilities & discretionary</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Expense</th>
+            <th>Due</th>
+            <th class="num">Amount</th>
+            <th style="width:34px"></th>
+          </tr>
+        </thead>
+        <tbody id="variableBody"></tbody>
+      </table>
+      <div class="add-row">
+        <input type="text" id="newVarName" placeholder="Variable expense" style="flex:1;min-width:130px" />
+        <input type="text" id="newVarDue" placeholder="Due" style="width:95px" />
+        <input type="number" step="0.01" id="newVarAmt" placeholder="Amount $" style="width:95px" />
+        <button class="primary" onclick="addExpense('variable')">Add</button>
+      </div>
+    </div>
+
+    <!-- LOANS -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Installment Loans <span class="badge" id="loanTotalBadge">$0.00</span></h2>
+        <span style="font-size:0.76rem;color:var(--muted)">Payments & balances</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Loan</th>
+            <th>Due</th>
+            <th class="num">Balance</th>
+            <th class="num">APR %</th>
+            <th class="num">Payment</th>
+            <th style="width:34px"></th>
+          </tr>
+        </thead>
+        <tbody id="loanBody"></tbody>
+      </table>
+      <div class="add-row">
+        <input type="text" id="newLoanName" placeholder="Loan name" style="flex:1;min-width:110px" />
+        <input type="text" id="newLoanDue" placeholder="Due" style="width:65px" />
+        <input type="number" step="0.01" id="newLoanBal" placeholder="Balance $" style="width:90px" />
+        <input type="number" step="0.01" id="newLoanPay" placeholder="Pay $" style="width:85px" />
+        <button class="primary" onclick="addLoan()">Add</button>
+      </div>
+    </div>
+
+    <!-- CREDIT CARDS -->
+    <div class="card full">
+      <div class="card-header">
+        <h2>Credit Cards <span class="badge" id="ccTotalBadge">$0.00</span></h2>
+        <span style="font-size:0.76rem;color:var(--muted);font-weight:600" id="ccStmtSummary"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Card</th>
+            <th>Due</th>
+            <th class="num">Statement Bal</th>
+            <th class="num">APR / Min</th>
+            <th class="num">Planned Payment</th>
+            <th style="width:34px"></th>
+          </tr>
+        </thead>
+        <tbody id="ccBody"></tbody>
+      </table>
+      <div class="add-row">
+        <input type="text" id="newCcName" placeholder="Card name" style="flex:1;min-width:140px" />
+        <input type="text" id="newCcDue" placeholder="Due" style="width:95px" />
+        <input type="number" step="0.01" id="newCcStmt" placeholder="Statement $" style="width:110px" />
+        <input type="number" step="0.01" id="newCcApr" placeholder="APR/Min" style="width:95px" />
+        <input type="number" step="0.01" id="newCcPay" placeholder="Payment $" style="width:110px" />
+        <button class="primary" onclick="addCC()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Account Auth Modal -->
+<div class="modal-backdrop" id="authModal">
+  <div class="modal">
+    <h3 id="authModalTitle">Account Sign In</h3>
+    <p>Access your cloud-synced budgets across all devices.</p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="authEmail" placeholder="you@domain.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="authPassword" placeholder="••••••••" />
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between; align-items:center;">
+      <button style="border:none; background:none; color:var(--accent); font-size:0.8rem; cursor:pointer;" onclick="toggleAuthMode()">Need an account? Sign Up</button>
+      <div>
+        <button onclick="closeAuthModal()">Cancel</button>
+        <button class="primary" id="authSubmitBtn" onclick="submitAuth()">Sign In</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recurring Rules Manager Modal -->
+<div class="modal-backdrop" id="recurringModal">
+  <div class="modal">
+    <h3>Recurring Rules Manager</h3>
+    <p>Manage or create recurring income and expenses for <strong><span id="modalYearLabel"></span></strong>.</p>
+    
+    <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:16px;">
+      <h4 style="font-size:0.85rem; margin-bottom:8px; font-weight:700;">Active Recurring Rules in this Year:</h4>
+      <div id="rulesListContainer" style="max-height:160px; overflow-y:auto; font-size:0.82rem;"></div>
+    </div>
+
+    <h4 style="font-size:0.88rem; margin-bottom:8px; font-weight:700;">+ Add New Recurring Rule</h4>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px;">
+      <div class="form-group">
+        <label>Category</label>
+        <select id="recCategory" onchange="toggleRecFields()">
+          <option value="fixed">Fixed Expense</option>
+          <option value="variable">Variable Expense</option>
+          <option value="income">Income</option>
+          <option value="loan">Loan Payment</option>
+          <option value="cc">Credit Card Payment</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="recName" placeholder="e.g. Mortgage or Salary" />
+      </div>
+      <div class="form-group">
+        <label>Amount ($)</label>
+        <input type="number" step="0.01" id="recAmount" placeholder="0.00" />
+      </div>
+      <div class="form-group" id="recAccountGroup" style="display:none">
+        <label>Deposit Account</label>
+        <select id="recAccount">
+          <option value="cpm">CPM Federal</option>
+          <option value="usaa">USAA</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Due Day</label>
+        <input type="text" id="recDue" placeholder="e.g. 1st or 15th" />
+      </div>
+      <div class="form-group">
+        <label>Start Month</label>
+        <select id="recStart"></select>
+      </div>
+      <div class="form-group">
+        <label>End Month</label>
+        <select id="recEnd"></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeRecurringModal()">Close</button>
+      <button class="primary" onclick="applyRecurringRule()">Apply & Push</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- CLOUD CONFIGURATION ---
+// Replace with your backend URL and Anon Key when deploying
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+let supabaseClient = null;
+let currentUser = null;
+let isSignUpMode = false;
+
+if (SUPABASE_URL && window.supabase) {
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { storageKey: STAGING_STORAGE_PREFIX + "_auth" } });
+}
+
+const BASELINE_2026 = {
+  autoCascade: true,
+  recurringRules: [],
+  months: Array.from({ length: 12 }, (_, index) => {
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthCodes = ["JAN", "FEB", "MAR", "APR", "MAY", "JUNE", "JULY", "AUG", "SEPT", "OCT", "NOV", "DEC"];
+    return {
+      code: monthCodes[index],
+      name: monthNames[index],
+      recordedLeftover: 0,
+      income: [],
+      fixed: [],
+      variable: [],
+      creditCards: [],
+      loans: []
+    };
+  })
+};
+
+let activeYear = "2026";
+let selectedIdx = 0;
+let db = {};
+
+function storageKey(year) {
+  return STAGING_STORAGE_PREFIX + "_" + (currentUser?.id || "guest") + "_budget_" + year;
+}
+function validYearData(value) {
+  return value && typeof value === "object" && Array.isArray(value.months) && value.months.length === 12 &&
+    value.months.every(m => m && typeof m === "object" && ["income", "fixed", "variable", "creditCards", "loans"].every(k => Array.isArray(m[k])));
+}
+async function initApp() {
+  if (supabaseClient) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUser = session?.user || null;
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      currentUser = session?.user || null;
+      document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
+      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
+      setTimeout(async () => {
+        await loadAllYears();
+        render();
+      }, 0);
+    });
+  }
+  document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
+  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
+  await loadAllYears();
+  render();
+}
+async function loadAllYears() {
+  const all = {};
+  for (const yr of ["2026", "2027"]) {
+    all[yr] = JSON.parse(JSON.stringify(BASELINE_2026));
+    try {
+      const saved = localStorage.getItem(storageKey(yr));
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (validYearData(parsed)) all[yr] = parsed;
+        else console.warn("Ignored invalid local budget data for", yr, "; original storage was preserved.");
+      }
+    } catch (error) { console.warn("Could not read local budget data for", yr, "; original storage was preserved.", error); }
+  }
+  if (supabaseClient && currentUser) {
+    try {
+      const { data, error } = await supabaseClient.from("budget_ui_years").select("year,budget_data").eq("user_id", currentUser.id);
+      if (error) throw error;
+      for (const row of data || []) {
+        const year = String(row.year);
+        if (validYearData(row.budget_data) && (!Object.hasOwn(all, year) || localStorage.getItem(storageKey(year)) === null)) all[year] = row.budget_data;
+      }
+    } catch (error) { console.error("Cloud load error; local data was retained:", error); }
+  }
+  db = all;
+}
+async function saveDB() {
+  const currentYearData = db[activeYear];
+  try { localStorage.setItem(storageKey(activeYear), JSON.stringify(currentYearData)); }
+  catch (error) { console.error("Local save error:", error); alert("Could not save this budget in browser storage. Your changes may not persist."); return; }
+  if (supabaseClient && currentUser) {
+    try {
+      const { error } = await supabaseClient.from("budget_ui_years").upsert({ user_id: currentUser.id, year: Number(activeYear), budget_data: currentYearData, updated_at: new Date().toISOString() }, { onConflict: "user_id,year" });
+      if (error) throw error;
+    } catch(error) { console.error("Cloud sync error; local copy was retained:", error); }
+  }
+}
+function switchYear(yr) {
+  activeYear = yr;
+  selectedIdx = 0;
+  if (!db[activeYear]) {
+    db[activeYear] = JSON.parse(JSON.stringify(BASELINE_2026));
+    db[activeYear].recurringRules = [];
+  }
+  render();
+}
+
+async function createNewYear() {
+  const newYr = prompt("Enter new year to plan (e.g. 2028):", String(parseInt(activeYear) + 1));
+  if (!newYr) return;
+  if (!/^\d{4}$/.test(newYr)) { alert("Enter a four-digit year."); return; }
+  
+  const computed = computeRolling(activeYear);
+  const decEnding = computed[11].endingRollover;
+
+  db[newYr] = JSON.parse(JSON.stringify(BASELINE_2026));
+  db[newYr].recurringRules = [];
+  db[newYr].months[0].recordedLeftover = decEnding;
+  for(let i=1; i<12; i++) {
+    db[newYr].months[i].recordedLeftover = 0;
+    db[newYr].months[i].income = [];
+    db[newYr].months[i].fixed = [];
+    db[newYr].months[i].variable = [];
+    db[newYr].months[i].creditCards = [];
+    db[newYr].months[i].loans = [];
+  }
+
+  const sel = document.getElementById("activeYearSelect");
+  if (![...sel.options].some(o => o.value === newYr)) {
+    const opt = document.createElement("option");
+    opt.value = newYr;
+    opt.textContent = newYr + " (Planning)";
+    sel.appendChild(opt);
+  }
+  sel.value = newYr;
+  activeYear = newYr;
+  await saveDB();
+  render();
+}
+
+function fmt(n) {
+  const val = Number(n) || 0;
+  return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+function parseDayNum(dueStr) {
+  if (!dueStr) return 99;
+  const match = String(dueStr).match(/\d+/);
+  return match ? parseInt(match[0], 10) : 99;
+}
+
+function computeRolling(yrKey) {
+  const yearData = db[yrKey];
+  if (!yearData) return [];
+  const results = [];
+  let runningRollover = yearData.months[0].recordedLeftover;
+
+  yearData.months.forEach((m, i) => {
+    const startLeftover = (i === 0 || !yearData.autoCascade) ? m.recordedLeftover : runningRollover;
+    const cpmIncome = m.income.reduce((s, x) => s + (Number(x.cpm) || 0), 0);
+    const usaaIncome = m.income.reduce((s, x) => s + (Number(x.usaa) || 0), 0);
+    const newIncome = cpmIncome + usaaIncome;
+    const totalAvailable = startLeftover + newIncome;
+
+    const fixedTotal = m.fixed.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const varTotal = m.variable.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const ccTotal = m.creditCards.reduce((s, x) => s + (Number(x.payment) || 0), 0);
+    const loanTotal = m.loans.reduce((s, x) => s + (Number(x.payment) || 0), 0);
+    const totalOutflow = fixedTotal + varTotal + ccTotal + loanTotal;
+
+    let pre15Outflow = 0;
+    m.fixed.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.amount) || 0; });
+    m.variable.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.amount) || 0; });
+    m.creditCards.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.payment) || 0; });
+    m.loans.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.payment) || 0; });
+
+    const pre15Buffer = startLeftover - pre15Outflow;
+    const endingRollover = totalAvailable - totalOutflow;
+    runningRollover = endingRollover;
+
+    results.push({
+      startLeftover, cpmIncome, usaaIncome, newIncome, totalAvailable,
+      fixedTotal, varTotal, ccTotal, loanTotal, totalOutflow,
+      pre15Outflow, pre15Buffer,
+      netMonthlyChange: newIncome - totalOutflow, endingRollover
+    });
+  });
+  return results;
+}
+
+function render() {
+  const yearData = db[activeYear];
+  if (!yearData) return;
+  document.getElementById("autoRollToggle").checked = yearData.autoCascade;
+  document.getElementById("activeYearSelect").value = activeYear;
+
+  const computed = computeRolling(activeYear);
+  const m = yearData.months[selectedIdx];
+  const c = computed[selectedIdx];
+  const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
+
+  document.getElementById("rollingStrip").innerHTML = yearData.months.map((mo, idx) => {
+    const co = computed[idx];
+    return `
+      <div class="month-pill ${idx === selectedIdx ? "active" : ""}" onclick="selectMonth(${idx})">
+        <div class="m-name">${esc(mo.code)}</div>
+        <div class="m-roll ${co.endingRollover < 0 ? "neg" : ""}">${fmt(co.endingRollover)}</div>
+        <div class="m-sub">In: ${fmt(co.startLeftover)}</div>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById("midMonthBanner").innerHTML = `
+    <div class="mm-title">
+      <span>🎯 Mid-Month 15th Payday Snapshot (${esc(m.name)})</span>
+    </div>
+    <div class="mm-stats">
+      <div class="mm-stat-item">
+        <span>Spent / Due Before 15th</span>
+        <strong class="warn">${fmt(c.pre15Outflow)}</strong>
+      </div>
+      <div class="mm-stat-item">
+        <span>Buffer Before Paycheck</span>
+        <strong class="${c.pre15Buffer >= 0 ? "pos" : "neg"}">${fmt(c.pre15Buffer)}</strong>
+      </div>
+      <div class="mm-stat-item">
+        <span>Payday Status</span>
+        <strong>${c.pre15Buffer >= 0 ? "🟢 Safe Buffer" : "🔴 Tight / Deficit"}</strong>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("kpiGrid").innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">Rolled In From Last Month</div>
+      <div class="kpi-val ${c.startLeftover >= 0 ? "pos" : "neg"}">${fmt(c.startLeftover)}</div>
+      <div class="kpi-foot">${selectedIdx === 0 ? `${activeYear} Opening Balance` : `Carried from ${esc(yearData.months[selectedIdx - 1].name)}`}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">${esc(m.name)} ${activeYear} Income</div>
+      <div class="kpi-val">${fmt(c.newIncome)}</div>
+      <div class="kpi-foot">CPM: ${fmt(c.cpmIncome)} • USAA: ${fmt(c.usaaIncome)}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Cash Available</div>
+      <div class="kpi-val purple-text">${fmt(c.totalAvailable)}</div>
+      <div class="kpi-foot">Rollover + Paychecks</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">${esc(m.name)} Total Outflows</div>
+      <div class="kpi-val warn">${fmt(c.totalOutflow)}</div>
+      <div class="kpi-foot">Net: <span class="${c.netMonthlyChange >= 0 ? "pos" : "neg"}"><strong>${c.netMonthlyChange >= 0 ? "+" : ""}${fmt(c.netMonthlyChange)}</strong></span></div>
+    </div>
+    <div class="kpi-card highlight">
+      <div class="kpi-label">Rolls Into ${esc(nextMonthName)}</div>
+      <div class="kpi-val ${c.endingRollover >= 0 ? "pos" : "neg"}">${fmt(c.endingRollover)}</div>
+      <div class="kpi-foot">Safe-to-spend buffer entering next month</div>
+    </div>
+  `;
+
+  const base = Math.max(c.totalAvailable, c.totalOutflow, 1);
+  document.getElementById("flowBarWrap").innerHTML = `
+    <div class="flow-bar-header">
+      <span><strong>${esc(m.name)} ${activeYear} Allocation</strong> (${((c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100).toFixed(1)}% committed)</span>
+      <span>Ending Rollover: <strong class="${c.endingRollover >= 0 ? "pos" : "neg"}">${fmt(c.endingRollover)}</strong></span>
+    </div>
+    <div class="flow-bar">
+      <div class="seg-fixed" style="width:${(c.fixedTotal/base)*100}%"></div>
+      <div class="seg-var" style="width:${(c.varTotal/base)*100}%"></div>
+      <div class="seg-cc" style="width:${(c.ccTotal/base)*100}%"></div>
+      <div class="seg-loan" style="width:${(c.loanTotal/base)*100}%"></div>
+      <div class="seg-left" style="width:${Math.max(0, (c.endingRollover/base)*100)}%"></div>
+    </div>
+    <div class="legend">
+      <span><i class="dot seg-fixed"></i>Fixed: ${fmt(c.fixedTotal)}</span>
+      <span><i class="dot seg-var"></i>Variable: ${fmt(c.varTotal)}</span>
+      <span><i class="dot seg-cc"></i>Cards: ${fmt(c.ccTotal)}</span>
+      <span><i class="dot seg-loan"></i>Loans: ${fmt(c.loanTotal)}</span>
+      <span><i class="dot seg-left"></i>Surplus: ${fmt(Math.max(0, c.endingRollover))}</span>
+    </div>
+  `;
+
+  document.getElementById("incTotalBadge").textContent = fmt(c.totalAvailable);
+  document.getElementById("acctSplitLabel").textContent = `New Pay: ${fmt(c.newIncome)}`;
+  const canEditStart = (selectedIdx === 0 || !yearData.autoCascade);
+
+  let incHtml = `
+    <tr class="roll-row">
+      <td><strong>Leftover (Rolled In)</strong> ${canEditStart ? "" : '<span style="font-size:0.7rem;color:var(--accent);font-weight:700">(Auto)</span>'}</td>
+      <td class="num">
+        ${canEditStart
+          ? `<input class="inline-input num" type="number" step="0.01" value="${c.startLeftover.toFixed(2)}" onchange="updateStartLeftover(this.value)" />`
+          : `<span class="purple-text"><strong>${fmt(c.startLeftover)}</strong></span>`}
+      </td>
+      <td class="num">—</td>
+      <td class="num purple-text"><strong>${fmt(c.startLeftover)}</strong></td>
+      <td></td>
+    </tr>
+  `;
+  incHtml += m.income.map((item, idx) => `
+    <tr>
+      <td><input class="inline-input" value="${esc(item.name)}" onchange="editInc(${idx}, 'name', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" onchange="editInc(${idx}, 'cpm', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" onchange="editInc(${idx}, 'usaa', this.value)" /></td>
+      <td class="num">${fmt((Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
+      <td><button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
+    </tr>
+  `).join("");
+  document.getElementById("incomeBody").innerHTML = incHtml;
+
+  document.getElementById("fixTotalBadge").textContent = fmt(c.fixedTotal);
+  document.getElementById("fixedBody").innerHTML = m.fixed.map((item, idx) => `
+    <tr>
+      <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
+      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('fixed', ${idx}, 'due', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
+      <td><button class="del-btn" onclick="delItem('fixed', ${idx})">×</button></td>
+    </tr>
+  `).join("");
+
+  document.getElementById("varTotalBadge").textContent = fmt(c.varTotal);
+  document.getElementById("variableBody").innerHTML = m.variable.map((item, idx) => `
+    <tr>
+      <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
+      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('variable', ${idx}, 'due', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
+      <td><button class="del-btn" onclick="delItem('variable', ${idx})">×</button></td>
+    </tr>
+  `).join("");
+
+  document.getElementById("loanTotalBadge").textContent = fmt(c.loanTotal);
+  document.getElementById("loanBody").innerHTML = m.loans.map((item, idx) => `
+    <tr>
+      <td><input class="inline-input" value="${esc(item.name)}" onchange="editLoan(${idx}, 'name', this.value)" /></td>
+      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editLoan(${idx}, 'due', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.balance) || 0}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
+      <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
+      <td><button class="del-btn" onclick="delItem('loans', ${idx})">×</button></td>
+    </tr>
+  `).join("");
+
+  document.getElementById("ccTotalBadge").textContent = fmt(c.ccTotal);
+  document.getElementById("ccStmtSummary").textContent = `Total Statement Balances: ${fmt(m.creditCards.reduce((s,x)=>s+(Number(x.statement)||0),0))}`;
+  document.getElementById("ccBody").innerHTML = m.creditCards.map((item, idx) => `
+    <tr>
+      <td><input class="inline-input" value="${esc(item.name)}" onchange="editCC(${idx}, 'name', this.value)" /></td>
+      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editCC(${idx}, 'due', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.statement) || 0}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
+      <td><button class="del-btn" onclick="delItem('creditCards', ${idx})">×</button></td>
+    </tr>
+  `).join("");
+}
+
+function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
+function selectMonth(idx) { selectedIdx = idx; render(); }
+
+document.getElementById("autoRollToggle").addEventListener("change", async (e) => {
+  db[activeYear].autoCascade = e.target.checked;
+  await saveDB(); render();
+});
+
+async function updateStartLeftover(val) {
+  db[activeYear].months[selectedIdx].recordedLeftover = parseFloat(val) || 0;
+  await saveDB(); render();
+}
+async function editInc(idx, f, v) { db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
+async function addIncome() {
+  const name = document.getElementById("newIncName").value.trim();
+  const cpm = parseFloat(document.getElementById("newIncCpm").value) || 0;
+  const usaa = parseFloat(document.getElementById("newIncUsaa").value) || 0;
+  if (!name) return;
+  db[activeYear].months[selectedIdx].income.push({ name, cpm, usaa });
+  document.getElementById("newIncName").value = ""; document.getElementById("newIncCpm").value = ""; document.getElementById("newIncUsaa").value = "";
+  await saveDB(); render();
+}
+async function editExp(type, idx, f, v) { db[activeYear].months[selectedIdx][type][idx][f] = f==='amount'?parseFloat(v)||0:v; await saveDB(); render(); }
+async function addExpense(type) {
+  const p = type === 'fixed' ? 'newFix' : 'newVar';
+  const name = document.getElementById(p + 'Name').value.trim();
+  const due = document.getElementById(p + 'Due').value.trim();
+  const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
+  if (!name) return;
+  db[activeYear].months[selectedIdx][type].push({ name, due, amount });
+  document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
+  await saveDB(); render();
+}
+async function editLoan(idx, f, v) { db[activeYear].months[selectedIdx].loans[idx][f] = ['name','due'].includes(f)?v:parseFloat(v)||0; await saveDB(); render(); }
+async function addLoan() {
+  const name = document.getElementById("newLoanName").value.trim();
+  const due = document.getElementById("newLoanDue").value.trim();
+  const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
+  const payment = parseFloat(document.getElementById("newLoanPay").value) || 0;
+  if (!name) return;
+  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment });
+  ['newLoanName','newLoanDue','newLoanBal','newLoanPay'].forEach(id => document.getElementById(id).value='');
+  await saveDB(); render();
+}
+async function editCC(idx, f, v) { db[activeYear].months[selectedIdx].creditCards[idx][f] = ['name','due'].includes(f)?v:parseFloat(v)||0; await saveDB(); render(); }
+async function addCC() {
+  const name = document.getElementById("newCcName").value.trim();
+  const due = document.getElementById("newCcDue").value.trim();
+  const statement = parseFloat(document.getElementById("newCcStmt").value) || 0;
+  const apr = parseFloat(document.getElementById("newCcApr").value) || 0;
+  const payment = parseFloat(document.getElementById("newCcPay").value) || 0;
+  if (!name) return;
+  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment });
+  ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
+  await saveDB(); render();
+}
+async function delItem(list, idx) { db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
+
+/* Auth Modal & Handlers */
+function handleAuthClick() {
+  if (currentUser) {
+    if (confirm("Sign out of your account?")) {
+      if (supabaseClient) supabaseClient.auth.signOut();
+    }
+  } else {
+    document.getElementById("authModal").classList.add("open");
+  }
+}
+function closeAuthModal() { document.getElementById("authModal").classList.remove("open"); }
+function toggleAuthMode() {
+  isSignUpMode = !isSignUpMode;
+  document.getElementById("authModalTitle").textContent = isSignUpMode ? "Create Account" : "Account Sign In";
+  document.getElementById("authSubmitBtn").textContent = isSignUpMode ? "Sign Up" : "Sign In";
+}
+async function submitAuth() {
+  if (!supabaseClient) {
+    alert("Cloud storage is not fully configured. Please provide backend connection keys.");
+    return;
+  }
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value.trim();
+  if (!email || !password) return;
+
+  if (isSignUpMode) {
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) alert(error.message);
+    else { alert("Check your email for confirmation link!"); closeAuthModal(); }
+  } else {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message);
+    else { closeAuthModal(); }
+  }
+}
+
+/* Recurring Rules Manager Modal */
+function openRecurringModal() {
+  document.getElementById("modalYearLabel").textContent = activeYear;
+  const start = document.getElementById("recStart");
+  const end = document.getElementById("recEnd");
+  const opts = db[activeYear].months.map((m, i) => `<option value="${i}">${esc(m.name)}</option>`).join("");
+  start.innerHTML = opts; end.innerHTML = opts;
+  start.value = 0; end.value = 11;
+  
+  renderRulesList();
+  document.getElementById("recurringModal").classList.add("open");
+}
+
+function closeRecurringModal() { document.getElementById("recurringModal").classList.remove("open"); }
+function toggleRecFields() {
+  document.getElementById("recAccountGroup").style.display = document.getElementById("recCategory").value === "income" ? "block" : "none";
+}
+
+function renderRulesList() {
+  const container = document.getElementById("rulesListContainer");
+  const rules = db[activeYear].recurringRules || [];
+  if (rules.length === 0) {
+    container.innerHTML = `<p style="color:var(--muted); font-style:italic;">No active recurring rules saved for ${esc(activeYear)}.</p>`;
+    return;
+  }
+  container.innerHTML = rules.map((r, idx) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px;">
+      <div>
+        <strong>${esc(r.name)}</strong> (${esc(r.cat).toUpperCase()}) — <strong>${fmt(r.amount)}</strong> (Due: ${esc(r.due || "1st")})
+      </div>
+      <button class="danger" style="padding:3px 8px; font-size:0.75rem;" onclick="deleteRecurringRule(${idx})">Delete</button>
+    </div>
+  `).join("");
+}
+
+async function applyRecurringRule() {
+  const cat = document.getElementById("recCategory").value;
+  const name = document.getElementById("recName").value.trim();
+  const amount = parseFloat(document.getElementById("recAmount").value) || 0;
+  const due = document.getElementById("recDue").value.trim();
+  const acct = document.getElementById("recAccount").value;
+  const start = parseInt(document.getElementById("recStart").value, 10);
+  const end = parseInt(document.getElementById("recEnd").value, 10);
+  if (!name || start > end) return;
+
+  if (!db[activeYear].recurringRules) db[activeYear].recurringRules = [];
+  db[activeYear].recurringRules.push({ id: Date.now(), cat, name, amount, due, acct, start, end });
+
+  for (let i = start; i <= end; i++) {
+    const mo = db[activeYear].months[i];
+    if (cat === "income") mo.income.push({ name, cpm: acct === "cpm" ? amount : 0, usaa: acct === "usaa" ? amount : 0 });
+    else if (cat === "fixed" || cat === "variable") mo[cat].push({ name, due, amount });
+    else if (cat === "loan") mo.loans.push({ name, due, balance: 0, apr: 0, payment: amount });
+    else if (cat === "cc") mo.creditCards.push({ name, due, statement: 0, apr: 0, payment: amount });
+  }
+
+  document.getElementById("recName").value = "";
+  document.getElementById("recAmount").value = "";
+  document.getElementById("recDue").value = "";
+  renderRulesList();
+  await saveDB(); render();
+}
+
+async function deleteRecurringRule(idx) {
+  if (!confirm("Delete this recurring rule definition?")) return;
+  db[activeYear].recurringRules.splice(idx, 1);
+  renderRulesList();
+  await saveDB(); render();
+}
+
+initApp();
+</script>
+</body>
+</html>
