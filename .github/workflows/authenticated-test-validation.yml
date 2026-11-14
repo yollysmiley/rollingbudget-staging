@@ -24,7 +24,8 @@ jobs:
           node --check tests/live/authenticated.spec.js
           node --check tests/live/safe-reporter.cjs
           node --check tests/live/safety.mjs
-      - name: Test safety helpers with synthetic inputs
-        run: node --test tests/live/safety.test.mjs
+          node --check scripts/live-staging-tests.mjs
+      - name: Test safety helpers and current staging UI contract
+        run: node --test tests/live/*.test.mjs
       - name: Discover authenticated cases without secrets or live requests
         run: npx playwright test --config=playwright.live.config.js --list

@@ -1,256 +1,206 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { requiredSettings, logoutAccepted, assertOwnedFixture, withDownload } from './safety.mjs';
+import { requiredSettings, logoutAccepted } from './safety.mjs';
+
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
-const PREFIX = 'rollingbudget_staging_phiscfwfuzeptetimdbo';
+const YEAR = 2026;
 const RUN = randomUUID();
 let settings;
 let accounts = [];
-const owned = new Map();
-async function response(path, session, method = 'GET', body) {
-  const r = await fetch(URL + path, { method, headers: { apikey: settings.STAGING_PUBLISHABLE_KEY, Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000) });
-  const text = await r.text();
+
+async function request(path, session, method = 'GET', body) {
+  const response = await fetch(URL + path, {
+    method,
+    headers: {
+      apikey: settings.STAGING_PUBLISHABLE_KEY,
+      Authorization: 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(20000)
+  });
+  const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch {}
-  return {ok:r.ok,status:r.status,data};
+  return { ok: response.ok, status: response.status, data };
 }
+
 async function api(path, session, method = 'GET', body) {
-  const r = await response(path,session,method,body);
-  if (!r.ok) throw new Error('Staging API request failed');
-  return r.data;
+  const result = await request(path, session, method, body);
+  if (!result.ok) throw new Error('Staging API request failed with status ' + result.status);
+  return result.data;
 }
-async function rows(a) { return api('/rest/v1/budget_data?select=id,user_id,state&user_id=eq.' + a.user.id,a); }
+
+function yearPath(userId) {
+  return '/rest/v1/budget_ui_years?select=user_id,year,budget_data,updated_at&user_id=eq.' +
+    encodeURIComponent(userId) + '&year=eq.' + YEAR;
+}
+
+async function rows(account) {
+  return api(yearPath(account.user.id), account);
+}
+
 function fixture(label) {
-  return {integrationRun:RUN,release2Version:2,activeYearIndex:0,recurring:[{name:label+'-BILL',amount:10}],years:[{year:'2026',activeMonth:0,months:Array.from({length:12},(_,i)=>({paychecks:i===0?[{id:randomUUID(),name:label,amount:100,date:''}]:[],expenses:[],excludedBuckets:[]}))}]};
+  const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return {
+    autoCascade: true,
+    recurringRules: [],
+    integrationRun: RUN,
+    months: names.map((name, index) => ({
+      code: name.slice(0, 3).toUpperCase(),
+      name,
+      recordedLeftover: 0,
+      income: index === 0 ? [{ name: label, cpm: 100, usaa: 0 }] : [],
+      fixed: [],
+      variable: [],
+      creditCards: [],
+      loans: []
+    }))
+  };
 }
-async function seed(a,data) {
-  const id = owned.get(a.user.id);
-  const result = await api('/rest/v1/budget_data',a,'POST',{id,user_id:a.user.id,state:data});
-  expect(result[0].id).toBe(id);
+
+async function seed(account, label) {
+  const result = await api('/rest/v1/budget_ui_years', account, 'POST', {
+    user_id: account.user.id,
+    year: YEAR,
+    budget_data: fixture(label),
+    updated_at: new Date().toISOString()
+  });
+  expect(result[0].user_id).toBe(account.user.id);
+  expect(result[0].year).toBe(YEAR);
 }
+
 async function guestPage(context) {
   const page = await context.newPage();
-  page.on('dialog',d=>d.dismiss());
+  page.on('dialog', dialog => dialog.accept());
   await page.goto('/rollover-budget-app.html');
-  await expect.poll(()=>page.evaluate(()=>typeof rb2Account!=='undefined' && rb2Account===null)).toBe(true);
+  await expect.poll(() => page.evaluate(() => typeof supabaseClient !== 'undefined' && Boolean(supabaseClient))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(db['2026']))).toBe(true);
   return page;
 }
-async function settled(page,a) {
-  await expect.poll(()=>page.evaluate(id=>rb2Account===id && !rb2Loading && !rb2Blocked,a.user.id)).toBe(true);
-}
-async function switchTo(page,a,ready=true) {
-  const failed=await page.evaluate(async s=>{
-    rb2SigningOut=false;
-    const {error}=await supabaseClient.auth.setSession({access_token:s.access_token,refresh_token:s.refresh_token});
-    return Boolean(error);
-  },{access_token:a.access_token,refresh_token:a.refresh_token});
-  expect(failed).toBe(false);
-  if(ready) await settled(page,a);
-}
-async function open(context,a) {
-  const page=await guestPage(context);
-  await switchTo(page,a);
-  return page;
-}
-async function save(page) {
-  const dialog=page.waitForEvent('dialog');
-  await page.locator('.nav-group button[onclick="saveData()"]').click();
-  expect((await dialog).message()).toBe('Saved locally and synced.');
-}
-async function signedOut(page) {
-  await expect.poll(()=>page.evaluate(()=>rb2Account===null)).toBe(true);
-}
-async function logout(page) {
-  await page.locator('#authContainer').getByRole('button',{name:'Sign Out'}).click();
-  await signedOut(page);
-}
-async function cloudName(a) {
-  const data=await rows(a);
-  expect(data).toHaveLength(1);
-  assertOwnedFixture(data[0],owned.get(a.user.id),a.user.id,RUN);
-  return data[0].state.years[0].months[0].paychecks[0].name;
-}
-test.beforeEach(async()=>{
-  accounts=[];owned.clear();
-  await test.step('setup.settings',async()=>{ settings=requiredSettings(process.env); });
-  for(const letter of ['A','B']) {
-    await test.step('setup.signin.'+letter,async()=>{
-      const r=await fetch(URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:settings.STAGING_PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:settings['STAGING_TEST_'+letter+'_EMAIL'],password:settings['STAGING_TEST_'+letter+'_PASSWORD']}),signal:AbortSignal.timeout(20000)});
-      if(!r.ok) throw new Error('Test account sign-in failed');
-      const s=await r.json();
-      if(!s.user?.id || !s.access_token || !s.refresh_token) throw new Error('Invalid test session');
-      accounts.push(s);
+
+async function switchTo(page, account, label) {
+  const result = await page.evaluate(async session => {
+    const { error } = await supabaseClient.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
     });
+    return error ? error.message : null;
+  }, { access_token: account.access_token, refresh_token: account.refresh_token });
+  expect(result).toBeNull();
+  await expect.poll(() => page.evaluate(id => currentUser?.id === id, account.user.id)).toBe(true);
+  if (label) {
+    await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe(label);
+    await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue(label);
   }
-  await test.step('setup.accounts-distinct',async()=>{ expect(accounts[0].user.id).not.toBe(accounts[1].user.id); });
-  for(const [index,a] of accounts.entries()) await test.step('setup.empty.'+(index===0?'A':'B'),async()=>{ expect(await rows(a)).toHaveLength(0); });
-  await test.step('setup.fixture-ids',async()=>{ for(const a of accounts) owned.set(a.user.id,randomUUID()); });
-});
-test.afterEach(async({context})=>{
-  let failed=false;
-  try { await test.step('cleanup.context',async()=>{ await context.close(); }); } catch { failed=true; }
-  for(const [index,a] of accounts.entries()) {
-    const letter=index===0?'A':'B';
-    try {
-      await test.step('cleanup.fixture.'+letter,async()=>{
-        const id=owned.get(a.user.id);
-        if(id) {
-          const row=(await rows(a)).find(r=>r.id===id);
-          if(row) {
-            assertOwnedFixture(row,id,a.user.id,RUN);
-            await api('/rest/v1/budget_data?id=eq.'+id+'&user_id=eq.'+a.user.id,a,'DELETE');
-          }
-          expect((await rows(a)).some(r=>r.id===id)).toBe(false);
-        }
-      });
-    } catch { failed=true; }
-    try {
-      await test.step('cleanup.session.'+letter,async()=>{
-        const r=await response('/auth/v1/logout?scope=local',a,'POST');
-        if(!logoutAccepted(r.status,r.data)) throw new Error('Unexpected session cleanup response');
-      });
-    } catch { failed=true; }
-  }
-  if(failed) throw new Error('Cleanup failed; inspect dedicated staging fixtures and sessions');
-});
-test('cloud save through UI survives fresh browser context',async({browser,context})=>{
-  const a=accounts[0];
-  await seed(a,fixture('CLOUD'));
-  const page=await open(context,a);
-  await page.locator('#paycheckContainer input[type=text]').first().fill('UI-SAVED');
-  await page.locator('#paycheckContainer input[type=text]').first().press('Tab');
-  await page.locator('#paycheckContainer input[type=number]').first().fill('4321.25');
-  await page.locator('#kpiEnd').click();
-  await save(page);
-  expect(await cloudName(a)).toBe('UI-SAVED');
-  const fresh=await browser.newContext({locale:'en-US',trace:'off'});
-  try {
-    const other=await open(fresh,a);
-    await expect(other.locator('#paycheckContainer input[type=text]').first()).toHaveValue('UI-SAVED');
-    await expect(other.locator('#kpiEnd')).toHaveText('$4,321.25');
-  } finally { await fresh.close(); }
-});
-test('logout closes open selected recurring modal before B loads',async({context})=>{
-  const [a,b]=accounts;
-  await test.step('modal.seed',async()=>{ await seed(a,fixture('ACCOUNT-A'));await seed(b,fixture('ACCOUNT-B')); });
-  const page=await test.step('modal.open-account-A',async()=>open(context,a));
-  await test.step('modal.open-recurring',async()=>{
-    await page.locator('button[onclick="openRecurringModal()"]').click();
-    await expect(page.locator('#recSelectList')).toContainText('ACCOUNT-A-BILL');
-  });
-  await test.step('modal.select-recurring',async()=>{
-    await page.locator('.rec-select-item').first().click();
-    expect(await page.evaluate(()=>modalSelections.size)).toBe(1);
-  });
-  // Controlled app action: modal overlay prevents clicking the underlying sign-out button.
-  await test.step('modal.signout-call',async()=>{ await page.evaluate(()=>signOut()); });
-  await test.step('modal.account-cleared',async()=>{ await signedOut(page); });
-  await test.step('modal.overlay-closed',async()=>{ await expect(page.locator('#recurringModal')).not.toHaveClass(/open/); });
-  await test.step('modal.list-cleared',async()=>{ await expect(page.locator('#recSelectList')).toBeEmpty(); });
-  await test.step('modal.selection-cleared',async()=>{ expect(await page.evaluate(()=>modalSelections.size)).toBe(0); });
-  await test.step('modal.budget-cleared',async()=>{ await expect(page.locator('#paycheckContainer input')).toHaveCount(0); });
-  await test.step('modal.switch-account-B',async()=>{ await switchTo(page,b); });
-  await test.step('modal.account-B-visible',async()=>{ await expect(page.locator('#paycheckContainer input[type=text]').first()).toHaveValue('ACCOUNT-B'); });
-  await test.step('modal.account-B-recurring',async()=>{
-    await page.locator('button[onclick="openRecurringModal()"]').click();
-    await expect(page.locator('#recSelectList')).toContainText('ACCOUNT-B-BILL');
-    await expect(page.locator('#recSelectList')).not.toContainText('ACCOUNT-A');
-  });
-  await test.step('modal.account-A-cloud-unchanged',async()=>{ expect(await cloudName(a)).toBe('ACCOUNT-A'); });
-});
-test('delayed A cloud result cannot replace active B state',async({context})=>{
-  const [a,b]=accounts;
-  await seed(a,fixture('DELAY-A'));await seed(b,fixture('DELAY-B'));
-  const page=await open(context,a);
-  let release,entered;
-  const gate=new Promise(r=>release=r);
-  const started=new Promise(r=>entered=r);
-  await page.route('**/rest/v1/budget_data*',async route=>{
-    if(route.request().method()==='GET' && new globalThis.URL(route.request().url()).searchParams.get('user_id')==='eq.'+a.user.id) {
-      const r=await route.fetch();entered();await gate;await route.fulfill({response:r});
-    } else await route.continue();
-  });
-  const pending=page.evaluate(()=>window.loadFromCloud());
-  try {
-    await started;await switchTo(page,b);release();await pending;
-    await expect(page.locator('#paycheckContainer input[type=text]').first()).toHaveValue('DELAY-B');
-    expect(await page.evaluate(()=>rb2Blocked)).toBe(false);
-  } finally { release();await page.unrouteAll({behavior:'wait'});await pending.catch(()=>{}); }
-});
-test('failed logout clears displayed budget and reports failure',async({context})=>{
-  const a=accounts[0];await seed(a,fixture('LOGOUT'));
-  const page=await open(context,a);
-  await page.route('**/auth/v1/logout*',r=>r.fulfill({status:400,contentType:'application/json',body:JSON.stringify({msg:'Synthetic logout failure'})}));
-  await logout(page);
-  await expect(page.locator('#release2Notice')).toContainText('sign-out failed');
-  await expect(page.locator('#paycheckContainer input')).toHaveCount(0);
-  expect(await cloudName(a)).toBe('LOGOUT');
-});
-test('corrupt local account state blocks saving and exports originals',async({context})=>{
-  const a=accounts[0];await seed(a,fixture('RECOVERY'));
-  const page=await guestPage(context);
-  const key=PREFIX+':release2:account:'+encodeURIComponent(a.user.id);
-  await page.evaluate(k=>localStorage.setItem(k,'{broken'),key);
-  await switchTo(page,a,false);
-  await expect(page.locator('#release2Notice')).toContainText('saving is blocked');
-  await page.locator('.nav-group button[onclick="saveData()"]').click();
-  const pending=page.waitForEvent('download');
-  await page.getByRole('button',{name:'Export recovery data'}).click();
-  await withDownload(await pending,async file=>{
-    const data=JSON.parse(await readFile(await file.path(),'utf8'));
-    expect(data.current).toBe('{broken');expect(data.accountId).toBe(a.user.id);expect(data.draft.schemaVersion).toBe(2);
-    expect(await page.evaluate(k=>localStorage.getItem(k),key)).toBe('{broken');
-    expect(await cloudName(a)).toBe('RECOVERY');
-  });
-});
-test('local storage failure prevents cloud overwrite',async({context})=>{
-  const a=accounts[0];await seed(a,fixture('UNCHANGED'));
-  const page=await open(context,a);
-  await page.locator('#paycheckContainer input[type=number]').first().fill('999');
-  await page.locator('#kpiEnd').click();
-  let writes=0;
-  page.on('request',r=>{if(r.url().startsWith(URL+'/rest/v1/') && !['GET','HEAD','OPTIONS'].includes(r.method())) writes++;});
-  await page.evaluate(()=>{
-    const original=Storage.prototype.setItem;
-    Storage.prototype.setItem=function(k,v){if(k.includes(':release2:')) throw new DOMException('Synthetic quota failure','QuotaExceededError');return original.call(this,k,v);};
-  });
-  await page.locator('.nav-group button[onclick="saveData()"]').click();
-  await expect(page.locator('#release2Notice')).toContainText('Local save failed; cloud was not changed');
-  expect(writes).toBe(0);expect((await rows(a))[0].state.years[0].months[0].paychecks[0].amount).toBe(100);
-});
-test('UI logout propagates to another tab without retaining account budget',async({context})=>{
-  const a=accounts[0];
-  await test.step('tabs.seed',async()=>{ await seed(a,fixture('TWO-TABS')); });
-  const first=await test.step('tabs.open-first',async()=>open(context,a));
-  const second=await test.step('tabs.open-second',async()=>{
-    const page=await context.newPage();page.on('dialog',d=>d.dismiss());
-    await page.goto('/rollover-budget-app.html');await settled(page,a);
-    return page;
-  });
-  await test.step('tabs.logout-first',async()=>{ await logout(first); });
-  await test.step('tabs.second-account-cleared',async()=>{ await expect.poll(()=>second.evaluate(()=>rb2Account===null)).toBe(true); });
-  await test.step('tabs.second-budget-cleared',async()=>{ await expect(second.locator('#paycheckContainer input')).toHaveCount(0); });
-});
-for(const kind of ['paychecks','excludedBuckets']) for(const position of [0,1,2]) {
-  test(kind+' deletion at position '+position+' preserves other references',async({context})=>{
-    const a=accounts[0],data=fixture('DELETE'),m=data.years[0].months[0];
-    const entities=Array.from({length:3},(_,i)=>({id:randomUUID(),name:'ENTITY-'+i,amount:100,date:''}));
-    m[kind]=entities;
-    const ref=kind==='paychecks'?'paycheckId':'excludedBucketId';
-    m.expenses=entities.map((e,i)=>({name:'EXPENSE-'+i,amount:10,paycheckId:null,excludedBucketId:null,[ref]:e.id}));
-    await seed(a,data);
-    const page=await open(context,a);
-    const container=kind==='paychecks'?'#paycheckContainer':'#excludedBucketContainer';
-    await page.locator(container+' .btn-remove').nth(position).click();
-    const values=await page.locator('#expenseContainer .row-expense').evaluateAll(rows=>rows.map(row=>{
-      const selects=row.querySelectorAll('select');return selects[selects.length-1].value;
-    }));
-    expect(values[position]).toBe('');
-    for(let i=0;i<3;i++) if(i!==position) expect(values[i]).toBe((kind==='paychecks'?'pay_':'excl_')+entities[i].id);
-    await save(page);
-    const cloud=(await rows(a))[0].state.years[0].months[0];
-    expect(cloud.expenses[position][ref]).toBe(null);
-    for(let i=0;i<3;i++) if(i!==position) expect(cloud.expenses[i][ref]).toBe(entities[i].id);
-  });
 }
+
+async function open(context, account, label) {
+  const page = await guestPage(context);
+  await switchTo(page, account, label);
+  return page;
+}
+
+async function cleanup(account) {
+  const existing = await rows(account);
+  if (existing.length) {
+    const row = existing[0];
+    if (row.budget_data?.integrationRun !== RUN) {
+      throw new Error('Refusing to clean a staging budget row not created by this test run');
+    }
+    await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, account, 'DELETE');
+  }
+  expect(await rows(account)).toHaveLength(0);
+}
+
+test.beforeEach(async () => {
+  accounts = [];
+  settings = requiredSettings(process.env);
+  for (const letter of ['A', 'B']) {
+    const result = await fetch(URL + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { apikey: settings.STAGING_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: settings['STAGING_TEST_' + letter + '_EMAIL'],
+        password: settings['STAGING_TEST_' + letter + '_PASSWORD']
+      }),
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!result.ok) throw new Error('Staging test account sign-in failed');
+    const session = await result.json();
+    if (!session.user?.id || !session.access_token || !session.refresh_token) {
+      throw new Error('Invalid staging test session');
+    }
+    accounts.push(session);
+  }
+  expect(accounts[0].user.id).not.toBe(accounts[1].user.id);
+  for (const account of accounts) {
+    expect(await rows(account), 'Dedicated test year must be empty; no existing budget will be overwritten').toHaveLength(0);
+  }
+});
+
+test.afterEach(async () => {
+  let failed = false;
+  for (const account of accounts) {
+    try { await cleanup(account); } catch { failed = true; }
+    try {
+      const result = await request('/auth/v1/logout?scope=local', account, 'POST');
+      if (!logoutAccepted(result.status, result.data)) failed = true;
+    } catch { failed = true; }
+  }
+  if (failed) throw new Error('Staging cleanup failed; inspect only the dedicated test-year fixtures before rerunning');
+});
+
+test('authenticated cloud save survives a fresh browser context', async ({ browser, context }) => {
+  const account = accounts[0];
+  await seed(account, 'CLOUD-SEED');
+  const page = await open(context, account, 'CLOUD-SEED');
+
+  const name = page.locator('#incomeBody input:not([type])').first();
+  await name.fill('UI-SAVED');
+  await name.press('Tab');
+  const amount = page.locator('#incomeBody input[type="number"]').first();
+  await amount.fill('4321.25');
+  await amount.press('Tab');
+
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.cpm).toBe(4321.25);
+
+  const fresh = await browser.newContext({ locale: 'en-US', trace: 'off' });
+  try {
+    const restored = await open(fresh, account, 'UI-SAVED');
+    await expect(restored.locator('#incomeBody input[type="number"]').first()).toHaveValue('4321.25');
+    await expect(restored.locator('#incTotalBadge')).toHaveText('$4,321.25');
+  } finally {
+    await fresh.close();
+  }
+});
+
+test('account switching loads only the selected account budget', async ({ context }) => {
+  const [a, b] = accounts;
+  await seed(a, 'ACCOUNT-A');
+  await seed(b, 'ACCOUNT-B');
+  const page = await open(context, a, 'ACCOUNT-A');
+
+  await switchTo(page, b, 'ACCOUNT-B');
+  await expect(page.locator('#incomeBody')).not.toContainText('ACCOUNT-A');
+
+  await switchTo(page, a, 'ACCOUNT-A');
+  await expect(page.locator('#incomeBody')).not.toContainText('ACCOUNT-B');
+});
+
+test('UI logout clears the signed-in budget before another account is loaded', async ({ context }) => {
+  const [a, b] = accounts;
+  await seed(a, 'LOGOUT-A');
+  await seed(b, 'LOGOUT-B');
+  const page = await open(context, a, 'LOGOUT-A');
+
+  await page.locator('#authBtn').click();
+  await expect.poll(() => page.evaluate(() => currentUser === null)).toBe(true);
+  await expect(page.locator('#authBtn')).toHaveText('Sign In');
+  await expect(page.locator('#incomeBody input')).toHaveCount(0);
+
+  await switchTo(page, b, 'LOGOUT-B');
+  await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
+});
