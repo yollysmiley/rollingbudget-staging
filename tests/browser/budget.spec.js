@@ -83,11 +83,16 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
   await expect(page.locator('#variableBody img')).toHaveCount(0);
 });
 
-test('desktop recurring manager keeps the app header available and has no back button', async ({ page }) => {
+test('desktop recurring manager provides a route back to the budget overview', async ({ page }) => {
   await page.locator('button[onclick="openRecurringModal()"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('header')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Back to budget' })).toHaveCount(0);
+  const backButton = page.getByRole('button', { name: '← Back to Overview' });
+  await expect(backButton).toBeVisible();
+  await expect(page.locator('.toggle-pill')).toHaveCSS('color', 'rgb(24, 19, 38)');
+  await backButton.click();
+  await expect(page.locator('#recurringManagerPage')).toBeHidden();
+  await expect(page.locator('.main-grid')).toBeVisible();
   await expect(page.locator('button[onclick="openRecurringModal()"]')).toBeVisible();
 });
 

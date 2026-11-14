@@ -211,6 +211,7 @@
     button.danger:hover { border-color: #fca5a5; color: var(--red); background: var(--red-bg); }
 
     .toggle-pill {
+      color: var(--text);
       display: inline-flex;
       align-items: center;
       gap: 7px;
@@ -529,6 +530,8 @@
     body.recurring-manager-open .recurring-manager-page{display:block}
     .recurring-manager-shell{display:grid;gap:20px}
     .recurring-manager-heading{display:flex;justify-content:space-between;align-items:center;gap:18px}
+    .recurring-back-button{flex:0 0 auto;min-height:42px;padding:9px 14px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);font-weight:700;box-shadow:var(--shadow-sm)}
+    .recurring-back-button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
     .recurring-manager-heading h2{font-size:1.7rem;letter-spacing:-.035em;margin:3px 0 5px}
     .recurring-manager-heading p,.recurring-panel-heading p{color:var(--muted);font-size:.86rem}
     .recurring-eyebrow{color:var(--accent)!important;font-size:.7rem!important;font-weight:800;letter-spacing:.1em}
@@ -547,6 +550,7 @@
       .recurring-manager-page{margin:16px auto 28px;padding:0 12px}
       .recurring-manager-heading{align-items:flex-start;flex-direction:column}
       .recurring-manager-heading h2{font-size:1.35rem}
+      .recurring-back-button{display:none}
       .recurring-manager-heading>button{width:100%;min-height:44px}
       .recurring-desktop-view{display:none}.recurring-mobile-view{display:grid;gap:14px}
       .recurring-mobile-section{min-width:0;padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--panel);box-shadow:var(--shadow-sm)}
@@ -846,7 +850,7 @@
 
 <section id="recurringManagerPage" class="recurring-manager-page" aria-label="Recurring Rules Manager">
 <div class="recurring-manager-shell">
-<div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div></div>
+<div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" class="recurring-back-button" onclick="closeRecurringModal()">← Back to Overview</button></div>
 <div id="recurringDesktopView" class="recurring-desktop-view">
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
@@ -1449,7 +1453,8 @@ async function submitAuth() {
   }
   try {
     if (isPasswordResetMode) {
-      const { error } = await supabaseClient.auth.resetPasswordForEmail(email);
+      const redirectTo = new URL("./reset-password.html", window.location.href).href;
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
       setAuthMessage("If an account exists for this email, a password reset link will be sent.", "success");
       return;
@@ -1460,7 +1465,8 @@ async function submitAuth() {
       return;
     }
     if (isSignUpMode) {
-      const { error } = await supabaseClient.auth.signUp({ email, password });
+      const emailRedirectTo = new URL("./auth-confirmation.html", window.location.href).href;
+      const { error } = await supabaseClient.auth.signUp({ email, password, options: { emailRedirectTo } });
       if (error) throw error;
       setAuthMessage("Check your inbox for a confirmation link to finish creating your account.", "success");
     } else {

@@ -113,6 +113,7 @@ test('mobile sidebar exposes core pages and year management without burying recu
   await expect(page.locator('#activeYearSelect')).toBeVisible();
   await expect(page.getByRole('button', { name: '+ New Year' })).toBeVisible();
   await expect(page.locator('#autoRollToggle')).toBeVisible();
+  await expect(page.locator('#mobileSettingsControls .toggle-pill')).toHaveCSS('color', 'rgb(24, 19, 38)');
   await page.locator('#activeYearSelect').selectOption('2027');
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
@@ -130,7 +131,7 @@ test('mobile menu navigation enters and exits recurring rules without refreshing
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
   const managerUrl = page.url();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Back to budget' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back to Overview' })).toHaveCount(0);
 
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="plan"]').click();
