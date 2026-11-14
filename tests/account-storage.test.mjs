@@ -18,12 +18,33 @@ function mockClient(initial = []) {
   return { client: { from(name) { assert.equal(name, 'budget_accounts'); return table; } }, rows, get writes() { return writes; } };
 }
 
-test('initializes CPM and USAA only for the authenticated user', async () => {
+test('new users and zero-dollar legacy budgets do not receive default accounts', async () => {
   const mock = mockClient();
-  const accounts = await loadOrSeedAccounts(mock.client, 'user-1');
-  assert.deepEqual(accounts.map(x => x.id), ['cpm', 'usaa']);
-  assert.ok(mock.rows.every(x => x.user_id === 'user-1'));
+  assert.deepEqual(await loadOrSeedAccounts(mock.client, 'user-1'), []);
+  assert.deepEqual(await loadOrSeedAccounts(mock.client, 'user-1', {
+    2026: { months: [{ income: [{ name: 'Empty', cpm: 0, usaa: 0 }] }] }
+  }), []);
+  assert.equal(mock.writes, 0);
+});
+
+test('seeds only accounts with nonzero historical legacy income', async () => {
+  const mock = mockClient();
+  const years = { 2025: { months: [{ income: [{ name: 'Salary', cpm: 125, usaa: 0 }] }] } };
+  assert.deepEqual((await loadOrSeedAccounts(mock.client, 'user-1', years)).map(x => x.id), ['cpm']);
   assert.equal(mock.writes, 1);
+  assert.ok(mock.rows.every(x => x.user_id === 'user-1'));
+  await loadOrSeedAccounts(mock.client, 'user-1', years);
+  assert.equal(mock.writes, 1);
+});
+
+test('keeps account-linked historical references and does not restore deleted unreferenced accounts', async () => {
+  const mock = mockClient([{ id: 'custom', name: 'Savings', included: false, user_id: 'user-1' }]);
+  const years = { 2026: { months: [{ income: [{ name: 'Prior', accountId: 'usaa', amount: 0 }] }] } };
+  assert.deepEqual((await loadOrSeedAccounts(mock.client, 'user-1', years)).map(x => x.id), ['custom', 'usaa']);
+  assert.equal(mock.writes, 1);
+  const clean = mockClient([{ id: 'custom', name: 'Savings', included: false, user_id: 'user-1' }]);
+  assert.deepEqual((await loadOrSeedAccounts(clean.client, 'user-1')).map(x => x.id), ['custom']);
+  assert.equal(clean.writes, 0);
 });
 
 test('repeated initialization preserves user-renamed and excluded accounts', async () => {
@@ -65,7 +86,9 @@ test('account removal blocks referenced entries and recurring rules', async () =
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [], recurringRules: [{ acct: 'cpm' }] } }), /Reassign/);
 });
 
-test('last account cannot be removed because initialization seeds an empty catalog', async () => {
+test('last unreferenced account is eligible for removal', async () => {
   const { deleteAccount } = await import('../scripts/account-storage.mjs');
-  await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', [{ id: 'custom', name: 'Custom', included: true }], 'custom', {}), /at least one/);
+  const rows = [{ id: 'custom', name: 'Custom', included: true, user_id: 'user-1' }];
+  const client = { from() { return { delete() { return { eq() { return this; }, select: async () => ({ data: [{ id: 'custom' }], error: null }) }; } }; } };
+  await assert.doesNotReject(() => deleteAccount(client, 'user-1', rows, 'custom', {}));
 });
