@@ -22,6 +22,12 @@ export function computeAccountBudget(year, accounts) {
   let running = Number(year.months[0].recordedLeftover) || 0;
   return year.months.map((month, index) => {
     const startLeftover = index === 0 || !year.autoCascade ? Number(month.recordedLeftover) || 0 : running;
+    const cpmIncome = month.income.reduce((sum, entry) =>
+      sum + (entry.accountId === 'cpm' && accountIncluded('cpm', accounts) ? Number(entry.amount) || 0 : 0)
+      + (!entry.accountId && accountIncluded('cpm', accounts) ? Number(entry.cpm) || 0 : 0), 0);
+    const usaaIncome = month.income.reduce((sum, entry) =>
+      sum + (entry.accountId === 'usaa' && accountIncluded('usaa', accounts) ? Number(entry.amount) || 0 : 0)
+      + (!entry.accountId && accountIncluded('usaa', accounts) ? Number(entry.usaa) || 0 : 0), 0);
     const newIncome = month.income.reduce((sum, entry) => sum + incomeAmount(entry, accounts), 0);
     const fixedTotal = month.fixed.reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
     const varTotal = month.variable.reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
@@ -37,7 +43,7 @@ export function computeAccountBudget(year, accounts) {
     const totalAvailable = startLeftover + newIncome;
     const endingRollover = totalAvailable - totalOutflow;
     running = endingRollover;
-    return { startLeftover, newIncome, fixedTotal, varTotal, ccTotal, loanTotal, totalOutflow,
+    return { startLeftover, cpmIncome, usaaIncome, newIncome, fixedTotal, varTotal, ccTotal, loanTotal, totalOutflow,
       totalAvailable, pre15Outflow, pre15Buffer: startLeftover - pre15Outflow,
       netMonthlyChange: newIncome - totalOutflow, endingRollover };
   });
