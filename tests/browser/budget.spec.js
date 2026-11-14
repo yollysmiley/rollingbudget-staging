@@ -14,6 +14,8 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveTitle(/STAGING/);
   await expect(page.locator('body')).toContainText('STAGING ONLY');
   await expect(page.locator('#incomeBody')).toBeVisible();
+  // Wait for initApp() to finish its async storage load and first render before interacting.
+  await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
 });
 
 test('new budget UI starts empty and renders the redesigned dashboard', async ({ page }) => {
