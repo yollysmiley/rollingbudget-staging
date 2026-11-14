@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Corrected authenticated browser regression tests to target the CPM income field explicitly and verify logout removes signed-in account data without assuming all baseline table inputs disappear.
+
 - Hardened staging PostgreSQL default privileges for objects created by the `postgres` migration role in the exposed `public` schema. New tables, sequences, and functions no longer grant access to client roles by default; new functions no longer inherit PUBLIC EXECUTE. Existing table grants, row policies, and budget records are unchanged. Added migration and regression coverage.
 
 - Improved live staging integration setup diagnostics to identify the failing stage and safe HTTP status/code without logging credentials, tokens, or response payloads.
