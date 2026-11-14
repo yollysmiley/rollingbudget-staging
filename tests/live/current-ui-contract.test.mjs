@@ -27,3 +27,5 @@ test('live workflow builds from the checked-out staging revision only', () => {
   assert.doesNotMatch(workflow, /yollysmiley\/rollingbudget/);
   assert.doesNotMatch(workflow, /upstream\//);
 });
+
+// Guard the live acceptance harness against reintroducing guest-first protected-page assumptions.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Updated live authenticated acceptance to bootstrap Supabase sessions before entering the protected `/app/` route, verify cloud restore and account isolation, and assert public-homepage redirects after logout.
+
 - Fixed browser sign-out regression tests to explicitly accept native confirmation dialogs and added desktop/mobile coverage for cancelling sign-out.
 
 - Fixed the simulated auth client to persist sign-out state across page navigation, preventing the public homepage from immediately re-authenticating after logout.

@@ -26,3 +26,6 @@ After review and merge to `main`, open Actions > Live staging auth and database 
 Fixtures are inserted only into the reserved years and are tagged with a unique integration-run marker. Cleanup deletes only the exact test user's reserved year after verifying that marker. If cleanup fails or a runner is interrupted, inspect those exact year rows before rerunning. No admin key, traces, screenshots, videos, auth-state files, or downloaded user data are uploaded.
 
 This workflow is staging-only. It does not change production configuration, users, provider settings, database policies, or existing budget records.
+
+
+Live browser acceptance now establishes each dedicated synthetic account session in the browser's staging-only Supabase auth storage before visiting `/app/`. Logout checks the public homepage and verifies that reopening `/app/` remains blocked until another test account authenticates. No production accounts or data are used.
