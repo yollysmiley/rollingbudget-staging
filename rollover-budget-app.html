@@ -418,6 +418,20 @@
       .card th,.card td { white-space:nowrap; }
     }
 
+
+    .mobile-auth-button { display:none; }
+    @media (max-width:768px) {
+      .header-top { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+      .mobile-auth-button {
+        display:inline-flex; align-items:center; justify-content:center;
+        min-height:40px; padding:9px 13px; border-radius:11px;
+        background:var(--accent); color:#fff; border:1px solid var(--accent);
+        font-size:.8rem; font-weight:750; white-space:nowrap; box-shadow:0 4px 12px rgba(124,58,237,.2);
+      }
+      .mobile-auth-button:hover { background:var(--accent-hover); color:#fff; }
+      .controls { grid-column:1 / -1; }
+    }
+
   </style>
 </head>
 <body>
@@ -431,6 +445,7 @@
         <p id="userStatusSub">Multi-Year & Mid-Month Financial Tracker</p>
       </div>
     </div>
+    <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
     <div class="controls">
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
@@ -742,6 +757,10 @@ async function initApp() {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUser = session?.user || null;
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
+  const mobileAuthBtn = document.getElementById("mobileAuthBtn");
+  if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
+      const mobileAuthBtn = document.getElementById("mobileAuthBtn");
+      if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
       document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
       setTimeout(async () => {
         await loadAllYears();
