@@ -39,6 +39,7 @@ export async function updateAccount(client, userId, accounts, id, patch) {
 
 export async function deleteAccount(client, userId, accounts, id, years) {
   if (!accounts.some(item => item.id === id)) throw new Error('Account not found');
+  if (accounts.length <= 1) throw new Error('Keep at least one account');
   if (!canRemoveAccount(id, years)) throw new Error('Reassign existing budget entries and recurring rules before removing this account');
   const { data, error } = await client.from('budget_accounts').delete().eq('user_id', userId).eq('id', id).select('id');
   if (error) throw error;
