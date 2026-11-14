@@ -756,7 +756,7 @@ function render() {
     const co = computed[idx];
     return `
       <div class="month-pill ${idx === selectedIdx ? "active" : ""}" onclick="selectMonth(${idx})">
-        <div class="m-name">${mo.code}</div>
+        <div class="m-name">${esc(mo.code)}</div>
         <div class="m-roll ${co.endingRollover < 0 ? "neg" : ""}">${fmt(co.endingRollover)}</div>
         <div class="m-sub">In: ${fmt(co.startLeftover)}</div>
       </div>
@@ -765,7 +765,7 @@ function render() {
 
   document.getElementById("midMonthBanner").innerHTML = `
     <div class="mm-title">
-      <span>🎯 Mid-Month 15th Payday Snapshot (${m.name})</span>
+      <span>🎯 Mid-Month 15th Payday Snapshot (${esc(m.name)})</span>
     </div>
     <div class="mm-stats">
       <div class="mm-stat-item">
@@ -787,10 +787,10 @@ function render() {
     <div class="kpi-card">
       <div class="kpi-label">Rolled In From Last Month</div>
       <div class="kpi-val ${c.startLeftover >= 0 ? "pos" : "neg"}">${fmt(c.startLeftover)}</div>
-      <div class="kpi-foot">${selectedIdx === 0 ? `${activeYear} Opening Balance` : `Carried from ${yearData.months[selectedIdx - 1].name}`}</div>
+      <div class="kpi-foot">${selectedIdx === 0 ? `${activeYear} Opening Balance` : `Carried from ${esc(yearData.months[selectedIdx - 1].name)}`}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">${m.name} ${activeYear} Income</div>
+      <div class="kpi-label">${esc(m.name)} ${activeYear} Income</div>
       <div class="kpi-val">${fmt(c.newIncome)}</div>
       <div class="kpi-foot">CPM: ${fmt(c.cpmIncome)} • USAA: ${fmt(c.usaaIncome)}</div>
     </div>
@@ -800,12 +800,12 @@ function render() {
       <div class="kpi-foot">Rollover + Paychecks</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">${m.name} Total Outflows</div>
+      <div class="kpi-label">${esc(m.name)} Total Outflows</div>
       <div class="kpi-val warn">${fmt(c.totalOutflow)}</div>
       <div class="kpi-foot">Net: <span class="${c.netMonthlyChange >= 0 ? "pos" : "neg"}"><strong>${c.netMonthlyChange >= 0 ? "+" : ""}${fmt(c.netMonthlyChange)}</strong></span></div>
     </div>
     <div class="kpi-card highlight">
-      <div class="kpi-label">Rolls Into ${nextMonthName}</div>
+      <div class="kpi-label">Rolls Into ${esc(nextMonthName)}</div>
       <div class="kpi-val ${c.endingRollover >= 0 ? "pos" : "neg"}">${fmt(c.endingRollover)}</div>
       <div class="kpi-foot">Safe-to-spend buffer entering next month</div>
     </div>
@@ -814,7 +814,7 @@ function render() {
   const base = Math.max(c.totalAvailable, c.totalOutflow, 1);
   document.getElementById("flowBarWrap").innerHTML = `
     <div class="flow-bar-header">
-      <span><strong>${m.name} ${activeYear} Allocation</strong> (${((c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100).toFixed(1)}% committed)</span>
+      <span><strong>${esc(m.name)} ${activeYear} Allocation</strong> (${((c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100).toFixed(1)}% committed)</span>
       <span>Ending Rollover: <strong class="${c.endingRollover >= 0 ? "pos" : "neg"}">${fmt(c.endingRollover)}</strong></span>
     </div>
     <div class="flow-bar">
@@ -853,8 +853,8 @@ function render() {
   incHtml += m.income.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editInc(${idx}, 'name', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.cpm}" onchange="editInc(${idx}, 'cpm', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.usaa}" onchange="editInc(${idx}, 'usaa', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.cpm) || 0}" onchange="editInc(${idx}, 'cpm', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.usaa) || 0}" onchange="editInc(${idx}, 'usaa', this.value)" /></td>
       <td class="num">${fmt((Number(item.cpm)||0)+(Number(item.usaa)||0))}</td>
       <td><button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
@@ -866,7 +866,7 @@ function render() {
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('fixed', ${idx}, 'due', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.amount}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
       <td><button class="del-btn" onclick="delItem('fixed', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -876,7 +876,7 @@ function render() {
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('variable', ${idx}, 'due', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.amount}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
       <td><button class="del-btn" onclick="delItem('variable', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -886,9 +886,9 @@ function render() {
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editLoan(${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editLoan(${idx}, 'due', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.balance}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
-      <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${item.apr}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.payment}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.balance) || 0}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
+      <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
       <td><button class="del-btn" onclick="delItem('loans', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -899,9 +899,9 @@ function render() {
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editCC(${idx}, 'name', this.value)" /></td>
       <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editCC(${idx}, 'due', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.statement}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.apr}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
-      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${item.payment}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.statement) || 0}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
+      <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
       <td><button class="del-btn" onclick="delItem('creditCards', ${idx})">×</button></td>
     </tr>
   `).join("");
@@ -1006,7 +1006,7 @@ function openRecurringModal() {
   document.getElementById("modalYearLabel").textContent = activeYear;
   const start = document.getElementById("recStart");
   const end = document.getElementById("recEnd");
-  const opts = db[activeYear].months.map((m, i) => `<option value="${i}">${m.name}</option>`).join("");
+  const opts = db[activeYear].months.map((m, i) => `<option value="${i}">${esc(m.name)}</option>`).join("");
   start.innerHTML = opts; end.innerHTML = opts;
   start.value = 0; end.value = 11;
   
@@ -1023,7 +1023,7 @@ function renderRulesList() {
   const container = document.getElementById("rulesListContainer");
   const rules = db[activeYear].recurringRules || [];
   if (rules.length === 0) {
-    container.innerHTML = `<p style="color:var(--muted); font-style:italic;">No active recurring rules saved for ${activeYear}.</p>`;
+    container.innerHTML = `<p style="color:var(--muted); font-style:italic;">No active recurring rules saved for ${esc(activeYear)}.</p>`;
     return;
   }
   container.innerHTML = rules.map((r, idx) => `
