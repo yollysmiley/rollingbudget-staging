@@ -11,7 +11,7 @@ const key = env('STAGING_PUBLISHABLE_KEY');
 assert(key.startsWith('sb_publishable_'), 'Use the staging publishable key, not an admin key');
 
 const run = randomUUID();
-const year = '2199';
+const year = 2199;
 const sessions = [];
 const created = [];
 let failures = 0;
@@ -33,7 +33,7 @@ async function request(path, { token, method = 'GET', body } = {}) {
   return { status: response.status, ok: response.ok, data };
 }
 
-function success(result, operation) {
+function success(result, operation = 'Staging API request') {
   assert(result.ok, operation + ' failed (HTTP ' + result.status +
     (result.data?.code ? ', code ' + result.data.code : '') + ')');
 }
@@ -43,42 +43,25 @@ function denied(result) {
     'Unauthorized operation was not denied'
   );
 }
+function tablePathAt(targetYear, extra = '') {
+  return '/rest/v1/budget_ui_years?select=user_id,year,budget_data,updated_at&year=eq.' + targetYear + extra;
+}
 function tablePath(extra = '') {
-  return '/rest/v1/budget_data?select=id,user_id,state,updated_at' + extra;
+  return tablePathAt(year, extra);
 }
 async function rows(session) {
-  const result = await request(tablePath('&user_id=eq.' + encodeURIComponent(session.user.id)), {
-    token: session.access_token
-  });
-  success(result, 'Read current budget_data document');
-  assert(Array.isArray(result.data), 'Expected a budget_data row array');
+  const result = await request(tablePath('&user_id=eq.' + session.user.id), { token: session.access_token });
+  success(result);
+  assert(Array.isArray(result.data));
   return result.data;
-}
-function fixture(owner) {
-  return {
-    integrationRun: run,
-    owner,
-    autoCascade: true,
-    recurringRules: [],
-    months: Array.from({ length: 12 }, (_, index) => ({
-      code: String(index + 1).padStart(2, '0'),
-      name: 'Month ' + (index + 1),
-      recordedLeftover: 0,
-      income: [],
-      fixed: [],
-      variable: [],
-      creditCards: [],
-      loans: []
-    }))
-  };
 }
 async function check(name, action) {
   try {
     await action();
     console.log('PASS ' + name);
-  } catch (error) {
+  } catch {
     failures++;
-    console.error('FAIL ' + name + (error?.message ? ': ' + error.message : ''));
+    console.error('FAIL ' + name + ' (sensitive response details suppressed)');
   }
 }
 
@@ -92,97 +75,101 @@ try {
         password: env('STAGING_TEST_' + account + '_PASSWORD')
       }
     });
-    success(result, 'Sign in test account ' + account);
-    assert(result.data?.access_token && result.data?.refresh_token && result.data?.user?.id,
-      'Test account ' + account + ' returned an incomplete session');
+    success(result);
+    assert(result.data?.access_token && result.data?.refresh_token && result.data?.user?.id, 'Invalid sign-in response');
     sessions.push(result.data);
   }
 
   setupStep = 'validate distinct test identities';
-  assert.notEqual(sessions[0].user.id, sessions[1].user.id,
-    'Two distinct staging test accounts are required');
-
+  assert.notEqual(sessions[0].user.id, sessions[1].user.id, 'Two distinct staging test accounts are required');
   for (const [index, session] of sessions.entries()) {
-    setupStep = 'verify clean budget_data fixture for account ' + index;
+    setupStep = 'check reserved year 2199 for test account ' + index;
     const existing = await rows(session);
-    assert.equal(existing.length, 0,
-      'Dedicated staging integration account already has a budget_data document; refusing to overwrite it');
+    assert.equal(existing.length, 0, 'Reserved integration year 2199 must be empty; no existing data will be overwritten');
   }
 
   for (const [index, session] of sessions.entries()) {
-    setupStep = 'create synthetic budget_data fixture for account ' + index;
-    const state = { [year]: fixture(index) };
-    const result = await request('/rest/v1/budget_data', {
+    setupStep = 'create synthetic year 2199 fixture for test account ' + index;
+    const budget = { integrationRun: run, owner: index, months: [] };
+    const result = await request('/rest/v1/budget_ui_years', {
       token: session.access_token,
       method: 'POST',
-      body: { user_id: session.user.id, state, updated_at: new Date().toISOString() }
+      body: { user_id: session.user.id, year, budget_data: budget, updated_at: new Date().toISOString() }
     });
-    success(result, 'Create budget_data fixture for account ' + index);
+    success(result, 'Create year 2199 fixture for test account ' + index);
     assert.equal(result.data?.[0]?.user_id, session.user.id);
-    assert.equal(result.data?.[0]?.state?.[year]?.integrationRun, run);
+    assert.equal(result.data?.[0]?.year, year);
     created.push({ session });
   }
 
   for (const [index, session] of sessions.entries()) {
     const otherSession = sessions[1 - index];
-    const ownPath = tablePath('&user_id=eq.' + encodeURIComponent(session.user.id));
-    const otherPath = tablePath('&user_id=eq.' + encodeURIComponent(otherSession.user.id));
 
-    await check('account ' + index + ' reads only its own budget document', async () => {
+    await check('account ' + index + ' reads only its own year row', async () => {
       const data = await rows(session);
       assert.equal(data.length, 1);
       assert.equal(data[0].user_id, session.user.id);
-      assert.equal(data[0].state?.[year]?.integrationRun, run);
+      assert.equal(data[0].budget_data.integrationRun, run);
     });
-    await check('account ' + index + ' updates its own budget document', async () => {
-      const updated = { ...fixture(index), value: 200 };
-      const result = await request(ownPath, {
+    await check('account ' + index + ' updates its own year row', async () => {
+      const result = await request(tablePath('&user_id=eq.' + session.user.id), {
         token: session.access_token,
         method: 'PATCH',
-        body: { state: { [year]: updated } }
+        body: { budget_data: { integrationRun: run, owner: index, value: 200 } }
       });
-      success(result, 'Update own budget document');
+      success(result);
       assert.equal(result.data?.length, 1);
-      assert.equal((await rows(session))[0].state?.[year]?.value, 200);
+      assert.equal((await rows(session))[0].budget_data.value, 200);
     });
-    await check('account ' + index + ' cannot read the other account document', async () => {
-      const result = await request(otherPath, { token: session.access_token });
-      success(result, 'Attempt cross-account read');
+    await check('account ' + index + ' cannot read the other account row', async () => {
+      const result = await request(tablePath('&user_id=eq.' + otherSession.user.id), { token: session.access_token });
+      success(result);
       assert.deepEqual(result.data, []);
     });
-    await check('account ' + index + ' cannot update the other account document', async () => {
-      const result = await request(otherPath, {
+    await check('account ' + index + ' cannot update the other account row', async () => {
+      const result = await request(tablePath('&user_id=eq.' + otherSession.user.id), {
         token: session.access_token,
         method: 'PATCH',
-        body: { state: { [year]: { integrationRun: run, unauthorized: true } } }
+        body: { budget_data: { integrationRun: run, unauthorized: true } }
       });
       denied(result);
-      assert.equal((await rows(otherSession))[0].state?.[year]?.unauthorized, undefined);
+      assert.equal((await rows(otherSession))[0].budget_data.unauthorized, undefined);
     });
-    await check('account ' + index + ' cannot delete the other account document', async () => {
-      const result = await request(otherPath, { token: session.access_token, method: 'DELETE' });
+    await check('account ' + index + ' cannot delete the other account row', async () => {
+      const result = await request(tablePath('&user_id=eq.' + otherSession.user.id), {
+        token: session.access_token,
+        method: 'DELETE'
+      });
       denied(result);
       assert.equal((await rows(otherSession)).length, 1);
     });
-    await check('account ' + index + ' cannot insert a document for another owner', async () => {
-      const result = await request('/rest/v1/budget_data', {
+    await check('account ' + index + ' cannot insert as another owner', async () => {
+      const attemptedYear = year - 1;
+      const result = await request('/rest/v1/budget_ui_years', {
         token: session.access_token,
         method: 'POST',
         body: {
           user_id: otherSession.user.id,
-          state: { [year]: { integrationRun: run, unauthorized: true } }
+          year: attemptedYear,
+          budget_data: { integrationRun: run, unauthorized: true }
         }
       });
-      denied(result);
-      assert.equal((await rows(otherSession))[0].state?.[year]?.unauthorized, undefined);
+      if (result.ok) {
+        const cleanup = await request(tablePathAt(attemptedYear, '&user_id=eq.' + otherSession.user.id), {
+          token: otherSession.access_token,
+          method: 'DELETE'
+        });
+        success(cleanup);
+      }
+      assert([401, 403].includes(result.status), 'Cross-owner insert must be rejected by RLS');
     });
-    await check('account ' + index + ' cannot change budget document ownership', async () => {
-      const result = await request(ownPath, {
+    await check('account ' + index + ' cannot change row ownership', async () => {
+      const result = await request(tablePath('&user_id=eq.' + session.user.id), {
         token: session.access_token,
         method: 'PATCH',
         body: { user_id: randomUUID() }
       });
-      denied(result);
+      assert([401, 403].includes(result.status), 'Ownership change must be rejected by RLS');
       assert.equal((await rows(session))[0].user_id, session.user.id);
     });
     await check('account ' + index + ' refreshes its real session', async () => {
@@ -190,62 +177,56 @@ try {
         method: 'POST',
         body: { refresh_token: session.refresh_token }
       });
-      success(result, 'Refresh test session');
+      success(result);
       assert.equal(result.data?.user?.id, session.user.id);
       Object.assign(session, result.data);
       assert.equal((await rows(session))[0].user_id, session.user.id);
     });
   }
 
-  await check('anonymous reads cannot access budget documents', async () => {
+  await check('anonymous reads are denied', async () => {
     const result = await request(tablePath());
-    denied(result);
+    assert([401, 403].includes(result.status));
   });
-  await check('anonymous inserts cannot create budget documents', async () => {
-    const result = await request('/rest/v1/budget_data', {
+  await check('anonymous inserts are denied', async () => {
+    const result = await request('/rest/v1/budget_ui_years', {
       method: 'POST',
-      body: { user_id: randomUUID(), state: { [year]: { integrationRun: run } } }
+      body: { user_id: randomUUID(), year: year - 2, budget_data: { integrationRun: run } }
     });
-    denied(result);
+    assert([401, 403].includes(result.status));
   });
   for (const method of ['PATCH', 'DELETE']) {
-    await check('anonymous ' + method + ' cannot modify budget documents', async () => {
-      const result = await request(tablePath('&user_id=eq.' + encodeURIComponent(sessions[0].user.id)), {
+    await check('anonymous ' + method + ' is denied', async () => {
+      const result = await request(tablePath('&user_id=eq.' + sessions[0].user.id), {
         method,
-        body: method === 'PATCH' ? { state: { [year]: { integrationRun: run } } } : undefined
+        body: method === 'PATCH' ? { budget_data: { integrationRun: run } } : undefined
       });
-      denied(result);
+      assert([401, 403].includes(result.status));
     });
   }
 } catch (error) {
   failures++;
-  const code = error?.message || 'unknown setup error';
-  console.error('FAIL setup at ' + setupStep + ': ' + code);
+  console.error('FAIL setup at ' + setupStep + ': ' + (error?.message || 'unknown setup error'));
 } finally {
   for (const { session } of created) {
-    await check('cleanup owned synthetic budget document', async () => {
+    await check('cleanup owned synthetic year row', async () => {
       const current = await rows(session);
-      const row = current.find(item => item.user_id === session.user.id);
+      const row = current.find(item => item.year === year);
       if (row) {
-        assert.equal(row.state?.[year]?.integrationRun, run,
-          'Refusing to delete a document not created by this run');
-        const result = await request(tablePath('&user_id=eq.' + encodeURIComponent(session.user.id)), {
+        assert.equal(row.budget_data?.integrationRun, run, 'Refusing to delete a row not created by this run');
+        const result = await request(tablePath('&user_id=eq.' + session.user.id), {
           token: session.access_token,
           method: 'DELETE'
         });
-        success(result, 'Delete owned synthetic budget document');
+        success(result);
       }
       assert.deepEqual(await rows(session), []);
     });
   }
   for (const session of sessions) {
     await check('sign out test session', async () => {
-      const result = await request('/auth/v1/logout?scope=local', {
-        token: session.access_token,
-        method: 'POST'
-      });
-      assert([200, 204].includes(result.status) ||
-        ([403, 404].includes(result.status) && result.data?.code === 'session_not_found'));
+      const result = await request('/auth/v1/logout?scope=local', { token: session.access_token, method: 'POST' });
+      assert([200, 204].includes(result.status) || ([403, 404].includes(result.status) && result.data?.code === 'session_not_found'));
     });
   }
 }
