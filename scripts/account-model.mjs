@@ -23,17 +23,30 @@ export function normalizeAccounts(accounts) {
 
 export function migrateLegacyIncome(income) {
   if (!Array.isArray(income)) throw new TypeError('Income must be an array');
-  // Retain the original record and split only when it contains legacy columns.
-  // Zero-valued legacy columns are kept in the original record, not emitted as entries.
   return income.flatMap(entry => {
     if (entry.accountId || (!Object.hasOwn(entry, 'cpm') && !Object.hasOwn(entry, 'usaa'))) return [{ ...entry }];
-    const migrated = [];
-    for (const id of ['cpm', 'usaa']) {
-      const amount = Number(entry[id]) || 0;
-      if (amount !== 0) migrated.push({ name: entry.name, amount, accountId: id, ...(entry.recurringRuleId ? { recurringRuleId: entry.recurringRuleId } : {}) });
+    const sources = ['cpm', 'usaa'].filter(id => (Number(entry[id]) || 0) !== 0);
+    if (!sources.length) {
+      const { cpm, usaa, ...rest } = entry;
+      return [{ ...rest, amount: 0, accountId: 'cpm' }];
     }
-    return migrated.length ? migrated : [{ ...entry, amount: 0, accountId: 'cpm' }];
+    return sources.map(id => {
+      const { cpm, usaa, ...rest } = entry;
+      return { ...rest, amount: Number(entry[id]) || 0, accountId: id };
+    });
   });
+}
+
+export function migrateLegacyYear(year) {
+  if (!year?.months) throw new TypeError('Year months are required');
+  let changed = false;
+  const months = year.months.map(month => {
+    const income = month.income || [];
+    if (!income.some(entry => !entry.accountId && (Object.hasOwn(entry, 'cpm') || Object.hasOwn(entry, 'usaa')))) return month;
+    changed = true;
+    return { ...month, income: migrateLegacyIncome(income) };
+  });
+  return { changed, year: changed ? { ...year, months } : year };
 }
 
 export function accountIncluded(accountId, accounts) {
