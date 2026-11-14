@@ -1,4 +1,6 @@
 ## Unreleased
+
+- Phase 2 Accounts Manager: distinct desktop and mobile Settings interfaces, authenticated account CRUD, guarded deletion, bundled browser account modules, and regression tests. Account inclusion affects totals only after the account-aware budgeting phase.
 - Phase 1 account storage: added user-scoped `budget_accounts` SQL migration with RLS, idempotent legacy account initialization helpers, and regression tests. Existing year documents remain untouched until the account-aware UI is ready. Staging database application is pending verification.
 
 
