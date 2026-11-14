@@ -16,7 +16,7 @@ function replaceOnce(oldValue, replacement, label) {
 replaceOnce('const SUPABASE_URL = "YOUR_SUPABASE_URL";', 'const SUPABASE_URL = ' + JSON.stringify(config.supabaseUrl) + ';', 'Supabase URL');
 replaceOnce('const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";', 'const SUPABASE_ANON_KEY = ' + JSON.stringify(config.publishableKey) + ';', 'Supabase publishable key');
 replaceOnce('const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";', 'const STAGING_STORAGE_PREFIX = ' + JSON.stringify(config.storagePrefix) + ';', 'Storage namespace');
-replaceOnce('<title>Multi-Year Rolling Budget & Planning Manager</title>', '<title>STAGING - Multi-Year Rolling Budget & Planning Manager</title>', 'Page title');
+replaceOnce('<title>Rolling Budget</title>', '<title>STAGING - Rolling Budget</title>', 'Page title');
 replaceOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-align:center;background:#fff3cd;color:#332701;border-bottom:2px solid #946200;font-weight:700">STAGING ONLY — isolated from production — legacy budget records are preserved separately and are not imported into this UI — ' + config.projectRef + '</aside>', 'Staging banner');
 
 assert.ok(html.includes('function storageKey(year)'), 'Account-scoped storage is missing');

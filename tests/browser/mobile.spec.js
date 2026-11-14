@@ -157,3 +157,18 @@ test('mobile recurring manager uses its distinct card layout and supports rule c
   const size=await page.evaluate(()=>({width:innerWidth,content:document.documentElement.scrollWidth}));
   expect(size.content).toBeLessThanOrEqual(size.width+1);
 });
+
+
+test('mobile header matches the approved email branding and preserves menu and sign-in controls', async ({ page }) => {
+  const brand = page.locator('header .title-group');
+  await expect(brand.locator('h1')).toHaveText('Rolling Budget');
+  await expect(brand.locator('p')).toHaveText('Plan smarter. Grow stronger.');
+  await expect(brand.locator('.brand-bar')).toHaveCount(3);
+  await expect(brand.locator('.brand-bar-short')).toHaveCSS('background-color', 'rgb(139, 124, 255)');
+  await expect(brand.locator('.brand-bar-tall')).toHaveCSS('background-color', 'rgb(177, 166, 255)');
+  await expect(page.locator('#mobileMenuButton')).toBeVisible();
+  await expect(page.locator('#mobileAuthBtn')).toBeVisible();
+  await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign In');
+  await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(23, 21, 43)');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});

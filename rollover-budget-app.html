@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multi-Year Rolling Budget & Planning Manager</title>
+  <title>Rolling Budget</title>
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -82,6 +82,61 @@
 
     .title-group h1 { font-size: 1.18rem; font-weight: 800; letter-spacing: -0.025em; }
     .title-group p { font-size: 0.8rem; color: var(--muted); }
+    /* Match the approved Supabase confirmation email brand. */
+    header {
+      background: #17152B;
+      border-bottom-color: #302D4B;
+      color: #FFFFFF;
+    }
+    .title-group { gap: 14px; }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 0;
+      background: transparent;
+      color: inherit;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 5px;
+      padding: 1px 0;
+      box-shadow: none;
+    }
+    .brand-bar {
+      display: block;
+      width: 9px;
+      border-radius: 3px;
+      background: #8B7CFF;
+      flex: 0 0 9px;
+    }
+    .brand-bar-short { height: 17px; }
+    .brand-bar-medium { height: 26px; }
+    .brand-bar-tall { height: 36px; background: #B1A6FF; }
+    .title-group h1 { color: #FFFFFF; font-size: 1.28rem; font-weight: 700; letter-spacing: -0.035em; }
+    .title-group h1 span { color: #A99CFF; }
+    .title-group p { color: #C8C3E2; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+    .mobile-menu-button, .mobile-auth-button {
+      background: #24213D;
+      color: #FFFFFF;
+      border-color: #494465;
+      box-shadow: none;
+    }
+    .mobile-menu-button:hover, .mobile-auth-button:hover {
+      background: #302C50;
+      border-color: #8B7CFF;
+      color: #FFFFFF;
+    }
+    @media (max-width: 768px) {
+      .title-group { gap: 10px; }
+      .brand-icon { width: 32px; height: 36px; gap: 4px; }
+      .brand-bar { width: 8px; flex-basis: 8px; }
+      .brand-bar-short { height: 15px; }
+      .brand-bar-medium { height: 23px; }
+      .brand-bar-tall { height: 32px; }
+      .title-group h1 { font-size: 1.02rem; }
+      .title-group p { font-size: 0.56rem; letter-spacing: 0.09em; }
+    }
+
 
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
@@ -510,10 +565,14 @@
   <div class="header-top">
     <button type="button" id="mobileMenuButton" class="mobile-menu-button" aria-label="Open navigation menu" aria-expanded="false" onclick="toggleMobileSidebar(true)">☰</button>
     <div class="title-group">
-      <div class="brand-icon">$</div>
-      <div>
-        <h1>Multi-Year Rolling Budget & Planning</h1>
-        <p id="userStatusSub">Multi-Year & Mid-Month Financial Tracker</p>
+      <div class="brand-icon" aria-hidden="true">
+        <span class="brand-bar brand-bar-short"></span>
+        <span class="brand-bar brand-bar-medium"></span>
+        <span class="brand-bar brand-bar-tall"></span>
+      </div>
+      <div class="brand-copy">
+        <h1>Rolling <span>Budget</span></h1>
+        <p id="userStatusSub">Plan smarter. Grow stronger.</p>
       </div>
     </div>
     <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
@@ -806,7 +865,7 @@ async function initApp() {
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
       const mobileAuthBtn = document.getElementById("mobileAuthBtn");
       if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
-      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
+      document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Plan smarter. Grow stronger.";
       setTimeout(async () => {
         await loadAllYears();
         render();
@@ -814,7 +873,7 @@ async function initApp() {
     });
   }
   document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
-  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
+  document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Plan smarter. Grow stronger.";
   await loadAllYears();
   render();
 }
