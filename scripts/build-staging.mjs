@@ -67,7 +67,7 @@ assert.ok(!homeHtml.includes('YOUR_SUPABASE_') && !homeHtml.includes('YOUR_STAGI
 writeFileSync('dist/index.html', homeHtml);
 mkdirSync('dist/app', { recursive: true });
 writeFileSync('dist/app/index.html', html);
-for (const path of ['account-model.mjs', 'account-storage.mjs']) {
+for (const path of ['account-model.mjs', 'account-storage.mjs', 'account-budget.mjs']) {
   const source = readFileSync(new URL('./' + path, import.meta.url));
   mkdirSync('dist/scripts', { recursive: true });
   mkdirSync('dist/app/scripts', { recursive: true });
