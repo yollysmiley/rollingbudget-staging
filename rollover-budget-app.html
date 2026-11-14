@@ -1005,22 +1005,58 @@ async function loadAllYears() {
   }
   db = all;
 }
+const cloudSaveQueues = new Map();
+function showCloudSaveStatus(message) {
+  let status = document.getElementById("cloudSaveStatus");
+  if (!status) {
+    status = document.createElement("div");
+    status.id = "cloudSaveStatus";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.style.cssText = "padding:10px 20px;background:var(--amber-bg);color:#78440a;font-weight:600;text-align:center";
+    document.querySelector("header").insertAdjacentElement("afterend", status);
+  }
+  status.textContent = message;
+  status.hidden = !message;
+}
+function queueCloudSave(key, operation) {
+  const previous = cloudSaveQueues.get(key) || Promise.resolve();
+  const pending = previous.catch(() => {}).then(operation);
+  cloudSaveQueues.set(key, pending);
+  void pending.finally(() => {
+    if (cloudSaveQueues.get(key) === pending) cloudSaveQueues.delete(key);
+  }).catch(() => {});
+  return pending;
+}
 async function saveDB() {
-  const currentYearData = db[activeYear];
+  const year = activeYear;
+  const userId = currentUser?.id || null;
+  const snapshot = JSON.parse(JSON.stringify(db[year]));
   const updatedAt = new Date().toISOString();
-  const localRecord = { data: currentYearData, updatedAt };
-  try { localStorage.setItem(storageKey(activeYear), JSON.stringify(localRecord)); }
-  catch (error) { console.error("Local save error:", error); alert("Could not save this budget in browser storage. Your changes may not persist."); return; }
-  if (supabaseClient && currentUser) {
-    try {
-      const { error } = await supabaseClient.from("budget_ui_years").upsert({
-        user_id: currentUser.id,
-        year: Number(activeYear),
-        budget_data: currentYearData,
+  try {
+    localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+  } catch (error) {
+    console.error("Local save error:", error);
+    alert("Could not save this budget in browser storage. Your changes may not persist.");
+    return;
+  }
+  if (!supabaseClient || !userId) return;
+  const client = supabaseClient;
+  const key = userId + ":" + year;
+  try {
+    await queueCloudSave(key, async () => {
+      const { error } = await client.from("budget_ui_years").upsert({
+        user_id: userId,
+        year: Number(year),
+        budget_data: snapshot,
         updated_at: updatedAt
       }, { onConflict: "user_id,year" });
       if (error) throw error;
-    } catch(error) { console.error("Cloud sync error; local copy was retained:", error); }
+    });
+    if (currentUser?.id === userId) showCloudSaveStatus("");
+  } catch (error) {
+    console.error("Cloud sync error; local copy was retained:", error);
+    if (currentUser?.id === userId) showCloudSaveStatus("Cloud sync failed. Changes are saved on this device only. Please check your connection.");
   }
 }
 function switchYear(yr) {
