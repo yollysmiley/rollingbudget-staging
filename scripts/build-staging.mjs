@@ -51,9 +51,11 @@ replaceResetOnce('const SUPABASE_URL = "YOUR_SUPABASE_URL";', 'const SUPABASE_UR
 replaceResetOnce('const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";', 'const SUPABASE_ANON_KEY = ' + JSON.stringify(config.publishableKey) + ';', 'Reset publishable key');
 replaceResetOnce('const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";', 'const STAGING_STORAGE_PREFIX = ' + JSON.stringify(config.storagePrefix) + ';', 'Reset storage namespace');
 replaceResetOnce('<title>Reset your Rolling Budget password</title>', '<title>STAGING - Reset your Rolling Budget password</title>', 'Reset page title');
-replaceResetOnce('<body>', '<body>\\n  <aside role="note" style="padding:10px;text-align:center;background:#fff3cd;color:#332701;border-bottom:2px solid #946200;font-weight:700">STAGING ONLY — isolated from production — ' + config.projectRef + '</aside>', 'Reset staging banner');
+replaceResetOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-align:center;background:#fff3cd;color:#332701;border-bottom:2px solid #946200;font-weight:700">STAGING ONLY — isolated from production — ' + config.projectRef + '</aside>', 'Reset staging banner');
 assert.ok(!resetHtml.includes('YOUR_SUPABASE_'), 'Reset page has an unconfigured Supabase placeholder');
 assert.ok(!resetHtml.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Reset page has an unconfigured storage placeholder');
+assert.ok(!resetHtml.includes('awalptqpsjflrahkrjzk'), 'Production project reference remains in reset page');
+assert.ok(!resetHtml.includes('sb_secret_'), 'Secret key marker found in reset page');
 assert.ok(resetHtml.includes('auth.updateUser({ password })'), 'Reset page does not update the authenticated password');
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/rollover-budget-app.html', html);
