@@ -7,8 +7,10 @@ export function requiredSettings(env) {
 export function logoutAccepted(status, body) {
   return status === 200 || status === 204 || ((status === 403 || status === 404) && body?.code === 'session_not_found');
 }
-export function assertOwnedFixture(row, id, userId, run) {
-  if (row.id !== id || row.user_id !== userId || row.state?.integrationRun !== run) throw new Error('Fixture ownership mismatch; refusing cleanup');
+export function assertOwnedFixture(row, id, userId, run, year) {
+  if (row.id !== id || row.user_id !== userId || row.state?.[String(year)]?.integrationRun !== run) {
+    throw new Error('Fixture ownership mismatch; refusing cleanup');
+  }
 }
 export async function withDownload(download, action) {
   try { return await action(download); } finally { await download.delete(); }
