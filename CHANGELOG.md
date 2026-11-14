@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Phase 3 acceptance corrections: safeguard mixed-source legacy income with explicit splitting, simplify new income account assignment, show account selection for all recurring rule types, and initialize accounts on authenticated refresh. Added regression coverage.
+
 - Phase 3 (in progress): introduced account-aware rolling totals and exclusion handling, including legacy CPM/USAA income compatibility and regression tests. Dynamic transaction account selectors and recurring-rule migration are still pending.
 
 - Phase 2 Accounts Manager: distinct desktop and mobile Settings interfaces, authenticated account CRUD, guarded deletion, bundled browser account modules, and regression tests. Account inclusion affects totals only after the account-aware budgeting phase.
