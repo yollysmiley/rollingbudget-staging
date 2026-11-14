@@ -110,3 +110,22 @@ test('mobile sidebar contains only Overview, Plan and Settings', async ({ page }
   await expect(page.locator('#authBtn')).toBeHidden();
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
 });
+
+test('mobile recurring manager uses its distinct card layout and supports rule creation', async ({ page }) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.getByRole('button',{name:/Recurring Rules/}).click();
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
+  await expect(page.locator('#recurringMobileView')).toBeVisible();
+  await expect(page.locator('#recurringDesktopView')).toBeHidden();
+  const form=page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Annual Insurance');
+  await form.locator('[data-rec-field="amount"]').fill('1200');
+  await form.locator('[data-rec-field="frequency"]').selectOption('annually');
+  await page.getByRole('button',{name:'Add rule'}).last().click();
+  await expect(page.locator('#mobileRulesList')).toContainText('Annual Insurance');
+  await expect(page.locator('#mobileRulesList')).toContainText('Annually');
+  const size=await page.evaluate(()=>({width:innerWidth,content:document.documentElement.scrollWidth}));
+  expect(size.content).toBeLessThanOrEqual(size.width+1);
+});

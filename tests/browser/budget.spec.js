@@ -82,18 +82,34 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
   await expect(page.locator('#variableBody img')).toHaveCount(0);
 });
 
-test('recurring rule applies to the selected months', async ({ page }) => {
+test('recurring manager applies quarterly rules and disabling removes generated items', async ({ page }) => {
   await page.locator('button[onclick="openRecurringModal()"]').click();
-  await page.locator('#recName').fill('Internet');
-  await page.locator('#recAmount').fill('80');
-  await page.locator('#recDue').fill('10th');
-  await page.locator('#recStart').selectOption('0');
-  await page.locator('#recEnd').selectOption('1');
-  await page.locator('button[onclick="applyRecurringRule()"]').click();
-  await expect(page.locator('#rulesListContainer')).toContainText('Internet');
-  await expect(page.locator('#fixedBody input:not([type])').first()).toHaveValue('Internet');
-  await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#fixedBody input:not([type])')).toHaveCount(0);
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
+  await expect(page.locator('#recurringDesktopView')).toBeVisible();
+  const form=page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Quarterly Internet');
+  await form.locator('[data-rec-field="amount"]').fill('80');
+  await form.locator('[data-rec-field="due"]').fill('10th');
+  await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
+  await page.getByRole('button',{name:'Add rule'}).first().click();
+  await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
+  await expect(page.locator('#desktopRulesList')).toContainText('Quarterly');
+  const occurrences=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
+  expect(occurrences).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
+  await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
+  const disabled=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
+  expect(disabled).toEqual(Array(12).fill(0));
+});
+
+test('legacy recurring rules remain visible and disabling preserves existing budget entries', async ({ page }) => {
+  await page.evaluate(async()=>{db[activeYear].recurringRules=[{id:123,cat:'fixed',name:'Legacy Rent',amount:900,due:'1st',start:0,end:11}];db[activeYear].months[0].fixed.push({name:'Legacy Rent',due:'1st',amount:900});await saveDB();});
+  await page.locator('button[onclick="openRecurringModal()"]').click();
+  await expect(page.locator('#desktopRulesList')).toContainText('Legacy Rent');
+  await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
+  await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
+  await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
+  await expect(page.locator('#fixedBody input:not([type])').first()).toHaveValue('Legacy Rent');
 });
 
 test('year switching in mobile Settings and narrow viewport remain usable', async ({ page }) => {
