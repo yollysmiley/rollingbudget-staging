@@ -6,8 +6,12 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.__errors = [];
     window.addEventListener('error', event => window.__errors.push(event.message));
-    for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('rollingbudget_staging_phiscfwfuzeptetimdbo_')) localStorage.removeItem(key);
+    // addInitScript runs on every navigation; clear once per test context, not on reload.
+    if (!sessionStorage.getItem('__budget_test_storage_cleaned')) {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('rollingbudget_staging_phiscfwfuzeptetimdbo_')) localStorage.removeItem(key);
+      }
+      sessionStorage.setItem('__budget_test_storage_cleaned', '1');
     }
   });
   await page.goto('/rollover-budget-app.html');
