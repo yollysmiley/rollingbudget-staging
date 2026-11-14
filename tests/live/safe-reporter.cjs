@@ -7,9 +7,9 @@ const STATUSES = new Set(['passed', 'failed', 'timedOut', 'skipped', 'interrupte
 
 function safeError(message) {
   return String(message || 'No assertion detail available')
-    .replace(/Bearer\\s+[^\\s]+/gi, 'Bearer [redacted]')
+    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [redacted]')
     .replace(/sb_(?:publishable|secret)_[A-Za-z0-9_-]+/g, '[redacted key]')
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, '[redacted email]')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
     .slice(0, 800);
 }
 
