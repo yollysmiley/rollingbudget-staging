@@ -21,14 +21,17 @@ export function normalizeAccounts(accounts) {
   });
 }
 
-export function migrateLegacyIncome(income) {
+export function migrateLegacyIncome(income, accounts = LEGACY_ACCOUNTS) {
   if (!Array.isArray(income)) throw new TypeError('Income must be an array');
   return income.flatMap(entry => {
     if (entry.accountId || (!Object.hasOwn(entry, 'cpm') && !Object.hasOwn(entry, 'usaa'))) return [{ ...entry }];
     const sources = ['cpm', 'usaa'].filter(id => (Number(entry[id]) || 0) !== 0);
+    for (const id of sources) if (!accounts.some(account => account.id === id)) throw new Error('Missing legacy income account: ' + id);
     if (!sources.length) {
       const { cpm, usaa, ...rest } = entry;
-      return [{ ...rest, amount: 0, accountId: 'cpm' }];
+      const fallback = ['cpm', 'usaa'].find(id => accounts.some(account => account.id === id));
+      if (!fallback) throw new Error('Missing legacy income account for zero-value entry');
+      return [{ ...rest, amount: 0, accountId: fallback }];
     }
     return sources.map(id => {
       const { cpm, usaa, ...rest } = entry;
@@ -37,14 +40,14 @@ export function migrateLegacyIncome(income) {
   });
 }
 
-export function migrateLegacyYear(year) {
+export function migrateLegacyYear(year, accounts = LEGACY_ACCOUNTS) {
   if (!year?.months) throw new TypeError('Year months are required');
   let changed = false;
   const months = year.months.map(month => {
     const income = month.income || [];
     if (!income.some(entry => !entry.accountId && (Object.hasOwn(entry, 'cpm') || Object.hasOwn(entry, 'usaa')))) return month;
     changed = true;
-    return { ...month, income: migrateLegacyIncome(income) };
+    return { ...month, income: migrateLegacyIncome(income, accounts) };
   });
   return { changed, year: changed ? { ...year, months } : year };
 }
@@ -65,7 +68,7 @@ export function canRemoveAccount(accountId, yearDocuments) {
   return !Object.values(yearDocuments).some(year =>
     year?.months?.some(month =>
       ['income', 'fixed', 'variable', 'creditCards', 'loans'].some(key =>
-        month[key]?.some(entry => entry.accountId === accountId || (key === 'income' && (accountId === 'cpm' || accountId === 'usaa') && Number(entry[accountId]) !== 0)))) ||
+        month[key]?.some(entry => entry.accountId === accountId || (key === 'income' && (accountId === 'cpm' || accountId === 'usaa') && Object.hasOwn(entry, accountId))))) ||
     year?.recurringRules?.some(rule => rule.accountId === accountId || rule.acct === accountId)
   );
 }
