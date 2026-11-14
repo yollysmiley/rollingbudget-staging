@@ -69,7 +69,7 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
   await page.locator('#newVarName').fill(payload);
   await page.locator('#newVarDue').fill('4th');
   await page.locator('#newVarAmt').fill('25');
-  await page.locator('button[onclick="addExpense(\'variable\')"]').click();
+  await page.evaluate(() => addExpense('variable'));
   await expect(page.locator('#variableBody input[type="text"]').first()).toHaveValue(payload);
   await expect(page.locator('#variableBody img')).toHaveCount(0);
 });
