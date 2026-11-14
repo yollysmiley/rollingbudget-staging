@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Updated remaining signed-out browser assertions for authenticated owner-scoped storage, account status, and desktop/mobile sign-out navigation.
+
 - Updated desktop and mobile browser acceptance tests to use an isolated simulated signed-in Supabase client, while separately asserting public homepage behavior and anonymous app redirects.
 
 - Added a public responsive Rolling Budget homepage and an authenticated app entry at `/app/`. Unauthenticated app visitors are redirected to the homepage and sign-out clears the rendered budget. The legacy app URL remains guarded for compatibility.

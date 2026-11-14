@@ -84,26 +84,14 @@ test('mobile plan supports collapsing and expanding all budget cards', async ({ 
   await expect(page.locator('#toggleAllCards')).toHaveText('Collapse all cards');
 });
 
-test('mobile header exposes Sign In and branded authentication modes', async ({ page }) => {
-  const signIn = page.locator('#mobileAuthBtn');
-  await expect(signIn).toBeVisible();
-  await expect(signIn).toHaveText('Sign In');
-  await signIn.click();
-  const modal = page.locator('#authModal');
-  await expect(modal).toHaveClass(/open/);
-  await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
-  await expect(modal.locator('#authEmail')).toBeVisible();
-  await expect(modal.locator('#authPassword')).toBeVisible();
-  await modal.locator('#authModeLink').click();
-  await expect(modal.locator('#authModalTitle')).toHaveText('Create your account');
-  await expect(modal.locator('#authSubmitBtn')).toHaveText('Create Account');
-  await modal.locator('#authModeLink').click();
-  await modal.locator('#authResetLink').click();
-  await expect(modal.locator('#authModalTitle')).toHaveText('Reset your password');
-  await expect(modal.locator('#authPasswordGroup')).toBeHidden();
-  await expect(modal.locator('.auth-brand-mark span')).toHaveCount(3);
-  await modal.getByRole('button', { name: 'Cancel' }).click();
-  await expect(modal).not.toHaveClass(/open/);
+test('mobile sign-out returns to public homepage without exposing budget', async ({ page }) => {
+  const signOut = page.locator('#mobileAuthBtn');
+  await expect(signOut).toBeVisible();
+  await expect(signOut).toHaveText('Sign Out');
+  await signOut.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+  await expect(page.locator('#incomeBody')).toHaveCount(0);
 });
 
 test('mobile sidebar exposes core pages and year management without burying recurring rules in Settings', async ({ page }) => {
@@ -174,13 +162,13 @@ test('mobile recurring manager uses its distinct card layout and supports rule c
 test('mobile header matches the approved email branding and preserves menu and sign-in controls', async ({ page }) => {
   const brand = page.locator('header .title-group');
   await expect(brand.locator('h1')).toHaveText('Rolling Budget');
-  await expect(brand.locator('p')).toHaveText('Plan smarter. Grow stronger.');
+  await expect(brand.locator('p')).toHaveText('Logged in as browser-test@example.invalid');
   await expect(brand.locator('.brand-bar')).toHaveCount(3);
   await expect(brand.locator('.brand-bar-short')).toHaveCSS('background-color', 'rgb(139, 124, 255)');
   await expect(brand.locator('.brand-bar-tall')).toHaveCSS('background-color', 'rgb(177, 166, 255)');
   await expect(page.locator('#mobileMenuButton')).toBeVisible();
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
-  await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign In');
+  await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign Out');
   await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(23, 21, 43)');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
