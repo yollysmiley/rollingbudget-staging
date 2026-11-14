@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const app = readFileSync(new URL('../rollover-budget-app.html', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../../rollover-budget-app.html', import.meta.url), 'utf8');
 const authenticated = readFileSync(new URL('./authenticated.spec.js', import.meta.url), 'utf8');
 const apiTests = readFileSync(new URL('../../scripts/live-staging-tests.mjs', import.meta.url), 'utf8');
 const workflow = readFileSync(new URL('../../.github/workflows/live-staging-tests.yml', import.meta.url), 'utf8');
