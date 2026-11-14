@@ -1,16 +1,28 @@
 # Live staging auth and database tests
 
-Status: implemented, not executed. This workflow is separate from guest UI acceptance and can write synthetic records only to the hard-coded staging project phiscfwfuzeptetimdbo. No production connection or admin key is used.
+The live workflow tests the current staging application from this repository. The UI stores each year in `public.budget_ui_years`; it does not use the legacy Release 2 `public.budget_data` table. The two tables remain separate and no migration or import is performed by these tests.
 
 ## One-time setup
-Create GitHub environment staging-live-tests with required reviewer approval and restrict deployment branches to main. Add environment secrets STAGING_PUBLISHABLE_KEY, STAGING_TEST_A_EMAIL, STAGING_TEST_A_PASSWORD, STAGING_TEST_B_EMAIL, STAGING_TEST_B_PASSWORD. Use two dedicated staging Supabase users with password sign-in enabled and confirmed test emails. Create these users through trusted staging administration, not production. Never paste passwords into chat. If email/password auth is intentionally disabled, do not enable it without a separate staging-only configuration decision.
 
-Both users must have no budget rows at test start. Tests refuse to overwrite existing rows. Avoid concurrent manual use of these accounts. The workflow is manual-only, main-only, and serialized. Do not run untrusted PR code with these credentials. Configure GitHub environment restrictions before running. No traces, screenshots, or auth artifacts are uploaded by this live API workflow.
+Create GitHub environment `staging-live-tests` with required reviewer approval and restrict deployment branches to `main`. Add environment secrets `STAGING_PUBLISHABLE_KEY`, `STAGING_TEST_A_EMAIL`, `STAGING_TEST_A_PASSWORD`, `STAGING_TEST_B_EMAIL`, and `STAGING_TEST_B_PASSWORD`. Use two dedicated staging Supabase users with password sign-in enabled and confirmed test emails. Never paste passwords into chat.
 
-## Run
-After review and merge to main, open Actions > Live staging auth and database tests > Run workflow, select main, then approve the environment. This is real authentication, refresh, CRUD and RLS testing with ordinary user tokens. The publishable key is not an admin key. Cross-user inserts and owner changes must return 401/403, not merely fail a unique/foreign-key constraint. Unauthorized updates/deletes may return successful empty arrays; tests also verify target-row integrity. Created fixture IDs are tracked and deleted in finally using the owner token. Interrupted runners can leave fixtures: inspect the two dedicated accounts, identify integrationRun-tagged records, and clean those exact records before rerunning.
+The API ownership test reserves year 2199 for synthetic fixtures. Both test accounts must have no row for year 2199. The browser acceptance tests use year 2026, which must also be empty for both dedicated accounts. Existing records are checked before fixture creation; the tests fail rather than overwrite them. Do not use these accounts for normal manual testing while the workflow is running.
 
-## Explicit remaining coverage
-These tests do NOT test GitHub OAuth redirects/consent, browser session injection, UI cloud save/reload, UI A/logout/B account switching, stale delayed results, failed logout, multi-tab behavior, or SQL policy migrations in a local Supabase instance. Password/API tests are not OAuth acceptance evidence. Keep the existing Supabase network blocks in the guest browser suite; a separate authenticated browser configuration will be required. Use disposable GitHub test identities for controlled OAuth smoke tests, never personal credentials or a GitHub PAT as a substitute for app OAuth. Session state must remain untracked and excluded from artifacts. Do not add test-only login controls to the deployed app.
+## What is tested
 
-No users, GitHub environment, secrets, auth provider settings, or database policies are created by this commit. Those are prerequisites, not completed setup.
+- Real password authentication and refresh using ordinary user sessions and the staging publishable key.
+- Row-level security on `budget_ui_years`: each account can read/update its own year, cannot read/update/delete the other account's row, cannot insert for another owner, and cannot change row ownership.
+- Anonymous access is denied.
+- The current staging UI can save an authenticated budget to the cloud and restore it in a fresh browser context.
+- Switching between the two accounts loads only the selected account's budget.
+- Signing out clears the signed-in budget view before another account is loaded.
+
+The legacy `budget_data` table is intentionally not used by this UI acceptance suite. Its schema and records remain untouched.
+
+## Run and safety
+
+After review and merge to `main`, open Actions > Live staging auth and database tests > Run workflow, select `main`, then approve the protected environment. Pushes to `main` also run the workflow. Do not run credentialed code from an untrusted branch.
+
+Fixtures are inserted only into the reserved years and are tagged with a unique integration-run marker. Cleanup deletes only the exact test user's reserved year after verifying that marker. If cleanup fails or a runner is interrupted, inspect those exact year rows before rerunning. No admin key, traces, screenshots, videos, auth-state files, or downloaded user data are uploaded.
+
+This workflow is staging-only. It does not change production configuration, users, provider settings, database policies, or existing budget records.
