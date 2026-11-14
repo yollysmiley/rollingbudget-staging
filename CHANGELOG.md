@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Corrected public homepage Forgot Password to request an email and send a Supabase recovery link rather than navigating directly to the token-only reset page; updated desktop/mobile regression coverage.
+
 - Fixed staging password recovery callback timing so delayed Supabase events do not immediately appear expired; added recovery token-hash verification and desktop/mobile regression tests. No production changes.
 
 - Restored the approved Rolling Budget logo, purple styling, responsive spacing, and account-mode navigation in public sign-in and registration dialogs, with desktop/mobile regression tests.
