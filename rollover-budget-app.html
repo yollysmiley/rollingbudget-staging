@@ -955,6 +955,11 @@ function computeRolling(yrKey) {
 function render() {
   const yearData = db[activeYear];
   if (!yearData) return;
+  // Compute the selected month before rendering either desktop or mobile views.
+  const computed = computeRolling(activeYear);
+  const m = yearData.months[selectedIdx];
+  const c = computed[selectedIdx];
+  const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade;
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
@@ -992,11 +997,6 @@ function render() {
   if (!document.body.dataset.mobileTabInitialized) { setMobileTab("overview"); document.body.dataset.mobileTabInitialized = "true"; }
 
   document.getElementById("activeYearSelect").value = activeYear;
-
-  const computed = computeRolling(activeYear);
-  const m = yearData.months[selectedIdx];
-  const c = computed[selectedIdx];
-  const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
 
   document.getElementById("rollingStrip").innerHTML = yearData.months.map((mo, idx) => {
     const co = computed[idx];
