@@ -52,7 +52,7 @@ export function canRemoveAccount(accountId, yearDocuments) {
   return !Object.values(yearDocuments).some(year =>
     year?.months?.some(month =>
       ['income', 'fixed', 'variable', 'creditCards', 'loans'].some(key =>
-        month[key]?.some(entry => entry.accountId === accountId))) ||
+        month[key]?.some(entry => entry.accountId === accountId || (key === 'income' && (accountId === 'cpm' || accountId === 'usaa') && Number(entry[accountId]) !== 0)))) ||
     year?.recurringRules?.some(rule => rule.accountId === accountId || rule.acct === accountId)
   );
 }
