@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added isolated account-model helpers and unit tests for legacy income migration, exclusion totals, and referenced-account removal safeguards. Not yet integrated into the budget UI or cloud persistence.
+
 - Staging draft PR #31: moved desktop year selection, New Year, Auto-Cascade and Recurring Rules controls into a Settings view; added navigation contract tests. Dynamic account management remains unimplemented.
 
 # Changelog
