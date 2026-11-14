@@ -43,3 +43,9 @@ test('accounts referenced by any month or recurring rule cannot be removed', () 
   year.recurringRules.push({ acct: 'b' });
   assert.equal(canRemoveAccount('b', { 2026: year }), false);
 });
+
+test('legacy income columns protect their source accounts from removal', () => {
+  const year = { months: [{ income: [{ name: 'Pay', cpm: 150, usaa: 0 }] }] };
+  assert.equal(canRemoveAccount('cpm', { 2026: year }), false);
+  assert.equal(canRemoveAccount('usaa', { 2026: year }), true);
+});
