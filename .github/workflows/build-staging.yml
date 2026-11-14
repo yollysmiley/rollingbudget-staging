@@ -17,13 +17,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Check out pinned application source
-        uses: actions/checkout@v5
-        with:
-          repository: yollysmiley/rollingbudget
-          ref: 3c9277bb5dd3209c603a8fd1e952583970136385
-          path: upstream
-          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -31,9 +24,9 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Build with staging-only configuration
-        run: node scripts/build-staging.mjs upstream/rollover-budget-app.html
-      - name: Run existing regression tests
+      - name: Build redesigned UI with staging-only configuration
+        run: node scripts/build-staging.mjs
+      - name: Run staging build and security regression tests
         run: |
           node --test tests/empty-budget-state.test.mjs tests/security-rendering.test.mjs
           node scripts/release2-state.test.mjs
@@ -75,6 +68,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy staging to GitHub Pages
+      - name: Deploy redesigned staging app to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
