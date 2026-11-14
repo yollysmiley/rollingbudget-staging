@@ -22,7 +22,7 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
 });
 
 test('new UI loads and saves its own cloud records without touching Release 2 data', () => {
-  assert.ok(html.includes('from("budget_ui_years").select("year,budget_data")'));
+  assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'));
   assert.ok(html.includes('from("budget_ui_years").upsert('));
   assert.ok(!html.includes('from("budget_data")'));
 });
@@ -41,4 +41,12 @@ test('staging migration creates a separate RLS-protected table for the new UI', 
   assert.ok(migration.includes('ENABLE ROW LEVEL SECURITY'));
   assert.ok(migration.includes('auth.uid()'));
   assert.ok(migration.includes('public.budget_data'));
+});
+
+test('local and cloud budget records are compared by their update timestamps', () => {
+  assert.ok(html.includes('function parseLocalBudgetRecord(raw)'));
+  assert.ok(html.includes('function chooseNewestBudget(localRecord, cloudRecord)'));
+  assert.ok(html.includes('updated_at: updatedAt'));
+  assert.ok(html.includes('select("year,budget_data,updated_at")'));
+  assert.ok(html.includes('Unversioned local data preserved'));
 });
