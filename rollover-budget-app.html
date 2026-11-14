@@ -603,8 +603,10 @@ async function initApp() {
       currentUser = session?.user || null;
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
       document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
-      await loadAllYears();
-      render();
+      setTimeout(async () => {
+        await loadAllYears();
+        render();
+      }, 0);
     });
   }
   document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
