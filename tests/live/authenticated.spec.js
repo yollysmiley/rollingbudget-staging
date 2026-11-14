@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { requiredSettings, logoutAccepted, verifiedCleanupSession, shouldLogoutOriginalSession } from './safety.mjs';
+import { requiredSettings, logoutAccepted, verifiedCleanupSession, shouldLogoutOriginalSession, assertOwnedAccountFixture } from './safety.mjs';
 
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
 const YEAR = 2026;
@@ -133,6 +133,10 @@ async function cleanup(account, letter) {
     return response.json();
   });
   try {
+  const accountPath = '/rest/v1/budget_accounts?select=id,user_id,name&user_id=eq.' + encodeURIComponent(owner.user.id) + '&id=eq.' + encodeURIComponent(FIXTURE_ACCOUNT_ID);
+  const ownedAccounts = await api(accountPath, owner);
+  if (ownedAccounts.length > 1) throw new Error('Unexpected duplicate integration accounts; refusing cleanup');
+  if (ownedAccounts.length) assertOwnedAccountFixture(ownedAccounts[0], FIXTURE_ACCOUNT_ID, owner.user.id, RUN);
   const existing = await rows(owner);
   if (existing.length) {
     const row = existing[0];
@@ -142,8 +146,13 @@ async function cleanup(account, letter) {
     await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, owner, 'DELETE');
   }
   expect(await rows(owner)).toHaveLength(0);
-  // Delete only this run's dedicated account, after its budget references are gone.
-  await api('/rest/v1/budget_accounts?user_id=eq.' + encodeURIComponent(owner.user.id) + '&id=eq.' + encodeURIComponent(FIXTURE_ACCOUNT_ID), owner, 'DELETE');
+  // Delete only the verified run-owned account, after its budget references are gone.
+  if (ownedAccounts.length) {
+    const deleted = await api(accountPath, owner, 'DELETE');
+    expect(deleted).toHaveLength(1);
+    assertOwnedAccountFixture(deleted[0], FIXTURE_ACCOUNT_ID, owner.user.id, RUN);
+  }
+  expect(await api(accountPath, owner)).toHaveLength(0);
   } finally {
     const result = await request('/auth/v1/logout?scope=local', owner, 'POST');
     if (!logoutAccepted(result.status, result.data)) throw new Error('Cleanup session logout failed');
