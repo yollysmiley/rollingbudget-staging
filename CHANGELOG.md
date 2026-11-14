@@ -1,4 +1,5 @@
 ## Unreleased
+- Harden account migration against missing legacy accounts and local cache failures; enable editable account-linked income amounts and add regression coverage.
 
 - Strengthen legacy-income migration browser regression by asserting both editable income rows render after reload; preserve account split, totals, metadata and idempotency checks.
 
