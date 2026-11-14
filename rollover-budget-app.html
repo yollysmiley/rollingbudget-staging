@@ -757,8 +757,6 @@ async function initApp() {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUser = session?.user || null;
       document.getElementById("authBtn").textContent = currentUser ? "Sign Out" : "Sign In";
-  const mobileAuthBtn = document.getElementById("mobileAuthBtn");
-  if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
       const mobileAuthBtn = document.getElementById("mobileAuthBtn");
       if (mobileAuthBtn) mobileAuthBtn.textContent = currentUser ? "Sign Out" : "Sign In";
       document.getElementById("userStatusSub").textContent = currentUser ? "Logged in as " + currentUser.email : "Multi-Year & Mid-Month Financial Tracker";
