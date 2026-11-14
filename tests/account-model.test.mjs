@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LEGACY_ACCOUNTS, normalizeAccounts, migrateLegacyIncome, accountIncluded, totalForAccounts, canRemoveAccount } from '../scripts/account-model.mjs';
+import { LEGACY_ACCOUNTS, normalizeAccounts, migrateLegacyIncome, migrateLegacyYear, accountIncluded, totalForAccounts, canRemoveAccount } from '../scripts/account-model.mjs';
 
 test('legacy accounts are present and included by default', () => {
   assert.deepEqual(LEGACY_ACCOUNTS.map(x => x.id), ['cpm', 'usaa']);
@@ -48,4 +48,28 @@ test('legacy income columns protect their source accounts from removal', () => {
   const year = { months: [{ income: [{ name: 'Pay', cpm: 150, usaa: 0 }] }] };
   assert.equal(canRemoveAccount('cpm', { 2026: year }), false);
   assert.equal(canRemoveAccount('usaa', { 2026: year }), true);
+});
+
+test('year migration is idempotent, immutable, and preserves all months and metadata', () => {
+  const original = { autoCascade: true, recurringRules: [{ id: 'r' }], months: [
+    { name: 'Jan', income: [{ name: 'Pay', cpm: 100, usaa: 25, recurringRuleId: 'r', note: 'kept' }] },
+    { name: 'Feb', income: [{ name: 'Modern', accountId: 'custom', amount: 50 }] }
+  ] };
+  const first = migrateLegacyYear(original);
+  assert.equal(first.changed, true);
+  assert.deepEqual(first.year.months[0].income, [
+    { name: 'Pay', recurringRuleId: 'r', note: 'kept', amount: 100, accountId: 'cpm' },
+    { name: 'Pay', recurringRuleId: 'r', note: 'kept', amount: 25, accountId: 'usaa' }
+  ]);
+  assert.deepEqual(original.months[0].income[0], { name: 'Pay', cpm: 100, usaa: 25, recurringRuleId: 'r', note: 'kept' });
+  const second = migrateLegacyYear(first.year);
+  assert.equal(second.changed, false);
+  assert.strictEqual(second.year, first.year);
+  assert.deepEqual(first.year.recurringRules, original.recurringRules);
+});
+test('zero-value income is migrated once without duplicating entries', () => {
+  const year = { months: [{ income: [{ name: 'Empty', cpm: 0, usaa: 0 }] }] };
+  const first = migrateLegacyYear(year);
+  assert.deepEqual(first.year.months[0].income, [{ name: 'Empty', amount: 0, accountId: 'cpm' }]);
+  assert.equal(migrateLegacyYear(first.year).changed, false);
 });
