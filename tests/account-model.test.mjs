@@ -44,10 +44,16 @@ test('accounts referenced by any month or recurring rule cannot be removed', () 
   assert.equal(canRemoveAccount('b', { 2026: year }), false);
 });
 
-test('legacy income columns protect their source accounts from removal', () => {
+test('legacy income columns protect both source accounts until migration completes', () => {
   const year = { months: [{ income: [{ name: 'Pay', cpm: 150, usaa: 0 }] }] };
   assert.equal(canRemoveAccount('cpm', { 2026: year }), false);
-  assert.equal(canRemoveAccount('usaa', { 2026: year }), true);
+  assert.equal(canRemoveAccount('usaa', { 2026: year }), false);
+
+  const migrated = migrateLegacyYear(year);
+  assert.equal(migrated.changed, true);
+  assert.equal(canRemoveAccount('cpm', { 2026: migrated.year }), false);
+  assert.equal(canRemoveAccount('usaa', { 2026: migrated.year }), true);
+  assert.equal(migrateLegacyYear(migrated.year).changed, false);
 });
 
 test('year migration is idempotent, immutable, and preserves all months and metadata', () => {
