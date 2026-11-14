@@ -20,9 +20,11 @@ test('404 cleanup requires the exact session_not_found code', () => {
   for (const status of [400,401,429,500,503]) assert.equal(logoutAccepted(status,{code:'session_not_found'}),false);
 });
 test('fixture cleanup requires exact ID, owner and run marker', () => {
-  const row={id:'row',user_id:'owner',state:{integrationRun:'run'}};
-  assertOwnedFixture(row,'row','owner','run');
-  for (const args of [['other','owner','run'],['row','other','run'],['row','owner','other']]) assert.throws(()=>assertOwnedFixture(row,...args));
+  const row={id:'row',user_id:'owner',state:{'2199':{integrationRun:'run'}}};
+  assertOwnedFixture(row,'row','owner','run',2199);
+  for (const args of [['other','owner','run',2199],['row','other','run',2199],['row','owner','other',2199],['row','owner','run',2026]]) {
+    assert.throws(()=>assertOwnedFixture(row,...args));
+  }
 });
 test('download is deleted even when inspection fails', async () => {
   let deleted=false; const file={delete:async()=>{deleted=true;}};
