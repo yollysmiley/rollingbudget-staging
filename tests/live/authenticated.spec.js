@@ -113,6 +113,7 @@ async function open(context, account, label) {
   await establishSession(page, account);
   if (label) {
     await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe(label);
+    await page.evaluate(() => selectMonth(0));
     await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue(label);
   }
   return page;
