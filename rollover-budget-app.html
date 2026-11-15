@@ -1419,7 +1419,7 @@ async function loadAllYears() {
       cloudYearLoadSucceeded = true;
       for (const row of data || []) {
         const year = String(row.year);
-        if (!/^\\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) continue;
+        if (!/^\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) continue;
         if (!all[year]) all[year] = JSON.parse(JSON.stringify(BASELINE_2026));
         const key = owner + ':' + year;
         if (!validYearData(row.budget_data)) {
@@ -1626,7 +1626,7 @@ async function saveDB() {
 }
 function switchYear(yr) {
   const next = String(yr);
-  if (!/^\\d{4}$/.test(next) || !Object.hasOwn(db, next)) return;
+  if (!/^\d{4}$/.test(next) || !Object.hasOwn(db, next)) return;
   activeYear = next;
   selectedIdx = restoreSelectedMonth(activeYear);
   try {
@@ -2455,7 +2455,7 @@ function setDesktopSettings(open) {
 }
 function syncMobileSettingsControls() {
   const years = Object.keys(db).filter(year =>
-    /^\\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200
+    /^\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200
   ).sort((a, b) => Number(a) - Number(b));
   for (const id of ['activeYearSelect', 'mobileActiveYearSelect']) {
     const select = document.getElementById(id);
