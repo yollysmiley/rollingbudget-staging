@@ -1329,7 +1329,12 @@ async function applyRecurringPreview() {
     // user edits while the confirmation dialogue was open.
     const current = await recurringAppService.commitRecurringYear(
       supabaseClient, owner, year,
-      cloudDocument => recurringAppService.previewLoadedRecurringYear(cloudDocument, year, loaded)
+      cloudDocument => {
+        if (JSON.stringify(cloudDocument) !== JSON.stringify(db[year])) {
+          throw new Error('Local budget differs from the cloud version; sync or reload before applying');
+        }
+        return recurringAppService.previewLoadedRecurringYear(cloudDocument, year, loaded);
+      }
     );
     if (!current.saved) return;
     if (currentUser?.id !== owner || activeYear !== year) return;
