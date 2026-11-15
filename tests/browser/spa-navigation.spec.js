@@ -75,3 +75,19 @@ test('invalid saved month defaults to calendar month and another account cannot 
   });
   expect(await page.evaluate(() => selectedIdx)).toBe(expected);
 });
+
+test('direct year selection survives SPA routes and refresh without a Settings years submenu', async ({ page }) => {
+  const year = String(new Date().getFullYear() + 2);
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
+  await page.locator('#activeYearSelect').selectOption(year);
+  await page.locator('#desktopOverviewButton').click();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(year);
+  await expect(page).toHaveURL(/[?&]page=overview(?:&|$)/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#activeYearSelect')).toHaveValue(year);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('[data-settings-section="years"]')).toHaveCount(0);
+  await page.locator('#desktopBudgetButton').click();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(year);
+});
