@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   integration:
-    if: github.ref == 'refs/heads/main'
+    # Only main pushes or an explicitly dispatched run on this reviewed PR branch may access the protected staging environment.
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/fix/live-income-ci-optimization')
     environment: staging-live-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
