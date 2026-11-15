@@ -1999,6 +1999,66 @@ function recurringRuleItem(r){
   return null;
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
+async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
+  const years = Object.keys(db).filter(year => /^\\d{4}$/.test(year) &&
+    year >= startDate.slice(0, 4) && (!endDate || year <= endDate.slice(0, 4)));
+  const deferred = [];
+  for (const year of years) {
+    if (currentUser?.id !== owner) return;
+    const key = owner + ':' + year;
+    if (cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year)) === '1') {
+      deferred.push(year);
+      continue;
+    }
+    try {
+      await queueCloudSave(key, async () => {
+        // Read first: an existing cloud row must never be replaced with an unversioned local copy.
+        const { data: rows, error: readError } = await supabaseClient.from('budget_ui_years')
+          .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
+        if (readError) throw readError;
+        if (!Array.isArray(rows) || rows.length > 1) throw new Error('Could not verify cloud budget year');
+        if (rows.length === 0) {
+          if (!validYearData(db[year])) throw new Error('Invalid local budget year');
+          const updatedAt = new Date().toISOString();
+          const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
+            user_id: owner, year: Number(year),
+            budget_data: structuredClone(db[year]), updated_at: updatedAt
+          });
+          if (insertError) throw insertError;
+          cloudBudgetVersions.set(key, updatedAt);
+        } else {
+          const knownVersion = cloudBudgetVersions.get(key);
+          if (knownVersion && knownVersion !== rows[0].updated_at) {
+            throw new Error('Budget changed on another device; reload before backfill');
+          }
+          if (!knownVersion && localStorage.getItem(storageKey(year))) {
+            // A local budget with no known cloud revision could contain unsynced edits.
+            // Never silently discard it or overwrite the authoritative cloud copy.
+            throw new Error('Unverified local budget; reload before backfill');
+          }
+          cloudBudgetVersions.set(key, rows[0].updated_at);
+        }
+        const result = await recurringAppService.backfillRecurringYear(supabaseClient, owner, Number(year));
+        if (currentUser?.id !== owner) return;
+        if (result.saved) {
+          db[year] = result.document;
+          cloudBudgetVersions.set(key, result.updatedAt);
+          localStorage.setItem(storageKey(year), JSON.stringify({
+            data: result.document, updatedAt: result.updatedAt
+          }));
+          if (activeYear === year) render();
+        }
+      });
+    } catch (error) {
+      console.warn('Automatic recurring backfill deferred for ' + year + ':', error);
+      deferred.push(year);
+    }
+  }
+  if (deferred.length) {
+    alert('Recurring rule saved, but entries could not be synchronized for ' +
+      deferred.join(', ') + '. Resolve cloud sync or reload before retrying.');
+  }
+}
 async function addRecurringRule(view) {
   const form = document.querySelector(`[data-recurring-form="${view}"]`);
   if (!form || !currentUser || !supabaseClient || !recurringAppService) return;
@@ -2014,30 +2074,7 @@ async function addRecurringRule(view) {
       startDate, endDate
     });
     await refreshRecurringPreview();
-    // Backfill from authoritative cloud data, never from a potentially stale local copy.
-    // A cloud conflict or unsaved year must be resolved before adding occurrences.
-    const owner = currentUser.id;
-    const year = activeYear;
-    const key = owner + ':' + year;
-    if (!cloudBudgetConflicts.has(key) && !cloudSaveQueues.has(key) &&
-        !cloudSaveQueues.has(year) && cloudBudgetVersions.has(key)) {
-      try {
-        const result = await recurringAppService.backfillRecurringYear(supabaseClient, owner, year);
-        if (currentUser?.id === owner && activeYear === year && result.saved) {
-          db[year] = result.document;
-          cloudBudgetVersions.set(key, result.updatedAt);
-          localStorage.setItem(storageKey(year), JSON.stringify({
-            data: result.document, updatedAt: result.updatedAt
-          }));
-          render();
-        }
-      } catch (backfillError) {
-        console.warn('Recurring rule saved; automatic backfill deferred:', backfillError);
-        alert('Rule saved, but scheduled entries could not be added. Reload after resolving cloud sync.');
-      }
-    } else {
-      console.warn('Recurring rule saved; automatic backfill deferred until cloud budget is synchronized.');
-    }
+    await backfillSavedRecurringYears(currentUser.id, startDate, endDate);
     form.querySelectorAll('input').forEach(input => input.value = '');
     renderRulesList();
   } catch (error) {
