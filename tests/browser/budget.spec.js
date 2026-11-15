@@ -267,12 +267,13 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
   await expect(page.locator('#incomeBody button', { hasText: 'Split income' })).toHaveCount(0);
 });
 
-test('account-based income amount can be edited and persists after reload', async ({ page }) => {
+test('unassigned income amount can be edited and persists after reload', async ({ page }) => {
   await page.locator('#newIncName').fill('Edited Pay');
   await page.locator('#newIncAccount').selectOption('');
   await page.locator('#newIncAmount').fill('200');
   await page.locator('button[onclick="addIncome()"]').click();
   const amount = page.locator('#incomeBody input[aria-label="Income amount"]').first();
+  await expect(amount).toBeEnabled();
   await amount.fill('350');
   await amount.press('Tab');
   await expect(page.locator('#incTotalBadge')).toHaveText('$350.00');
