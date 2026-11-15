@@ -300,3 +300,34 @@ test('desktop primary navigation follows the reference hierarchy without losing 
   await page.locator('[data-settings-section="years"]').click();
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
+
+test('account exclusions update dashboard totals without removing entries on desktop or mobile', async ({ page }) => {
+  await page.evaluate(() => {
+    const month = db[activeYear].months[0];
+    month.income.push({ name: 'Included pay', accountId: 'cpm', amount: 400 });
+    month.income.push({ name: 'Excluded pay', accountId: 'usaa', amount: 500 });
+    month.fixed.push({ name: 'Excluded rent', accountId: 'usaa', amount: 100, due: '1st' });
+    budgetAccounts = budgetAccounts.map(account => ({ ...account, included: account.id !== 'usaa' }));
+    renderAccounts();
+    render();
+  });
+  await expect(page.locator('#incTotalBadge')).toHaveText('$400.00');
+  await expect(page.locator('#fixTotalBadge')).toHaveText('$0.00');
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager [data-account-action="included"][data-account-id="usaa"]')).not.toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsAccounts [data-account-action="included"][data-account-id="usaa"]')).not.toBeChecked();
+  await page.evaluate(() => {
+    budgetAccounts = budgetAccounts.map(account => ({ ...account, included: true }));
+    renderAccounts();
+    render();
+  });
+  await expect(page.locator('#mobileSettingsAccounts [data-account-action="included"][data-account-id="usaa"]')).toBeChecked();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
+  await expect(page.locator('#mobileOverview')).toContainText('$900.00');
+  expect(await page.evaluate(() => db[activeYear].months[0].income.length)).toBe(2);
+});
