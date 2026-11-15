@@ -33,7 +33,12 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
       const alreadyPresent = Object.values(TARGETS).some(category =>
         months[index][category].some(entry =>
           entry.occurrenceId === occurrence.occurrenceId ||
-          entry.recurringRuleId === rule.id));
+          entry.recurringRuleId === rule.id ||
+          // Conservatively block an untagged same-name entry in this month.
+          // Never overwrite or silently duplicate a manually recorded transaction.
+          (!entry.occurrenceId && !entry.recurringRuleId &&
+            typeof entry.name === 'string' &&
+            entry.name.trim().toLocaleLowerCase() === occurrence.name.trim().toLocaleLowerCase())));
       if (blocked.has(rule.id) || alreadyPresent) {
         skipped.push(occurrence.occurrenceId);
         continue;
