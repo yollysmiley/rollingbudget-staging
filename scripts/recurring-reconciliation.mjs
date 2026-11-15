@@ -33,6 +33,7 @@ export function inspectRecurringHistory(years, manifest) {
         issues.push({ type: 'missing-id', year, index });
         continue;
       }
+      if (typeof rule.id === 'number') issues.push({ type: 'numeric-id-requires-normalization', year, id });
       if (withinYear.has(id)) issues.push({ type: 'duplicate-in-year', year, id });
       withinYear.add(id);
       const previous = seen.get(id);
