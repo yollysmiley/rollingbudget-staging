@@ -1,6 +1,6 @@
 ## Unreleased
 
-- Permit explicitly dispatched credentialed live integration on the reviewed PR #33 staging branch, retaining the protected environment and blocking ordinary pull-request secret access.
+- Temporarily permitted protected manual live integration on PR #33 for pre-merge verification; restored the workflow's main-only execution gate before merging.
 
 - Adopt the committed npm v3 lockfile in all staging CI workflows with `npm ci` and lockfile-keyed npm download caching; retain `--ignore-scripts` for secret-free and credentialed live validation. No change to required check names or deployment gates.
 
