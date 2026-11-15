@@ -1323,11 +1323,11 @@ async function applyRecurringPreview() {
     if (initial.ambiguous.length) {
       const examples = initial.ambiguous.slice(0, 8).map(item =>
         item.month + ': ' + item.name + ' (' + item.amount + ')' +
-        ' matches ' + item.matches.map(match => match.name + ' (' + match.amount + ')').join(', ')).join('\\n');
+        ' matches ' + item.matches.map(match => match.name + ' (' + match.amount + ')').join(', ')).join('\n');
       const includeAmbiguous = confirm(
-        initial.ambiguous.length + ' possible duplicate recurring entries were found.\\n' +
-        examples + (initial.ambiguous.length > 8 ? '\\n...and more.' : '') +
-        '\\n\\nOK: explicitly include these possible duplicates.\\n' +
+        initial.ambiguous.length + ' possible duplicate recurring entries were found.\n' +
+        examples + (initial.ambiguous.length > 8 ? '\n...and more.' : '') +
+        '\n\nOK: explicitly include these possible duplicates.\n' +
         'Cancel: keep existing transactions and skip all possible duplicates.'
       );
       if (includeAmbiguous) approvedOccurrenceIds = initial.ambiguous.map(item => item.occurrenceId);
