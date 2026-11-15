@@ -64,6 +64,16 @@ test('consecutive edits save immutable snapshots in order', async () => {
   await Promise.all([first, second]);
   assert.deepEqual(backfills, [{ owner: 'owner', from: '2026-01-01', through: '2026-12-31' }]);
 });
+test('explicit recurring rule creation skips the general first-year backfill', async () => {
+  const { context, writes, backfills } = harness();
+  const saving = vm.runInContext('saveDB({ backfillNewYear: false })', context);
+  await flush();
+  assert.equal(writes.length, 1);
+  writes[0].resolve({ error: null });
+  assert.equal(await saving, 'cloud-saved');
+  assert.deepEqual(backfills, []);
+});
+
 test('failed cloud save retains local snapshot and shows warning', async () => {
   const { context, writes, store, status } = harness();
   const saving = vm.runInContext('saveDB()', context);
