@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { normalizeRecurringRule, collectLegacyRecurringRules } from '../scripts/recurring-foundation.mjs';
 import { migrateRecurringRules } from '../scripts/recurring-storage.mjs';
 
+const manifest = { complete: true, expectedYears: ['2026'] };
 const historical = { 2026: { recurringRules: [
   { id: 'mortgage', cat: 'fixed', name: 'Mortgage', amount: 1850, startMonth: 2, frequency: 'monthly', acct: 'checking' },
   { id: 'annual', cat: 'income', name: 'Bonus', amount: 100, startMonth: 10, frequency: 'annually', active: false }
@@ -51,17 +52,63 @@ test('migration writes only user-owned rows and retries idempotently', async () 
       return { error: null };
     } };
   } };
-  assert.deepEqual(await migrateRecurringRules(client, 'user-a', {}), { discovered: 0 });
+  assert.deepEqual(await migrateRecurringRules(client, 'user-a', {}, { complete: true, expectedYears: [] }), { discovered: 0 });
   assert.equal(calls, 0);
-  await migrateRecurringRules(client, 'user-a', historical);
-  await migrateRecurringRules(client, 'user-a', historical);
+  await migrateRecurringRules(client, 'user-a', historical, manifest);
+  await migrateRecurringRules(client, 'user-a', historical, manifest);
   assert.equal(stored.size, 2);
   assert.equal(calls, 2);
   assert.equal(historical[2026].months[0].fixed.length, 1);
 });
 
 test('migration rejects unauthenticated writes and propagates database errors', async () => {
-  await assert.rejects(() => migrateRecurringRules(null, null, historical), /Authenticated/);
+  await assert.rejects(() => migrateRecurringRules(null, null, historical, manifest), /Authenticated/);
   const client = { from() { return { upsert: async () => ({ error: new Error('offline') }) }; } };
-  await assert.rejects(() => migrateRecurringRules(client, 'user-a', historical), /offline/);
+  await assert.rejects(() => migrateRecurringRules(client, 'user-a', historical, manifest), /offline/);
+});
+
+test('rejects missing, partial and mismatched year manifests before any write', async () => {
+  let writes = 0;
+  const client = { from() { writes++; throw new Error('unexpected write'); } };
+  await assert.rejects(() => migrateRecurringRules(client, 'user-a', historical), /manifest/);
+  await assert.rejects(() => migrateRecurringRules(client, 'user-a', historical, { complete: false, expectedYears: ['2026'] }), /manifest/);
+  await assert.rejects(() => migrateRecurringRules(client, 'user-a', historical, { complete: true, expectedYears: ['2026', '2027'] }), /Incomplete/);
+  await assert.rejects(() => migrateRecurringRules(client, 'user-a', historical, { complete: true, expectedYears: ['2026', '2026'] }), /Incomplete/);
+  assert.equal(writes, 0);
+});
+
+test('requires stable legacy IDs even after reordering historical records', () => {
+  const input = structuredClone(historical);
+  delete input[2026].recurringRules[0].id;
+  assert.throws(() => collectLegacyRecurringRules(input), /Stable legacy rule ID/);
+  input[2026].recurringRules.reverse();
+  assert.throws(() => collectLegacyRecurringRules(input), /Stable legacy rule ID/);
+});
+
+test('rejects repeated rule IDs across years pending explicit historical reconciliation', async () => {
+  const twoYears = structuredClone(historical);
+  twoYears[2027] = structuredClone(historical[2026]);
+  assert.throws(() => collectLegacyRecurringRules(twoYears), /multiple years/);
+  let writes = 0;
+  const client = { from() { writes++; throw new Error('unexpected write'); } };
+  await assert.rejects(() => migrateRecurringRules(client, 'user-a', twoYears, { complete: true, expectedYears: ['2026', '2027'] }), /multiple years/);
+  assert.equal(writes, 0);
+});
+
+test('rejects invalid categories, identifiers and amounts', () => {
+  const base = { id: 'rule-1', name: 'Rent', category: 'fixed', amount: 100, startDate: '2026-01-01' };
+  assert.throws(() => normalizeRecurringRule({ ...base, id: '' }), /identifier/);
+  assert.throws(() => normalizeRecurringRule({ ...base, category: 'other' }), /category/);
+  assert.throws(() => normalizeRecurringRule({ ...base, amount: '100' }), /amount/);
+  assert.throws(() => normalizeRecurringRule({ ...base, startDate: '0000-01-01' }), /start date/);
+  const bad = structuredClone(historical);
+  bad[2026].recurringRules[0].cat = 'other';
+  assert.throws(() => collectLegacyRecurringRules(bad), /category/);
+});
+
+test('migration rejects duplicate IDs in a year and leaves original data intact', () => {
+  const bad = structuredClone(historical);
+  bad[2026].recurringRules.push(structuredClone(bad[2026].recurringRules[0]));
+  assert.throws(() => collectLegacyRecurringRules(bad), /Duplicate legacy/);
+  assert.equal(historical[2026].months[0].fixed[0].amount, 1850);
 });
