@@ -1568,7 +1568,7 @@ function queueCloudSave(key, operation) {
   }).catch(() => {});
   return pending;
 }
-async function saveDB() {
+async function saveDB({ backfillNewYear = true } = {}) {
   const year = activeYear;
   const userId = currentUser?.id || null;
   let insertedNewYear = false;
@@ -1611,7 +1611,7 @@ async function saveDB() {
       cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) {
-      if (insertedNewYear) {
+      if (insertedNewYear && backfillNewYear) {
         // Available years are virtual until edited. Apply global schedules only
         // after the year's first confirmed cloud save.
         await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
@@ -2284,7 +2284,8 @@ async function addRecurringRule(view) {
     if (selectedYear === activeYear && selectedYear >= startDate.slice(0, 4) &&
         (!endDate || selectedYear <= endDate.slice(0, 4)) &&
         !cloudBudgetVersions.has(owner + ':' + selectedYear)) {
-      const status = await saveDB();
+      // addRecurringRule performs its own scoped backfill below; do not run it twice.
+      const status = await saveDB({ backfillNewYear: false });
       if (status !== 'cloud-saved') {
         renderRulesList();
         alert('Recurring rule saved, but the selected budget year could not be synchronized. Resolve the cloud save before retrying.');
