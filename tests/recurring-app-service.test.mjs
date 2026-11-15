@@ -68,10 +68,10 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
         eq(field, value) { filters[field] = value; return query; },
         async select() { calls.push(['update', changes, filters]); return { data: [{ id: filters.id }], error: null }; }
       }; return query; },
-      delete() { return { eq(field, owner) {
-        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
-        return { async eq(key, id) { calls.push(['delete', key, id]); return { error: null }; } };
-      } }; }
+      delete() { const filters = {}; const chain = {
+        eq(field, value) { filters[field] = value; return chain; },
+        async select() { calls.push(['delete', filters]); return { data: [{ id: filters.id }], error: null }; }
+      }; return chain; }
     };
   } };
   const historical = budget();
@@ -92,7 +92,10 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
   assert.equal(calls[1][2].user_id, 'owner-a');
   assert.equal(calls[1][2].id, 'new-rent');
   assert.equal(typeof calls[1][2].versions, 'string');
-  assert.deepEqual(calls[2], ['delete', 'id', 'new-rent']);
+  assert.equal(calls[2][0], 'delete');
+  assert.equal(calls[2][1].user_id, 'owner-a');
+  assert.equal(calls[2][1].id, 'new-rent');
+  assert.equal(typeof calls[2][1].versions, 'string');
   assert.deepEqual(historical, snapshot);
 });
 
@@ -146,4 +149,27 @@ test('concurrent rule version update is rejected without changing the source', a
     { amount: 600 }, '2027-01-01'), /changed on another device/);
   assert.equal(source.versions.length, 1);
   assert.equal(source.versions[0].amount, 500);
+});
+
+test('concurrent edit prevents stale owner-scoped recurring deletion', async () => {
+  const initial = structuredClone(rule);
+  const filters = {};
+  const client = { from(table) {
+    assert.equal(table, 'budget_recurring_rules');
+    return {
+      select() { return { eq(field, value) {
+        assert.equal(field, 'user_id'); assert.equal(value, 'owner-a');
+        return { async eq(key, id) { assert.equal(key, 'id'); assert.equal(id, 'rent'); return { data: [initial], error: null }; } };
+      } }; },
+      delete() { const chain = {
+        eq(field, value) { filters[field] = value; return chain; },
+        async select() { return { data: [], error: null }; }
+      }; return chain; }
+    };
+  } };
+  await assert.rejects(() => removeRecurringRule(client, 'owner-a', 'rent'),
+    /changed on another device/);
+  assert.equal(filters.user_id, 'owner-a');
+  assert.equal(filters.id, 'rent');
+  assert.equal(filters.versions, JSON.stringify(initial.versions));
 });
