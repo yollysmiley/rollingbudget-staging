@@ -1039,6 +1039,7 @@ function clearMonthPreferences(user) {
     for (const key of Object.keys(sessionStorage)) {
       if (key.startsWith(prefix)) sessionStorage.removeItem(key);
     }
+    sessionStorage.removeItem('rollingbudget_selected_year:' + encodeURIComponent(user.id));
   } catch (error) { console.warn("Could not clear month preferences", error); }
 }
 function selectedYearSessionKey(user = currentUser) {
@@ -1374,14 +1375,6 @@ function parseLocalBudgetRecord(raw) {
   }
   return null;
 }
-function chooseNewestBudget(localRecord, cloudRecord) {
-  if (!localRecord) return cloudRecord;
-  if (!cloudRecord) return localRecord;
-  // An unversioned legacy local record has unknown age. Prefer the timestamped cloud copy.
-  if (localRecord.updatedAt === null && cloudRecord.updatedAt !== null) return cloudRecord;
-  if (cloudRecord.updatedAt === null && localRecord.updatedAt !== null) return localRecord;
-  return (localRecord.updatedAt ?? 0) > (cloudRecord.updatedAt ?? 0) ? localRecord : cloudRecord;
-}
 async function loadAllYears() {
   const { availableBudgetYears, sameBudgetDocument } = await import('./scripts/year-discovery.mjs');
   cloudBudgetVersions.clear();
@@ -1578,6 +1571,7 @@ function queueCloudSave(key, operation) {
 async function saveDB() {
   const year = activeYear;
   const userId = currentUser?.id || null;
+  let insertedNewYear = false;
   const snapshot = JSON.parse(JSON.stringify(db[year]));
   const updatedAt = new Date().toISOString();
   try {
@@ -1612,10 +1606,18 @@ async function saveDB() {
           user_id: userId, year: Number(year), budget_data: snapshot, updated_at: nextTimestamp
         });
         if (error) throw error;
+        insertedNewYear = true;
       }
       cloudBudgetVersions.set(key, nextTimestamp);
     });
-    if (currentUser?.id === userId) showCloudSaveStatus("");
+    if (currentUser?.id === userId) {
+      if (insertedNewYear) {
+        // Available years are virtual until edited. Apply global schedules only
+        // after the year's first confirmed cloud save.
+        await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
+      }
+      showCloudSaveStatus("");
+    }
     return 'cloud-saved';
   } catch (error) {
     console.error("Cloud sync error; local copy was retained:", error);
