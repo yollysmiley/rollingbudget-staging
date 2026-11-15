@@ -84,3 +84,7 @@ The scheduler uses stable occurrence IDs, original-month frequency anchoring and
 Potential duplicates across all categories are classified by normalized transaction names, including cases with changed amounts or accounts. Existing occurrence IDs are never recreated. Untagged possible duplicates are skipped by default, with a separate explicit review prompt for every ambiguous occurrence before the final Apply confirmation. No existing budget transaction is deleted or overwritten. Heuristic matching cannot guarantee detection of unrelated renamed transactions.
 
 Regression coverage includes recurring service and scheduler unit tests, preview classification and individual approval tests, cloud conflict tests, desktop/mobile browser acceptance, and clean-account fixtures. Required staging CI must pass before merge. Production is unchanged.
+
+## Final review hardening
+
+Recurring-rule deletion is guarded by an owner-scoped versions compare-and-swap, matching effective-dated edits. Duplicate review uses exact normalized names, distinctive leading names, or substantive shared terms with matching amount and account, avoiding prompts from generic shared words alone. Desktop and mobile browser regression tests cover unresolved cloud conflicts, reload persistence, and explicit cloud recovery. Unit tests cover repeated stale saves and concurrent rule edit/delete rejection. Browser doubles enforce owner identity; live Supabase/RLS integration validation remains necessary before production promotion.
