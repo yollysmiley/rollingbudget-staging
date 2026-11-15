@@ -11,7 +11,8 @@ test('desktop header retains authentication and exposes Settings navigation', ()
   assert.match(header, /id="desktopBudgetButton"/);
   assert.match(header, /id="authBtn"/);
   assert.match(header, /aria-label="Primary navigation"/);
-  assert.match(header, /id="desktopPlanButton"/);
+  assert.doesNotMatch(header, /id="desktopPlanButton"/);
+  assert.match(header, /id="desktopBudgetButton"[^>]*>Budget<\/button>/);
   assert.match(header, /id="desktopRecurringButton"/);
   assert.doesNotMatch(header, /id="activeYearSelect"|id="autoRollToggle"|openRecurringModal\(\)/);
 });
@@ -33,4 +34,21 @@ test('desktop Settings is reversible and mobile controls retain a separate mount
   assert.match(html, /function syncMobileSettingsControls\(\)/);
   assert.match(html, /id="mobileSettingsControls"/);
   assert.match(html, /setDesktopSettings\(false\)/);
+});
+
+test('desktop Settings submenu selects exactly one screen without anchor scrolling', () => {
+  for (const section of ['accounts','years','automation','security']) assert.match(panel, new RegExp('data-settings-section="' + section + '"'));
+  assert.doesNotMatch(panel, /href="#settings(?:Accounts|Years|Automation|Profile)"/);
+  for (const id of ['settingsYears','settingsAutomation','settingsProfile']) assert.match(panel, new RegExp('id="' + id + '" hidden'));
+  assert.match(html, /function showSettingsSection\(section\)/);
+  assert.match(html, /panel\.hidden = key !== section/);
+  assert.match(html, /showDesktopPage\('budget'\)/);
+});
+test('mobile Settings menu and detail view are separate from desktop controls', () => {
+  assert.match(html, /id="mobileSettingsMenu"/);
+  assert.match(html, /id="mobileSettingsDetail" hidden/);
+  for (const section of ['accounts','years','automation','security']) assert.match(html, new RegExp('data-mobile-settings-section="' + section + '"'));
+  assert.match(html, /function showMobileSettingsSection\(section\)/);
+  assert.match(html, /function showMobileSettingsMenu\(\)/);
+  assert.match(html, /Back to Settings/);
 });

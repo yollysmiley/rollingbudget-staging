@@ -625,7 +625,7 @@
   body.desktop-settings-open > .container { display:none; }
   @media (max-width:768px) { .desktop-settings-panel { display:none !important; } }
 </style>
-  <link rel="stylesheet" href="styles/brand.css">
+  <link rel="stylesheet" href="styles/brand.css"><link rel="stylesheet" href="styles/settings.css">
 </head>
 <body>
 <style id="authGateStyle">html:not(.budget-authenticated) body > :not(#authGateScreen):not(script){visibility:hidden!important}#authGateScreen{position:fixed;inset:0;z-index:99999;background:#f8f7fc;color:#17152b;display:grid;place-items:center;font-family:Inter,system-ui,sans-serif;padding:24px}html.budget-authenticated #authGateScreen{display:none}#authGateScreen section{max-width:440px;text-align:center}#authGateScreen a{color:#7c3aed;font-weight:700}</style>
@@ -648,8 +648,7 @@
     <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
     <div class="controls desktop-header-actions">
       <nav class="desktop-primary-nav" aria-label="Primary navigation">
-        <button type="button" id="desktopBudgetButton" onclick="showDesktopPage('overview')" aria-current="page">Overview</button>
-        <button type="button" id="desktopPlanButton" onclick="showDesktopPage('plan')">Plan</button>
+        <button type="button" id="desktopBudgetButton" onclick="showDesktopPage('budget')" aria-current="page">Budget</button>
         <button type="button" id="desktopRecurringButton" onclick="showDesktopPage('recurring')">Recurring Rules</button>
         <button type="button" id="desktopSettingsButton" onclick="showDesktopPage('settings')" aria-expanded="false" aria-controls="desktopSettingsPanel">Settings</button>
       </nav>
@@ -677,19 +676,19 @@
   <h2>Settings</h2>
   <div class="settings-layout">
     <nav class="settings-section-nav" aria-label="Settings sections">
-      <a href="#settingsAccounts">Budget Accounts</a>
-      <a href="#settingsYears">Budget Years</a>
-      <a href="#settingsAutomation">Rollover &amp; Automation</a>
-      <a href="#settingsProfile">Profile &amp; Security</a>
-    </nav>
+<button type="button" data-settings-section="accounts" aria-controls="settingsAccounts" onclick="showSettingsSection('accounts')">Budget Accounts</button>
+<button type="button" data-settings-section="years" aria-controls="settingsYears" onclick="showSettingsSection('years')">Budget Years</button>
+<button type="button" data-settings-section="automation" aria-controls="settingsAutomation" onclick="showSettingsSection('automation')">Rollover &amp; Automation</button>
+<button type="button" data-settings-section="security" aria-controls="settingsProfile" onclick="showSettingsSection('security')">Profile &amp; Security</button>
+</nav>
     <div class="settings-sections">
   <div class="desktop-settings-card" id="settingsAccounts">
     <h3>Budget Accounts</h3>
     <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
     <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
   </div>
-  <div class="desktop-settings-card" id="settingsYears">
-    <h3>Budget Years &amp; Rollover Automation</h3>
+  <div class="desktop-settings-card" id="settingsYears" hidden>
+    <h3>Budget Years</h3>
     <div class="controls" id="budgetSettingsControls">
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
@@ -699,6 +698,13 @@
         </select>
       </div>
       <button onclick="createNewYear()">+ New Year</button>
+
+    </div>
+  </div>
+  <div class="desktop-settings-card" id="settingsAutomation" hidden>
+    <h3>Rollover &amp; Automation</h3>
+    <p>Control how unspent funds carry forward and manage recurring budget rules.</p>
+    <div class="controls" id="desktopAutomationControls">
       <label class="toggle-pill" title="Auto-cascade surplus into next month">
         <input type="checkbox" id="autoRollToggle" checked />
         <span>Auto-Cascade</span>
@@ -706,11 +712,7 @@
       <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
     </div>
   </div>
-  <div class="desktop-settings-card" id="settingsAutomation">
-    <h3>Rollover &amp; Automation</h3>
-    <p>Manage your auto-cascade setting above. Recurring rules are available from the primary navigation.</p>
-  </div>
-  <div class="desktop-settings-card" id="settingsProfile">
+  <div class="desktop-settings-card" id="settingsProfile" hidden>
     <h3>Profile &amp; Security</h3>
     <p>Your account session and recovery options are managed through Rolling Budget authentication.</p>
   </div>
@@ -733,21 +735,28 @@
   <section id="mobileOverview" class="mobile-overview" aria-label="Monthly budget overview"></section>
   <section id="mobileSettingsPanel" class="mobile-settings-panel" aria-label="Settings">
     <h2>Settings</h2>
-    <p style="color:var(--muted);font-size:.86rem;margin:8px 0 16px">Manage your Rolling Budget account and application preferences.</p>
-    <div class="card mobile-settings-section" style="padding:16px;box-shadow:none;margin-bottom:12px">
+    <p class="mobile-settings-intro">Choose a section to manage your budget preferences.</p>
+<nav id="mobileSettingsMenu" class="mobile-settings-menu" aria-label="Settings sections">
+<button type="button" onclick="showMobileSettingsSection('accounts')">Budget Accounts</button>
+<button type="button" onclick="showMobileSettingsSection('years')">Budget Years</button>
+<button type="button" onclick="showMobileSettingsSection('automation')">Rollover &amp; Automation</button>
+<button type="button" onclick="showMobileSettingsSection('security')">Profile &amp; Security</button>
+</nav>
+<div id="mobileSettingsDetail" hidden><button type="button" class="mobile-settings-back" onclick="showMobileSettingsMenu()">← Back to Settings</button>
+    <div data-mobile-settings-section="accounts" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none;margin-bottom:12px">
       <h3 style="font-size:.95rem;margin-bottom:8px">Budget Accounts</h3>
       <div id="mobileSettingsAccounts" class="account-manager"></div>
     </div>
-    <div class="card mobile-settings-section" style="padding:16px;box-shadow:none">
-      <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years &amp; Rollover</h3>
-      <div id="mobileSettingsControls"></div>
-    </div>
-    <div class="card mobile-settings-section" style="padding:16px;box-shadow:none">
+    <div data-mobile-settings-section="years" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
+      <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years</h3>
+      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p><button type="button" class="primary" onclick="openRecurringModal()">Recurring Rules</button></div>
+    <div data-mobile-settings-section="security" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
       <button type="button" class="primary" onclick="handleAuthClick()">Manage Account</button>
     </div>
-  </section>
+  </div>
+</section>
   <section class="mobile-settings-panel" id="mobileAccountsManagerPanel" aria-label="Mobile Accounts Manager" style="display:none">
     <h3>Accounts</h3>
     <div id="mobileAccountsManager" class="account-manager"></div>
@@ -1419,7 +1428,7 @@ function render() {
   const m = yearData.months[selectedIdx];
   const c = computed[selectedIdx];
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
-  document.getElementById("autoRollToggle").checked = yearData.autoCascade;
+  document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
@@ -1456,7 +1465,7 @@ function render() {
     </div>`;
   if (!document.body.dataset.mobileTabInitialized) { setMobileTab("overview"); document.body.dataset.mobileTabInitialized = "true"; }
 
-  document.getElementById("activeYearSelect").value = activeYear;
+  document.getElementById("activeYearSelect").value = activeYear; syncMobileSettingsControls();
 
   document.getElementById("rollingStrip").innerHTML = yearData.months.map((mo, idx) => {
     const co = computed[idx];
@@ -1617,9 +1626,8 @@ function render() {
 function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
 function selectMonth(idx) { selectedIdx = idx; render(); }
 
-document.getElementById("autoRollToggle").addEventListener("change", async (e) => {
-  db[activeYear].autoCascade = e.target.checked;
-  await saveDB(); render();
+document.getElementById("autoRollToggle").addEventListener("change", (e) => {
+  void setAutoCascade(e.target.checked);
 });
 
 async function updateStartLeftover(val) {
@@ -1835,22 +1843,43 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
+const settingsSectionIds = { accounts: "settingsAccounts", years: "settingsYears", automation: "settingsAutomation", security: "settingsProfile" };
+let activeSettingsSection = "accounts";
+function showSettingsSection(section) {
+  if (!settingsSectionIds[section]) return;
+  activeSettingsSection = section;
+  for (const [key, id] of Object.entries(settingsSectionIds)) {
+    const panel = document.getElementById(id);
+    if (panel) panel.hidden = key !== section;
+  }
+  document.querySelectorAll("[data-settings-section]").forEach(button => {
+    if (button.dataset.settingsSection === section) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+}
+function showMobileSettingsMenu() {
+  document.getElementById("mobileSettingsMenu").hidden = false;
+  document.getElementById("mobileSettingsDetail").hidden = true;
+}
+function showMobileSettingsSection(section) {
+  if (!settingsSectionIds[section]) return;
+  document.querySelectorAll("[data-mobile-settings-section]").forEach(panel => {
+    panel.hidden = panel.dataset.mobileSettingsSection !== section;
+  });
+  document.getElementById("mobileSettingsMenu").hidden = true;
+  document.getElementById("mobileSettingsDetail").hidden = false;
+}
 function showDesktopPage(page) {
   if (window.matchMedia("(max-width: 768px)").matches) return;
-  if (page === "recurring") {
-    setDesktopSettings(false);
-    openRecurringModal();
-  } else {
+  if (page === "recurring") { setDesktopSettings(false); openRecurringModal(); }
+  else {
     closeRecurringModal();
     setDesktopSettings(page === "settings");
-    if (page === "plan") document.querySelector(".main-grid")?.scrollIntoView({ block: "start" });
-    else window.scrollTo({ top: 0, behavior: "instant" });
+    if (page === "settings") showSettingsSection(activeSettingsSection);
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
   document.querySelectorAll(".desktop-primary-nav button").forEach(button => {
-    const current = button.id === ({
-      overview: "desktopBudgetButton", plan: "desktopPlanButton",
-      recurring: "desktopRecurringButton", settings: "desktopSettingsButton"
-    })[page];
+    const current = button.id === ({ budget: "desktopBudgetButton", recurring: "desktopRecurringButton", settings: "desktopSettingsButton" })[page];
     if (current) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
@@ -1860,25 +1889,28 @@ function setDesktopSettings(open) {
   document.body.classList.toggle("desktop-settings-open", enabled);
   const panel = document.getElementById("desktopSettingsPanel");
   const settings = document.getElementById("desktopSettingsButton");
-  const budget = document.getElementById("desktopBudgetButton");
   if (panel) panel.hidden = !enabled;
   if (settings) settings.setAttribute("aria-expanded", String(enabled));
-  if (budget) budget.hidden = false;
 }
 function syncMobileSettingsControls() {
-  const controls = document.getElementById("budgetSettingsControls");
-  const mobileMount = document.getElementById("mobileSettingsControls");
-  if (!controls || !mobileMount) return;
-  const mobile = window.matchMedia("(max-width: 768px)").matches;
-  const movable = Array.from(controls.children).filter(node => node.dataset.setting !== "recurring");
-  if (mobile) {
-    movable.forEach(node => mobileMount.appendChild(node));
-    setDesktopSettings(false);
-  } else {
-    movable.forEach(node => controls.appendChild(node));
+  const desktop = document.getElementById("activeYearSelect");
+  const mobile = document.getElementById("mobileActiveYearSelect");
+  if (desktop && mobile) {
+    mobile.replaceChildren(...Array.from(desktop.options, option => option.cloneNode(true)));
+    mobile.value = activeYear;
   }
+  const toggle = document.getElementById("mobileAutoRollToggle");
+  if (toggle && db?.[activeYear]) toggle.checked = Boolean(db[activeYear].autoCascade);
+  if (window.matchMedia("(max-width: 768px)").matches) setDesktopSettings(false);
 }
-
+async function setAutoCascade(enabled) {
+  if (!db?.[activeYear]) return;
+  db[activeYear].autoCascade = Boolean(enabled);
+  document.getElementById("autoRollToggle").checked = Boolean(enabled);
+  document.getElementById("mobileAutoRollToggle").checked = Boolean(enabled);
+  await saveDB();
+  render();
+}
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
   closeRecurringModal();
@@ -1890,6 +1922,7 @@ function setMobileTab(tab) {
     button.setAttribute("aria-current", active ? "page" : "false");
   });
   toggleMobileSidebar(false);
+  if (tab === "settings") showMobileSettingsMenu();
   if (tab === "plan") updateMobileCardToggleAllLabel();
 }
 

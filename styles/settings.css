@@ -1,0 +1,29 @@
+/* Phase 3A: distinct Settings presentations, shared application state. */
+.settings-section-nav a[aria-current="location"]{background:#ede9fe;color:#5b21b6;box-shadow:inset 3px 0 0 var(--rb-accent)}
+.desktop-settings-panel .settings-sections{display:grid;gap:18px}
+.desktop-settings-panel .desktop-settings-card{min-width:0}
+.mobile-settings-controls{display:grid;gap:10px}
+.mobile-settings-controls label,.mobile-settings-toggle{font-weight:700;color:var(--text)}
+.mobile-settings-controls select,.mobile-settings-controls button{width:100%;min-height:44px}
+.mobile-settings-toggle{display:flex;gap:12px;align-items:center;min-height:44px}
+.mobile-settings-toggle input{width:20px;height:20px;accent-color:var(--rb-accent)}
+.settings-help{color:var(--muted);font-size:.85rem;line-height:1.5;margin:5px 0 14px}
+@media(max-width:768px){#mobileSettingsPanel{max-width:100%;overflow-wrap:anywhere}#mobileSettingsPanel .mobile-settings-section{min-width:0}#mobileSettingsPanel button{min-height:44px}}
+@media(min-width:769px){#mobileSettingsPanel{display:none!important}}
+
+/* Override the legacy movable-control layout without touching budget forms. */
+#mobileSettingsControls{display:grid!important;gap:10px}
+#mobileSettingsControls > label{display:block!important}
+#mobileSettingsControls > select{display:block!important;width:100%}
+#mobileSettingsControls > button{display:block!important;width:100%}
+
+/* Settings navigation displays one content screen at a time. */
+.desktop-settings-card[hidden],.mobile-settings-section[hidden],#mobileSettingsDetail[hidden],#mobileSettingsMenu[hidden]{display:none!important}
+.settings-section-nav button{appearance:none;border:0;background:transparent;text-align:left;color:#42375d;padding:12px;border-radius:10px;font:inherit;font-weight:650;cursor:pointer;min-height:44px}
+.settings-section-nav button:hover,.settings-section-nav button:focus-visible,.settings-section-nav button[aria-current="page"]{background:#ede9fe;color:#5b21b6}
+.settings-section-nav button[aria-current="page"]{box-shadow:inset 3px 0 0 var(--rb-accent)}
+.mobile-settings-menu{display:grid;gap:10px}
+.mobile-settings-menu button{min-height:52px;width:100%;text-align:left;background:#fff;border:1px solid var(--rb-border);border-radius:12px;color:#42375d;padding:12px 16px;font-weight:650}
+.mobile-settings-menu button:focus-visible,.mobile-settings-menu button:hover{border-color:var(--rb-accent);background:#ede9fe}
+.mobile-settings-back{min-height:44px;margin-bottom:14px;background:transparent;color:#5b21b6;border:0;font-weight:700;padding:8px}
+.mobile-settings-intro{color:var(--muted);font-size:.86rem;margin:8px 0 16px}
