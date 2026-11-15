@@ -330,3 +330,73 @@ test('recurring sync rejects a cloud revision changed after preflight without wr
     { expectedUpdatedAt: 'newer-revision', canCommit: () => false }), /cancelled/);
   assert.equal(writes, 0);
 });
+
+test('legacy globally inactive rule resumes only from its future enabled version', async () => {
+  let stored = { ...structuredClone(rule), active: false,
+    start_date: '2026-11-15', versions: [{
+      effectiveFrom: '2026-11-01', name: 'Rent', amount: 500,
+      due: '15', accountId: null, frequency: 'monthly'
+    }] };
+  const query = () => ({ select() { return { eq(field, owner) {
+    assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+    return { async eq(key, value) {
+      assert.equal(key, 'id'); assert.equal(value, 'rent');
+      return { data: [stored], error: null };
+    } };
+  } }; }, update(change) { const filters = {};
+    const updating = { eq(key, value) { filters[key] = value; return updating; },
+      async select() {
+        assert.equal(filters.user_id, 'owner-a');
+        assert.equal(filters.id, 'rent');
+        assert.equal(filters.active, false);
+        assert.equal(filters.versions, JSON.stringify(stored.versions));
+        stored = { ...stored, ...change };
+        return { data: [{ id: stored.id }], error: null };
+      }
+    };
+    return updating;
+  } });
+  const client = { from(table) { assert.equal(table, 'budget_recurring_rules'); return query(); } };
+  await setRecurringRuleActive(client, 'owner-a', 'rent', true, '2026-12-01');
+  assert.equal(stored.active, true);
+  assert.deepEqual(stored.versions.map(v => [v.effectiveFrom, v.enabled]), [
+    ['2026-11-01', false], ['2026-12-01', true]
+  ]);
+});
+
+test('edits to future-starting rules may update their initial month without invalid date rejection', async () => {
+  const future = { ...structuredClone(rule), start_date: '2028-01-15', versions: [{
+    effectiveFrom: '2028-01-01', name: 'Rent', amount: 500,
+    due: '15', accountId: null, frequency: 'monthly'
+  }] };
+  let changed;
+  const client = { from() { return {
+    select() { return { eq() { return { async eq() { return { data: [future], error: null }; } }; } }; },
+    update(next) { const q = { eq() { return q; }, async select() {
+      changed = next;
+      return { data: [{ id: 'rent' }], error: null };
+    } }; return q; }
+  }; } };
+  await editRecurringRule(client, 'owner-a', 'rent', { amount: 625 }, '2028-01-01');
+  assert.equal(changed.versions.length, 1);
+  assert.equal(changed.versions[0].amount, 625);
+});
+
+test('loaded rules expose next-month scheduling independently of current status', async () => {
+  const today = new Date();
+  const thisMonth = today.toISOString().slice(0, 7) + '-01';
+  const nextMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+    .toISOString().slice(0, 10);
+  const latest = { ...rule, start_date: thisMonth, versions: [
+    { effectiveFrom: thisMonth, name: 'Rent', amount: 500, frequency: 'monthly' },
+    { effectiveFrom: nextMonth, name: 'Rent', amount: 650, frequency: 'monthly', enabled: false }
+  ] };
+  const client = { from() { return { select() { return { async eq() {
+    return { data: [latest], error: null };
+  } }; } }; } };
+  const loaded = await loadRecurringPreviewRules(client, 'owner-a');
+  assert.equal(loaded.rules[0].displayActive, true);
+  assert.equal(loaded.rules[0].upcomingActive, false);
+  assert.equal(loaded.rules[0].upcomingAmount, 650);
+  assert.equal(loaded.rules[0].upcomingEffectiveFrom, nextMonth);
+});

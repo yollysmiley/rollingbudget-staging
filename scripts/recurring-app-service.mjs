@@ -25,14 +25,22 @@ export async function loadRecurringPreviewRules(client, userId) {
     if (!Array.isArray(rule.versions) || !rule.versions.length) {
       throw new Error('Recurring rule versions missing');
     }
-    const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
-    const currentVersion = rule.versions.filter(version => version.effectiveFrom <= currentMonth)
-      .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
-    const displayVersion = currentVersion || rule.versions
-      .slice().sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))[0];
-    rule.displayActive = row.active !== false && (displayVersion?.enabled !== false);
+    const today = new Date();
+    const currentMonth = today.toISOString().slice(0, 7) + '-01';
+    const nextMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+      .toISOString().slice(0, 10);
+    const versions = rule.versions.slice().sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+    const displayVersion = versions.filter(version => version.effectiveFrom <= currentMonth).at(-1) || versions[0];
+    const upcomingMonth = nextMonth > rule.startDate.slice(0, 7) + '-01'
+      ? nextMonth : rule.startDate.slice(0, 7) + '-01';
+    const upcomingVersion = versions.filter(version => version.effectiveFrom <= upcomingMonth).at(-1) || versions[0];
+    rule.displayActive = row.active !== false && displayVersion?.enabled !== false;
     rule.displayAmount = displayVersion?.amount ?? rule.amount;
     rule.displayFrequency = displayVersion?.frequency ?? rule.frequency;
+    rule.upcomingActive = row.active !== false && upcomingVersion?.enabled !== false;
+    rule.upcomingAmount = upcomingVersion?.amount ?? rule.amount;
+    rule.upcomingFrequency = upcomingVersion?.frequency ?? rule.frequency;
+    rule.upcomingEffectiveFrom = upcomingMonth;
     rules.push(rule);
   }
   return { rules, held };
@@ -67,9 +75,13 @@ export async function editRecurringRule(client, userId, id, changes, effectiveFr
   if (readError) throw readError;
   if (!Array.isArray(rows) || rows.length !== 1) throw new Error('Recurring rule not found');
   const row = rows[0];
-  if (effectiveFrom < row.start_date) throw new Error('Effective date precedes rule start');
-  const versions = structuredClone(row.versions);
+  if (effectiveFrom < row.start_date.slice(0, 7) + '-01') throw new Error('Effective month precedes rule start');
+  let versions = structuredClone(row.versions);
   if (!Array.isArray(versions) || !versions.length) throw new Error('Recurring rule versions missing');
+  // Legacy rows with active=false would remain disabled forever if only the
+  // effective-dated version were enabled. Preserve their disabled history.
+  const reactivateLegacy = changes.enabled === true && row.active === false;
+  if (reactivateLegacy) versions = versions.map(version => ({ ...version, enabled: false }));
   const current = versions.filter(version => version.effectiveFrom <= effectiveFrom)
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
   if (!current) throw new Error('No applicable recurring version');
@@ -81,9 +93,11 @@ export async function editRecurringRule(client, userId, id, changes, effectiveFr
   });
   const updated = [...versions.filter(version => version.effectiveFrom !== effectiveFrom), next]
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-  const { data: written, error: writeError } = await client.from('budget_recurring_rules')
-    .update({ versions: updated }).eq('user_id', userId).eq('id', id)
-    .eq('versions', JSON.stringify(row.versions)).select('id');
+  let mutation = client.from('budget_recurring_rules')
+    .update(reactivateLegacy ? { versions: updated, active: true } : { versions: updated })
+    .eq('user_id', userId).eq('id', id).eq('versions', JSON.stringify(row.versions));
+  if (reactivateLegacy) mutation = mutation.eq('active', false);
+  const { data: written, error: writeError } = await mutation.select('id');
   if (writeError) throw writeError;
   if (!Array.isArray(written) || written.length !== 1) throw new Error('Recurring rule changed on another device; reload before editing');
   return updated;
