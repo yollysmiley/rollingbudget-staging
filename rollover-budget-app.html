@@ -1626,9 +1626,8 @@ function render() {
 function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
 function selectMonth(idx) { selectedIdx = idx; render(); }
 
-document.getElementById("autoRollToggle").addEventListener("change", async (e) => {
-  db[activeYear].autoCascade = e.target.checked;
-  await saveDB(); render();
+document.getElementById("autoRollToggle").addEventListener("change", (e) => {
+  void setAutoCascade(e.target.checked);
 });
 
 async function updateStartLeftover(val) {
@@ -1905,8 +1904,12 @@ function syncMobileSettingsControls() {
   if (window.matchMedia("(max-width: 768px)").matches) setDesktopSettings(false);
 }
 async function setAutoCascade(enabled) {
-  const desktop = document.getElementById("autoRollToggle");
-  if (desktop) { desktop.checked = Boolean(enabled); desktop.dispatchEvent(new Event("change", { bubbles: true })); }
+  if (!db?.[activeYear]) return;
+  db[activeYear].autoCascade = Boolean(enabled);
+  document.getElementById("autoRollToggle").checked = Boolean(enabled);
+  document.getElementById("mobileAutoRollToggle").checked = Boolean(enabled);
+  await saveDB();
+  render();
 }
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
@@ -1919,6 +1922,7 @@ function setMobileTab(tab) {
     button.setAttribute("aria-current", active ? "page" : "false");
   });
   toggleMobileSidebar(false);
+  if (tab === "settings") showMobileSettingsMenu();
   if (tab === "plan") updateMobileCardToggleAllLabel();
 }
 
