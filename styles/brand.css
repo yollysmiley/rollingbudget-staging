@@ -25,6 +25,4 @@
 @media(max-width:768px) {
   .desktop-primary-nav,.settings-layout { display:none !important; }
   .mobile-settings-section { margin-bottom:12px; }
-  #mobileSettingsControls { display:grid; gap:10px; }
-  #mobileSettingsControls button,#mobileSettingsControls select { min-height:44px; }
 }
