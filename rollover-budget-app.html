@@ -1970,7 +1970,8 @@ async function toggleRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
   try {
-    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.displayActive);
+    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.displayActive,
+      [new Date().toISOString().slice(0, 7) + '-01', rule.startDate].sort().at(-1));
     await refreshRecurringPreview();
     renderRulesList();
   } catch (error) {
