@@ -1323,7 +1323,7 @@ async function applyRecurringPreview() {
       return;
     }
     const accepted = confirm('Add ' + result.added + ' scheduled entries to ' + year +
-      '? Existing entries will not be changed. Historical imported rules remain excluded.');
+      '? Existing entries will not be changed. Review your budget first: older transactions without recurring IDs may be duplicated.');
     if (!accepted || currentUser?.id !== owner || activeYear !== year) return;
     // Recalculate immediately before applying to avoid duplication from
     // user edits while the confirmation dialogue was open.
