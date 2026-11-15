@@ -28,7 +28,7 @@ assert.ok(!html.includes('YOUR_SUPABASE_'), 'Unconfigured Supabase placeholder r
 assert.ok(!html.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Unconfigured storage placeholder remains');
 assert.ok(!html.includes('awalptqpsjflrahkrjzk'), 'Production project reference remains');
 assert.ok(!html.includes('sb_secret_'), 'Secret key marker found');
-assert.ok(!/localStorage\\.removeItem\\(storageKey\\(/.test(html), 'Build must not delete budget records');
+assert.ok(!html.includes('localStorage.removeItem(storageKey('), 'Build must not delete budget records');
 assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year))"), 'Conflict marker cleanup must remain scoped');
 assert.ok(html.includes('function esc(str)') && html.includes('&lt;'), 'HTML text escaping is missing');
 
