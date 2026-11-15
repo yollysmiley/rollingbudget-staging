@@ -74,3 +74,11 @@ The Accounts Manager exposes **Include in budget totals** for each account. Excl
 The public homepage header labels are **Login** and **Sign Up** and remain grouped at the right on mobile. The hero keeps **Get started** and removes the duplicate sign-in action. The authenticated budget navigation and authentication behavior are unchanged. Validation includes account calculation unit tests, desktop/mobile budget browser coverage, and responsive homepage tests.
 
 New-user browser fixtures begin with no accounts, and the desktop/mobile Accounts Manager must show the empty state. Historical CPM/USAA account fixtures are enabled only in explicitly marked legacy migration tests; no named account is created for a new user by default.
+
+## Phase 4A — Recurring rule foundation (staging only)
+
+The additive `budget_recurring_rules` migration defines owner-scoped, RLS-protected recurring rule storage. Apply and verify the migration in the isolated staging Supabase project before using the new storage service. Existing `budget_ui_years` documents and generated budget entries are not modified.
+
+`scripts/recurring-foundation.mjs` converts year-scoped legacy rules into dated definitions with deterministic migration identifiers and initial effective-dated versions. `scripts/recurring-storage.mjs` exposes an **explicit** idempotent import routine; it is deliberately not invoked by the app until the Phase 4B scheduling and historical-deduplication strategy is implemented. Never run the import using a partial set of historical years. Year-scoped rules remain the live source of truth in Phase 4A. No automatic cross-year generation, rule editing, or UI behavior changes are part of this phase.
+
+Regression coverage: `tests/recurring-foundation.test.mjs`, plus the existing desktop/mobile recurring-rule and account tests. Migration rollout requires separate staging schema verification and an authenticated user isolation check before activation.
