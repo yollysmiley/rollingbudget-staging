@@ -52,3 +52,13 @@ test('incomplete documents are rejected rather than silently repaired', () => {
   delete bad.months[0].creditCards;
   assert.throws(() => previewRecurringYear(bad, 2027, [rule()]), /category/);
 });
+
+test('a manually moved recurring entry blocks duplicate creation in another category', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: 'Moved rent', amount: 275, recurringRuleId: 'rent' });
+  const result = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(result.added, 11);
+  assert.equal(result.document.months[0].fixed.length, 0);
+  assert.equal(result.document.months[0].variable[0].amount, 275);
+  assert.deepEqual(source.months[0].variable, result.document.months[0].variable);
+});
