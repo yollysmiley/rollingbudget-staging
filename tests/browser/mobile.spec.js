@@ -109,10 +109,14 @@ test('mobile sidebar exposes core pages and year management without burying recu
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
   await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+  await expect(page.locator('#mobileSettingsMenu')).toBeVisible();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Years' }).click();
   await expect(page.locator('#mobileSettingsPanel #mobileActiveYearSelect')).toHaveCount(1);
   await expect(page.locator('#mobileSidebar #mobileActiveYearSelect')).toHaveCount(0);
   await page.locator('#mobileActiveYearSelect').selectOption('2027');
   await expect(page.locator('#mobileActiveYearSelect')).toHaveValue('2027');
+  await page.locator('.mobile-settings-back').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('#mobileAutoRollToggle')).toBeVisible();
   await expect(page.locator('#authBtn')).toBeHidden();
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
@@ -186,10 +190,13 @@ test('cancelling mobile sign-out keeps the authenticated budget visible', async 
 test('mobile Settings uses independent controls and preserves state after viewport switch', async ({ page }) => {
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Years' }).click();
   await expect(page.locator('#mobileActiveYearSelect')).toBeVisible();
   await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('#mobileActiveYearSelect').selectOption('2027');
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await page.locator('.mobile-settings-back').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await page.locator('#mobileAutoRollToggle').uncheck();
   await expect(page.locator('#autoRollToggle')).not.toBeChecked();
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -201,4 +208,18 @@ test('mobile Settings uses independent controls and preserves state after viewpo
   await expect(page.locator('#mobileActiveYearSelect')).toHaveValue('2027');
   await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+test('mobile Settings opens one submenu screen and returns to its menu', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await expect(page.locator('#mobileSettingsMenu')).toBeVisible();
+  await expect(page.locator('#mobileSettingsDetail')).toBeHidden();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsMenu')).toBeHidden();
+  await expect(page.locator('[data-mobile-settings-section="accounts"]')).toBeVisible();
+  await expect(page.locator('[data-mobile-settings-section="years"]')).toBeHidden();
+  await page.locator('.mobile-settings-back').click();
+  await expect(page.locator('#mobileSettingsMenu')).toBeVisible();
+  await expect(page.locator('#mobileSettingsDetail')).toBeHidden();
 });
