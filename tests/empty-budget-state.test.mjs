@@ -60,5 +60,5 @@ test('local and cloud budgets are compared semantically and divergent local reco
   assert.doesNotMatch(html, /function chooseNewestBudget\(/);
   assert.ok(html.includes('updated_at: updatedAt'));
   assert.ok(html.includes('select("year,budget_data,updated_at")'));
-  assert.ok(html.includes('Unversioned local data preserved'));
+  assert.ok(html.includes('Never replace an unreadable local snapshot'));
 });
