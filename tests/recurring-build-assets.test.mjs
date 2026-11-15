@@ -25,3 +25,17 @@ test('staging build ships recurring service and every browser import dependency'
   const app = readFileSync('dist/app/index.html', 'utf8');
   assert.match(app, /import\('\.\/scripts\/recurring-app-service\.mjs'\)/);
 });
+
+test('desktop and mobile recurring manager use date fields without manual preview/apply controls', () => {
+  const app = readFileSync('rollover-budget-app.html', 'utf8');
+  for (const view of ['desktop', 'mobile']) {
+    const section = app.match(new RegExp('data-recurring-form="' + view + '"[\\s\\S]*?data-rec-field="frequency"'));
+    assert.ok(section, view + ' recurring form must exist');
+    assert.match(section[0], /data-rec-field="startDate" type="date" required/);
+    assert.match(section[0], /data-rec-field="endDate" type="date"/);
+  }
+  assert.doesNotMatch(app, /id="(?:desktop|mobile)ApplyRecurringPreview"/);
+  assert.doesNotMatch(app, /id="(?:desktop|mobile)RecurringPreviewStatus"/);
+  assert.doesNotMatch(app, /potential recurring entries|Apply scheduled entries/i);
+  assert.doesNotMatch(app, /data-rec-field="startMonth"|data-rec-field="due"/);
+});
