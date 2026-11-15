@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear } from '../scripts/recurring-app-service.mjs';
+import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear, backfillRecurringYear } from '../scripts/recurring-app-service.mjs';
 
 const rule = { id: 'rent', name: 'Rent', category: 'fixed', amount: '500', due: '1st',
   account_id: null, frequency: 'monthly', start_date: '2026-12-01',
@@ -172,4 +172,76 @@ test('concurrent edit prevents stale owner-scoped recurring deletion', async () 
   assert.equal(filters.user_id, 'owner-a');
   assert.equal(filters.id, 'rent');
   assert.equal(filters.versions, JSON.stringify(initial.versions));
+});
+
+test('automatic backfill uses owner-scoped rules and cloud CAS; preserves existing transactions', async () => {
+  const source = budget();
+  source.months[0].fixed.push({ name: 'Rent', amount: 777, recurringRuleId: 'rent' });
+  const before = structuredClone(source);
+  let stored = source;
+  let version = '2026-11-15T00:00:00.000Z';
+  let writes = 0;
+  const client = { from(table) {
+    if (table === 'budget_recurring_rules') return { select() {
+      return { eq(field, owner) {
+        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+        return Promise.resolve({ data: [rule], error: null });
+      } };
+    } };
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq(field, owner) {
+        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+        return { async eq(key, year) {
+          assert.equal(key, 'year'); assert.equal(year, 2027);
+          return { data: [{ year, budget_data: stored, updated_at: version }], error: null };
+        } };
+      } }; },
+      update(changes) {
+        const conditions = {};
+        const query = {
+          eq(key, value) { conditions[key] = value; return query; },
+          async select() {
+            assert.equal(conditions.user_id, 'owner-a');
+            assert.equal(conditions.year, 2027);
+            if (conditions.updated_at !== version) return { data: [], error: null };
+            stored = changes.budget_data;
+            version = changes.updated_at;
+            writes++;
+            return { data: [{ year: 2027 }], error: null };
+          }
+        };
+        return query;
+      }
+    };
+  } };
+  const first = await backfillRecurringYear(client, 'owner-a', 2027);
+  assert.equal(first.added, 11);
+  assert.equal(first.saved, true);
+  assert.deepEqual(stored.months[0].fixed, before.months[0].fixed);
+  assert.deepEqual(source, before);
+  const again = await backfillRecurringYear(client, 'owner-a', 2027);
+  assert.equal(again.added, 0);
+  assert.equal(again.saved, false);
+  assert.equal(writes, 1);
+});
+
+test('automatic backfill does not duplicate ambiguous historical transactions', async () => {
+  const source = budget();
+  source.months[0].fixed.push({ name: 'Rent', amount: 600 });
+  const client = { from(table) {
+    if (table === 'budget_recurring_rules') return { select() { return { eq: async () => ({
+      data: [rule], error: null
+    }) }; } }; };
+    return { select() { return { eq() { return { async eq() { return {
+      data: [{ year: 2027, budget_data: source, updated_at: '2026-11-15T00:00:00.000Z' }], error: null
+    }; } }; } }; }, update() { return { eq() { return { eq() { return { eq() {
+      return { async select() { return { data: [{ year: 2027 }], error: null }; } };
+    } }; } }; } }; } };
+  } };
+  const result = await backfillRecurringYear(client, 'owner-a', 2027);
+  assert.equal(result.added, 11);
+  assert.equal(result.ambiguous.length, 1);
+  assert.equal(result.document.months[0].fixed.length, 1);
+  assert.deepEqual(source.months[0].fixed, [{ name: 'Rent', amount: 600 }]);
 });
