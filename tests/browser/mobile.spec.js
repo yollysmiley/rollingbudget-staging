@@ -313,3 +313,31 @@ test('mobile apply action saves verified entries once and desktop sees the same 
   expect(saved).toHaveLength(1);
   expect(saved[0].occurrenceId).toBe(JSON.stringify(['verified-demo', '2026-01-01']));
 });
+
+test('recurring application warns when cloud persistence fails but retains local entries', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_budget_cloud_failure', '1');
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      id: 'local-only', name: 'Local-only expense', category: 'fixed', amount: 20,
+      due: '1', account_id: null, frequency: 'monthly', start_date: '2026-01-01',
+      end_date: null, active: true, source_year: null,
+      versions: [{ effectiveFrom: '2026-01-01', name: 'Local-only expense',
+        amount: 20, due: '1', accountId: null, frequency: 'monthly' }]
+    }]));
+  });
+  await page.reload();
+  const dialogs = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#mobileApplyRecurringPreview').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('saved on this device only');
+  expect(dialogs.some(message => message.includes('Cloud sync failed'))).toBeTruthy();
+  const entries = await page.evaluate(() =>
+    db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'local-only'));
+  expect(entries).toHaveLength(1);
+});
