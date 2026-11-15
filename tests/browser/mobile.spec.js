@@ -152,6 +152,7 @@ test('mobile recurring manager uses its distinct card layout and supports rule c
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringMobileView')).toBeVisible();
+  await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('Recurring preview');
   await expect(page.locator('#recurringDesktopView')).toBeHidden();
   const form=page.locator('[data-recurring-form="mobile"]');
   await form.locator('[data-rec-field="name"]').fill('Annual Insurance');
