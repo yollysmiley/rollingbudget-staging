@@ -223,3 +223,40 @@ test('mobile Settings opens one submenu screen and returns to its menu', async (
   await expect(page.locator('#mobileSettingsMenu')).toBeVisible();
   await expect(page.locator('#mobileSettingsDetail')).toBeHidden();
 });
+
+test('mobile Settings returns to its menu when reopened from another page', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Years' }).click();
+  await expect(page.locator('#mobileSettingsDetail')).toBeVisible();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await expect(page.locator('#mobileSettingsMenu')).toBeVisible();
+  await expect(page.locator('#mobileSettingsDetail')).toBeHidden();
+});
+
+test('auto-cascade persists from mobile and desktop through the same budget setting', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
+  await page.locator('#mobileAutoRollToggle').uncheck();
+  await expect(page.locator('#autoRollToggle')).not.toBeChecked();
+  await page.reload();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
+  await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="automation"]').click();
+  await page.locator('#autoRollToggle').check();
+  await expect(page.locator('#mobileAutoRollToggle')).toBeChecked();
+  await page.reload();
+  await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="automation"]').click();
+  await expect(page.locator('#autoRollToggle')).toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#mobileAutoRollToggle')).toBeChecked();
+});
