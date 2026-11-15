@@ -90,3 +90,7 @@ The read-only `inspectRecurringHistory(years, manifest)` preflight requires a ve
 ### Phase 4B.3 reconciled storage bridge
 
 `migrateReconciledRecurringRules(client, userId, years, manifest, decisions)` is an opt-in API, not invoked by the app. The caller must provide the authenticated user, a verified complete year history, and explicit per-year source-ID mappings using JSON-encoded `[year,sourceId]` keys. Cross-year merged identities, missing IDs, duplicate IDs, incomplete history, and invalid rule definitions block all writes. The bridge preserves original year documents and historical transactions, and upserts only new user-owned recurring definitions with `ignoreDuplicates`. Its `attempted` count is not an inserted-row count. Existing source-identity uniqueness constraints may reject conflicting mappings, which must be resolved rather than bypassed. Do not enable automatic migration until end-to-end verification is complete.
+
+### Phase 4B.4 authenticated recurring preview
+
+The authenticated app now loads owner-scoped definitions through `scripts/recurring-app-service.mjs` after budget years load and shows a read-only occurrence preview in the desktop and mobile Recurring Rules Manager. Imported historical rules (`source_year` set) remain held for reconciliation. The preview does not write budget transactions, alter totals, or enable automatic migration. Failed loads show an unavailable status rather than generating entries. Browser and unit regression tests cover the new preview surface. Full CI must pass before any merge.
