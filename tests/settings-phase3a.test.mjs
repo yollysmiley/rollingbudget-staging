@@ -55,5 +55,6 @@ test('auto-cascade writes shared state without synthetic desktop events', () => 
   assert.match(setter, /await saveDB\(\)/);
   assert.match(setter, /render\(\)/);
   assert.doesNotMatch(setter, /dispatchEvent/);
-  assert.match(html, /if \(tab === "settings"\) showMobileSettingsMenu\(\)/);
+  assert.match(html, /if \(mobile\) showMobileSettingsMenu\(\)/);
+  assert.match(html, /function setMobileTab\(tab\)[\s\S]*?navigatePage\(page\)/);
 });

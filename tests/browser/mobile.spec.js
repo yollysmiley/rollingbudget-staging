@@ -143,7 +143,10 @@ test('mobile menu navigation enters and exits recurring rules without refreshing
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
   await expect(page.locator('#mobileOverview')).toBeVisible();
+  await expect(page).toHaveURL(/[?&]page=overview(?:&|$)/);
+  await page.goBack();
   await expect(page).toHaveURL(managerUrl);
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
 });
 
 test('mobile recurring manager uses its distinct card layout and supports rule creation', async ({ page }) => {
@@ -246,15 +249,15 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await page.locator('#mobileAutoRollToggle').uncheck();
   await expect(page.locator('#autoRollToggle')).not.toBeChecked();
   await page.reload();
+  // Initial render calls setMobileTab('overview'), which closes the sidebar.
+  // Wait for initialization so it cannot race with opening the menu after reload.
+  await expect.poll(() => page.evaluate(() => document.body.dataset.mobileTabInitialized)).toBe('true');
   await page.locator('#mobileMenuButton').click();
-  // Wait for the sidebar transition to finish before using its navigation.
-  await expect(page.locator('#mobileSidebar')).toHaveAttribute('aria-hidden', 'false');
-  await page.locator('#mobileSidebar').evaluate(element => new Promise(resolve => {
-    if (getComputedStyle(element).transform === 'none') return resolve();
-    const done = () => resolve();
-    element.addEventListener('transitionend', done, { once: true });
-    setTimeout(done, 1000);
-  }));
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await expect.poll(async () => {
+    const box = await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').boundingBox();
+    return Boolean(box && box.x >= 0 && box.x + box.width <= page.viewportSize().width);
+  }).toBe(true);
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
@@ -432,4 +435,56 @@ test('mobile overview defaults to calendar month and keeps manual month selectio
   await page.evaluate(() => selectMonth(7));
   await page.evaluate(() => render());
   expect(await page.evaluate(() => selectedIdx)).toBe(7);
+});
+
+test('mobile SPA routes persist through refresh and browser history', async ({ page }) => {
+  const cases = [
+    ['overview', 'overview'],
+    ['plan', 'budget'],
+    ['settings', 'settings']
+  ];
+  for (const [tab, route] of cases) {
+    await page.locator('#mobileMenuButton').click();
+    await page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`[?&]page=${route}(?:&|$)`));
+    await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
+    await page.reload();
+    await expectAuthenticatedBudget(page);
+    await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
+  }
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('[data-mobile-action="recurring"]').click();
+  await expect(page).toHaveURL(/[?&]page=recurring-rules(?:&|$)/);
+  await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('body')).toHaveClass(/recurring-manager-open/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('body')).toHaveClass(/recurring-manager-open/);
+  await page.goBack();
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await expect(page.locator('body')).not.toHaveClass(/recurring-manager-open/);
+  await expect(page.locator('[data-mobile-tab="settings"]')).toHaveAttribute('aria-current', 'page');
+  await page.goForward();
+  await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
+});
+
+test('mobile planning month persists during session and is independent by year', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('[data-mobile-tab="plan"]').click();
+  await page.evaluate(() => selectMonth(6));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/jul/i);
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('[data-mobile-tab="overview"]').click();
+  await expect(page.locator('#mobileOverview')).toContainText('Jul');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#mobileOverview')).toContainText('Jul');
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#mobileOverview')).toContainText(/jan/i);
+  await page.evaluate(() => selectMonth(2));
+  await expect(page.locator('#mobileOverview')).toContainText(/mar/i);
+  await page.evaluate(() => switchYear('2026'));
+  await expect(page.locator('#mobileOverview')).toContainText('Jul');
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#mobileOverview')).toContainText('Mar');
 });

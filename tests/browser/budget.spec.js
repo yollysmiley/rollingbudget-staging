@@ -302,7 +302,7 @@ test('unassigned income amount can be edited and persists after reload', async (
 
 test('desktop primary navigation follows the reference hierarchy without losing budget state', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-  await expect(nav.locator('button')).toHaveText(['Budget', 'Recurring Rules', 'Settings']);
+  await expect(nav.locator('button')).toHaveText(['Overview', 'Budget', 'Recurring Rules', 'Settings']);
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#settingsAccounts')).toBeVisible();
   await expect(page.locator('#settingsYears')).toBeHidden();
@@ -480,7 +480,7 @@ test('desktop explicitly keeping local changes resolves a conflict with conditio
 });
 
 
-test('desktop overview selects the current month for current year and January for other years', async ({ page }) => {
+test('desktop overview defaults to current month or January and restores manual year selection', async ({ page }) => {
   const initial = await page.evaluate(() => ({ year: activeYear, month: selectedIdx, nowYear: new Date().getFullYear(), nowMonth: new Date().getMonth() }));
   expect(initial.month).toBe(initial.year === String(initial.nowYear) ? initial.nowMonth : 0);
   await page.evaluate(() => selectMonth(4));
@@ -490,7 +490,7 @@ test('desktop overview selects the current month for current year and January fo
   await page.evaluate(year => switchYear(year), otherYear);
   expect(await page.evaluate(() => selectedIdx)).toBe(0);
   await page.evaluate(year => switchYear(year), String(initial.nowYear));
-  expect(await page.evaluate(() => selectedIdx)).toBe(initial.nowMonth);
+  expect(await page.evaluate(() => selectedIdx)).toBe(4);
 });
 
 test('recurring manager heading is global and contains no budget year', async ({ page }) => {
