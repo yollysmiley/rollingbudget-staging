@@ -18,7 +18,13 @@ export async function mockSignedInBudget(page) {
           from(table) {
             const chain = {
               select() { return chain; },
-              eq() { return Promise.resolve({ data: table === 'budget_accounts' && sessionStorage.getItem('__mock_legacy_accounts') === '1' ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [], error: null }); },
+              eq() {
+                const accountRows = table === 'budget_accounts' && sessionStorage.getItem('__mock_legacy_accounts') === '1'
+                  ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [];
+                const recurringRows = table === 'budget_recurring_rules'
+                  ? JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]') : [];
+                return Promise.resolve({ data: table === 'budget_recurring_rules' ? recurringRows : accountRows, error: null });
+              },
               upsert() { return Promise.resolve({ data: [], error: null }); }
             };
             return chain;
