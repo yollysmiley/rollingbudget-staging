@@ -12,7 +12,7 @@ export async function migrateRecurringRules(client, userId, years) {
     start_date: startDate, end_date: endDate, account_id: accountId
   }));
   const { error } = await client.from('budget_recurring_rules').upsert(rows, {
-    onConflict: 'user_id,source_year,source_rule_id', ignoreDuplicates: true
+    onConflict: 'user_id,id', ignoreDuplicates: true
   });
   if (error) throw error;
   return { discovered: rows.length };
