@@ -17,8 +17,8 @@ function isPossibleDuplicate(entry, occurrence) {
   const words = name => name.split(' ').filter(word => word.length > 3);
   const similar = existing.includes(proposed) || proposed.includes(existing) ||
     words(existing).some(word => words(proposed).includes(word));
-  return similar && amountOf(entry) === Number(occurrence.amount) &&
-    accountOf(entry) === (occurrence.accountId ?? null);
+  // Amount and account differences are review signals, not proof of uniqueness.
+  return similar;
 }
 
 // Pure preview used by both desktop and mobile views. It never changes budgets.
@@ -51,19 +51,14 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
       const alreadyPresent = Object.values(TARGETS).some(category =>
         months[index][category].some(entry =>
           entry.occurrenceId === occurrence.occurrenceId ||
-          entry.recurringRuleId === rule.id ||
-          // Conservatively block an untagged same-name entry in this month.
-          // Never overwrite or silently duplicate a manually recorded transaction.
-          (!entry.occurrenceId && !entry.recurringRuleId &&
-            typeof entry.name === 'string' &&
-            entry.name.trim().toLocaleLowerCase() === occurrence.name.trim().toLocaleLowerCase())));
+          entry.recurringRuleId === rule.id));
       const possible = Object.values(TARGETS).flatMap(category =>
         months[index][category].filter(entry => isPossibleDuplicate(entry, occurrence))
           .map(entry => ({ category, name: entry.name, amount: amountOf(entry), accountId: accountOf(entry) })));
       if (possible.length && !alreadyPresent) {
         ambiguous.push({ occurrenceId: occurrence.occurrenceId, month: occurrence.scheduledMonth,
           name: occurrence.name, amount: occurrence.amount, accountId: occurrence.accountId ?? null,
-          matches: possible });
+          matches: possible, classification: 'possible-duplicate' });
       }
       if (possible.length && !alreadyPresent && !approved.has(occurrence.occurrenceId)) {
         skipped.push(occurrence.occurrenceId);
