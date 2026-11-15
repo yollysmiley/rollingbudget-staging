@@ -63,3 +63,31 @@ export async function removeRecurringRule(client, userId, id) {
     .delete().eq('user_id', userId).eq('id', id);
   if (error) throw error;
 }
+
+export async function commitRecurringYear(client, userId, year, buildPreview) {
+  if (!client || !userId || !Number.isInteger(Number(year)) || typeof buildPreview !== 'function') {
+    throw new Error('Authenticated recurring commit requires a year and preview builder');
+  }
+  // Read the authoritative document and conditionally update the same version.
+  // Concurrent edits cannot be overwritten by a stale browser snapshot.
+  const { data: rows, error: readError } = await client.from('budget_ui_years')
+    .select('year,budget_data,updated_at').eq('user_id', userId).eq('year', Number(year));
+  if (readError) throw readError;
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new Error('Budget year must be cloud-saved before applying recurring entries');
+  }
+  const source = rows[0];
+  const preview = buildPreview(source.budget_data);
+  if (!preview?.document || !Number.isInteger(preview.added)) throw new Error('Invalid recurring preview');
+  if (!preview.added) return { ...preview, saved: false };
+  const updatedAt = new Date(Math.max(Date.now(), Date.parse(source.updated_at) + 1)).toISOString();
+  const { data: written, error: writeError } = await client.from('budget_ui_years')
+    .update({ budget_data: preview.document, updated_at: updatedAt })
+    .eq('user_id', userId).eq('year', Number(year)).eq('updated_at', source.updated_at)
+    .select('year');
+  if (writeError) throw writeError;
+  if (!Array.isArray(written) || written.length !== 1) {
+    throw new Error('Budget changed on another device; reload before applying recurring entries');
+  }
+  return { ...preview, saved: true, updatedAt };
+}
