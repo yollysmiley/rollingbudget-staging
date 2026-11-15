@@ -8,7 +8,7 @@ export const FREQUENCY_MONTHS = Object.freeze({
 export function normalizeRecurringRule(rule) {
   if (!rule || typeof rule !== 'object') throw new TypeError('Rule required');
   const startDate = String(rule.startDate ?? '');
-  if (!/^\\d{4}-(0[1-9]|1[0-2])-01$/.test(startDate)) throw new Error('Start date must be the first day of a calendar month');
+  if (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(startDate)) throw new Error('Start date must be the first day of a calendar month');
   const frequency = rule.frequency || 'monthly';
   if (!FREQUENCY_MONTHS[frequency]) throw new Error('Unsupported recurring frequency');
   const amount = Number(rule.amount);
@@ -16,7 +16,7 @@ export function normalizeRecurringRule(rule) {
   const name = String(rule.name ?? '').trim();
   if (!name) throw new Error('Rule name required');
   const endDate = rule.endDate ?? null;
-  if (endDate !== null && (!/^\\d{4}-(0[1-9]|1[0-2])-01$/.test(endDate) || endDate < startDate)) throw new Error('Invalid end date');
+  if (endDate !== null && (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(endDate) || endDate < startDate)) throw new Error('Invalid end date');
   return {
     id: String(rule.id), name, category: rule.category,
     amount, due: String(rule.due ?? ''), accountId: rule.accountId || null,
@@ -29,7 +29,7 @@ export function collectLegacyRecurringRules(years) {
   const rules = [];
   const seen = new Set();
   for (const [year, document] of Object.entries(years ?? {}).sort(([a], [b]) => Number(a) - Number(b))) {
-    if (!/^\\d{4}$/.test(year)) continue;
+    if (!/^\d{4}$/.test(year)) continue;
     for (const [index, legacy] of (document?.recurringRules ?? []).entries()) {
       const month = legacy.startMonth ?? legacy.start ?? 0;
       if (!Number.isInteger(month) || month < 0 || month > 11) throw new Error('Invalid historical rule start month');
