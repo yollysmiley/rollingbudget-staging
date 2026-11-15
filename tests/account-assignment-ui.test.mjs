@@ -20,7 +20,9 @@ test('income keeps historical values and offers only account-based new income', 
 test('recurring rule items carry account identity across categories', () => {
   assert.match(html, /const accountId = r\.accountId \|\| r\.acct \|\| null/);
   assert.match(html, /accountId: get\('account'\) \|\| null, frequency, active: true/);
-  assert.match(html, /recurringAppService\.createRecurringRule\(supabaseClient, currentUser\.id/);
+  assert.match(html, /const owner = currentUser\.id, selectedYear = activeYear/);
+  assert.match(html, /recurringAppService\.createRecurringRule\(supabaseClient, owner/);
+  assert.match(html, /if \(currentUser\?\.id !== owner\) return;/);
   assert.match(html, /refreshAccountSelectors\(\);/);
 });
 test('account selectors reject IDs absent from authenticated account list', () => {
