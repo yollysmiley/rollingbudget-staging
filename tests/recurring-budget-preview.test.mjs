@@ -63,12 +63,13 @@ test('a manually moved recurring entry blocks duplicate creation in another cate
   assert.deepEqual(source.months[0].variable, result.document.months[0].variable);
 });
 
-test('untagged historical same-name transactions block duplicate generation without being changed', () => {
+test('untagged historical same-name transactions require review without being changed', () => {
   const source = budget();
   source.months[0].variable.push({ name: '  RENT ', amount: 650 });
   const result = previewRecurringYear(source, 2027, [rule()]);
   assert.equal(result.added, 11);
   assert.equal(result.skipped.length, 1);
+  assert.equal(result.ambiguous.length, 1);
   assert.deepEqual(result.document.months[0].variable, source.months[0].variable);
   assert.deepEqual(result.document.months[0].fixed, []);
   assert.deepEqual(source.months[0].fixed, []);
@@ -90,20 +91,35 @@ test('ambiguous renamed historical entry is skipped until explicitly approved', 
   assert.deepEqual(source, before);
 });
 
-test('different amounts or accounts do not create ambiguous matches', () => {
+test('different amounts or accounts remain reviewable when names are similar', () => {
   const source = budget();
   source.months[0].variable.push({ name: 'Rent payment', amount: 200, accountId: 'other' });
   const result = previewRecurringYear(source, 2027, [rule()]);
-  assert.equal(result.ambiguous.length, 0);
-  assert.equal(result.added, 12);
+  assert.equal(result.ambiguous.length, 1);
+  assert.equal(result.added, 11);
 });
 
-test('exact-name historical entries remain blocked even when approved', () => {
+test('exact-name historical entries require explicit approval and preserve originals', () => {
   const source = budget();
   source.months[0].fixed.push({ name: 'Rent', amount: 500 });
   const result = previewRecurringYear(source, 2027, [rule()],
     { approvedOccurrenceIds: [JSON.stringify(['rent', '2027-01-01'])] });
-  assert.equal(result.added, 11);
-  assert.equal(result.ambiguous.length, 0);
-  assert.deepEqual(result.document.months[0].fixed, source.months[0].fixed);
+  assert.equal(result.added, 12);
+  assert.equal(result.ambiguous.length, 1);
+  assert.equal(result.document.months[0].fixed.length, 2);
+  assert.deepEqual(result.document.months[0].fixed[0], source.months[0].fixed[0]);
+});
+
+test('individual approvals include only selected ambiguous occurrences', () => {
+  const source = budget();
+  source.months[0].fixed.push({ name: 'Rent payment', amount: 500 });
+  source.months[1].variable.push({ name: 'Rent invoice', amount: 700, accountId: 'other' });
+  const pending = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(pending.ambiguous.length, 2);
+  const approved = previewRecurringYear(source, 2027, [rule()],
+    { approvedOccurrenceIds: [pending.ambiguous[0].occurrenceId] });
+  assert.equal(approved.added, 11);
+  assert.equal(approved.document.months[0].fixed.length, 2);
+  assert.equal(approved.document.months[1].fixed.length, 0);
+  assert.deepEqual(source.months[1].variable[0], { name: 'Rent invoice', amount: 700, accountId: 'other' });
 });
