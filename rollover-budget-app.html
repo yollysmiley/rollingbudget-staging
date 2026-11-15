@@ -1313,21 +1313,29 @@ async function reconcileCloudBudget(useLocal) {
       const { data, error } = await supabaseClient.from('budget_ui_years')
         .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
       if (error) throw error;
-      if (!Array.isArray(data) || data.length !== 1) throw new Error('Cloud budget unavailable');
-      const cloud = data[0];
+      if (!Array.isArray(data) || data.length > 1) throw new Error('Cloud budget unavailable');
+      const cloud = data[0] || null;
       const local = JSON.parse(localStorage.getItem(storageKey(year)) || 'null');
       if (local?.data) localStorage.setItem(storageKey(year) + '_conflict_backup', JSON.stringify(local));
       if (useLocal) {
         if (!local?.data) throw new Error('Local budget unavailable');
-        const nextTimestamp = new Date(Math.max(Date.now(), Date.parse(cloud.updated_at) + 1)).toISOString();
-        const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
-          .update({ budget_data: local.data, updated_at: nextTimestamp })
-          .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
-        if (writeError) throw writeError;
-        if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
+        const nextTimestamp = new Date(Math.max(Date.now(), cloud ? Date.parse(cloud.updated_at) + 1 : 0)).toISOString();
+        if (cloud) {
+          const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
+            .update({ budget_data: local.data, updated_at: nextTimestamp })
+            .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
+          if (writeError) throw writeError;
+          if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
+        } else {
+          const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
+            user_id: owner, year: Number(year), budget_data: local.data, updated_at: nextTimestamp
+          });
+          if (insertError) throw insertError;
+        }
         cloudBudgetVersions.set(key, nextTimestamp);
         db[year] = local.data;
       } else {
+        if (!cloud) throw new Error('No cloud copy exists; keep local changes instead');
         db[year] = cloud.budget_data;
         cloudBudgetVersions.set(key, cloud.updated_at);
         localStorage.setItem(storageKey(year), JSON.stringify({ data: cloud.budget_data, updatedAt: cloud.updated_at }));
