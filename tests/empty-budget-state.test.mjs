@@ -25,7 +25,9 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
 
 test('new UI loads and saves its own cloud records without touching Release 2 data', () => {
   assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'));
-  assert.ok(html.includes('from("budget_ui_years").upsert('));
+  assert.ok(html.includes('from("budget_ui_years").insert('));
+  assert.ok(html.includes('.eq("updated_at", version).select("year")'));
+  assert.ok(!html.includes('from("budget_ui_years").upsert('));
   assert.ok(!html.includes('from("budget_data")'));
 });
 
