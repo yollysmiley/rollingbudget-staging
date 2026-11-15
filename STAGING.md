@@ -57,3 +57,7 @@ In the staging Supabase dashboard, add that exact URL under **Authentication →
 ## Phase 2 public homepage and authentication
 
 The public landing page uses `styles/homepage.css` and a split hero with a budget illustration and feature cards, based on the approved homepage reference. The staging build copies the stylesheet to `dist/styles/homepage.css`. Authentication continues to use the existing Supabase modal handlers and confirmation/recovery redirect pages. The authenticated budget remains at `/app/`, with desktop and mobile app views unchanged. Tests: `tests/homepage-phase2.test.mjs` and `tests/browser/homepage.spec.js`.
+
+## Phase 3A — Settings presentation separation
+
+Desktop Settings keeps its existing section navigation and controls. Mobile Settings now has independent year selection, year creation, and auto-cascade controls rather than moving desktop DOM nodes between responsive views. Both views use the existing `activeYear`, `db`, `switchYear`, `createNewYear`, and auto-cascade persistence logic. `styles/settings.css` is scoped to the Settings views and copied to `dist/app/styles/settings.css` by the staging build. Tests: `tests/settings-phase3a.test.mjs` and `tests/browser/mobile.spec.js`. Account exclusion calculations, year cloning, and profile/security functionality remain for Phases 3B–3D; this PR does not change those contracts.
