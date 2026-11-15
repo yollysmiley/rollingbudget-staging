@@ -683,10 +683,12 @@
   <div class="budget-year-picker budget-year-picker-desktop">
     <label for="activeYearSelect">Budget year</label>
     <select id="activeYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
+    <button type="button" id="desktopCopyPreviousYear" class="copy-previous-year-button" onclick="copyPreviousYearPlan()" hidden>Copy Previous Year’s Plan</button>
   </div>
   <div class="budget-year-picker budget-year-picker-mobile">
     <label for="mobileActiveYearSelect">Budget year</label>
     <select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
+    <button type="button" id="mobileCopyPreviousYear" class="copy-previous-year-button" onclick="copyPreviousYearPlan()" hidden>Copy Previous Year’s Plan</button>
   </div>
 </section>
 
@@ -1627,6 +1629,67 @@ async function saveDB({ backfillNewYear = true } = {}) {
     return 'local-saved';
   }
 }
+let yearPlanCopyInProgress = false;
+async function copyPreviousYearPlan() {
+  if (yearPlanCopyInProgress || !currentUser) return;
+  const year = activeYear;
+  const previous = String(Number(year) - 1);
+  const owner = currentUser.id;
+  if (!Object.hasOwn(db, previous) || !Object.hasOwn(db, year) ||
+      cloudBudgetConflicts.has(owner + ':' + year) ||
+      localStorage.getItem(conflictStorageKey(year)) === '1') return;
+  const { copyPreviousYearPlan: copyPlan } = await import('./scripts/year-plan.mjs');
+  if (activeYear !== year || currentUser?.id !== owner) return;
+  let proposal;
+  try {
+    proposal = copyPlan(db[previous], db[year]);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
+      year + '? Existing opening balances will remain unchanged. Recurring entries will be generated separately.')) return;
+  if (activeYear !== year || currentUser?.id !== owner ||
+      localStorage.getItem(conflictStorageKey(year)) === '1') return;
+  yearPlanCopyInProgress = true;
+  syncCopyPreviousYearControls();
+  try {
+    // Revalidate after confirmation so a second click cannot overwrite newer edits.
+    const updated = copyPlan(db[previous], db[year]);
+    db[year] = updated;
+    const status = await saveDB();
+    if (currentUser?.id === owner && activeYear === year) {
+      render();
+      if (status !== 'cloud-saved') {
+        showCloudSaveStatus('Plan copied locally. Cloud synchronization is pending; reconcile before editing on another device.');
+      }
+    }
+  } catch (error) {
+    console.error('Could not copy previous year plan:', error);
+    alert('The plan could not be copied. Existing budget entries were preserved.');
+  } finally {
+    yearPlanCopyInProgress = false;
+    if (currentUser?.id === owner) syncCopyPreviousYearControls();
+  }
+}
+function syncCopyPreviousYearControls() {
+  const year = activeYear;
+  const previous = String(Number(year) - 1);
+  const eligible = Boolean(currentUser && Object.hasOwn(db, previous) && Object.hasOwn(db, year) &&
+    !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
+    localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    db[year].months?.every(month => ['income','fixed','variable','creditCards','loans']
+      .every(type => Array.isArray(month[type]) && month[type].length === 0)) &&
+    db[previous].months?.some(month => ['income','fixed','variable','creditCards','loans']
+      .some(type => Array.isArray(month[type]) && month[type].some(entry =>
+        !entry.occurrenceId && !entry.recurringRuleId && !entry.scheduledMonth))));
+  for (const id of ['desktopCopyPreviousYear', 'mobileCopyPreviousYear']) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.hidden = !eligible;
+    button.disabled = yearPlanCopyInProgress;
+  }
+}
 function switchYear(yr) {
   const next = String(yr);
   if (!/^\d{4}$/.test(next) || !Object.hasOwn(db, next)) return;
@@ -1725,6 +1788,7 @@ function render() {
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
+  syncCopyPreviousYearControls();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
   document.getElementById("mobileOverview").innerHTML = `
