@@ -74,3 +74,11 @@ The Accounts Manager exposes **Include in budget totals** for each account. Excl
 The public homepage header labels are **Login** and **Sign Up** and remain grouped at the right on mobile. The hero keeps **Get started** and removes the duplicate sign-in action. The authenticated budget navigation and authentication behavior are unchanged. Validation includes account calculation unit tests, desktop/mobile budget browser coverage, and responsive homepage tests.
 
 New-user browser fixtures begin with no accounts, and the desktop/mobile Accounts Manager must show the empty state. Historical CPM/USAA account fixtures are enabled only in explicitly marked legacy migration tests; no named account is created for a new user by default.
+
+## Phase 4A — Recurring rule foundation (staging only)
+
+The additive `budget_recurring_rules` migration defines owner-scoped, RLS-protected recurring rule storage. The table migration was applied and owner-scoped RLS verified in the isolated staging Supabase project. Existing `budget_ui_years` documents and generated budget entries are not modified.
+
+`scripts/recurring-foundation.mjs` converts year-scoped legacy rules into dated definitions with deterministic migration identifiers and initial effective-dated versions. `scripts/recurring-storage.mjs` exposes an **explicit** idempotent import routine; it is deliberately not invoked by the app until the Phase 4B scheduling and historical-deduplication strategy is implemented. The import requires a verified complete year manifest. Rules without stable IDs or with repeated IDs across historical years are deliberately blocked pending explicit reconciliation; this prevents silent duplication, and the migration must not be enabled until those cases are resolved. Year-scoped rules remain the live source of truth in Phase 4A. No automatic cross-year generation, rule editing, or UI behavior changes are part of this phase.
+
+Regression coverage: `tests/recurring-foundation.test.mjs`, plus the existing desktop/mobile recurring-rule and account tests. Staging schema and simulated authenticated cross-user RLS checks passed. Historical migration is not activated. Existing desktop/mobile behavior is unchanged.
