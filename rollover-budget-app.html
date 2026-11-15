@@ -1567,7 +1567,7 @@ function render() {
   incHtml += m.income.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editInc(${idx}, 'name', this.value)" /></td>
-      <td class="num"><input class="inline-input num" aria-label="Income amount" type="number" step="0.01" value="${Number(item.amount ?? ((Number(item.cpm)||0)+(Number(item.usaa)||0))) || 0}" ${item.accountId ? '' : 'disabled title="Legacy income awaiting migration"'} onchange="editInc(${idx}, 'amount', this.value)" /></td>
+      <td class="num"><input class="inline-input num" aria-label="Income amount" type="number" step="0.01" value="${Number(item.amount ?? ((Number(item.cpm)||0)+(Number(item.usaa)||0))) || 0}" ${(!item.accountId && (Object.hasOwn(item, 'cpm') || Object.hasOwn(item, 'usaa'))) ? 'disabled title="Legacy income awaiting migration"' : ''} onchange="editInc(${idx}, 'amount', this.value)" /></td>
       <td>${accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
   `).join("");
