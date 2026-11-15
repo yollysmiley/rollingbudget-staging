@@ -15,7 +15,7 @@ function harness() {
   const document = {
     getElementById: () => status,
     querySelector: () => ({ insertAdjacentElement() {} }),
-    createElement: () => status,
+    createElement: () => ({ textContent: '', onclick: null }),
     createTextNode: value => ({ textContent: value })
   };
   const context = {
