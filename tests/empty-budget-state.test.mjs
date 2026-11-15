@@ -19,6 +19,8 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
   assert.ok(!html.includes('localStorage.removeItem(storageKey('));
   assert.ok(html.includes('localStorage.removeItem(conflictStorageKey(year))'));
   assert.ok(html.includes('localStorage.getItem(storageKey(yr))'));
+  assert.ok(html.includes('availableBudgetYears(new Date().getFullYear()'));
+  assert.ok(!html.includes('for (const yr of ["2026", "2027"])'));
   assert.ok(html.includes('localStorage.setItem(storageKey(year)'));
   assert.ok(html.includes('const year = activeYear;'));
   assert.ok(html.includes('const userId = currentUser?.id || null;'));
@@ -50,9 +52,12 @@ test('staging migration creates a separate RLS-protected table for the new UI', 
   assert.ok(migration.includes('public.budget_data'));
 });
 
-test('local and cloud budget records are compared by their update timestamps', () => {
+test('local and cloud budgets are compared semantically and divergent local records are protected', () => {
   assert.ok(html.includes('function parseLocalBudgetRecord(raw)'));
-  assert.ok(html.includes('function chooseNewestBudget(localRecord, cloudRecord)'));
+  assert.ok(html.includes("await import('./scripts/year-discovery.mjs')"));
+  assert.ok(html.includes('sameBudgetDocument(local.data, row.budget_data)'));
+  assert.ok(html.includes('markCloudConflict(key, year)'));
+  assert.doesNotMatch(html, /function chooseNewestBudget\(/);
   assert.ok(html.includes('updated_at: updatedAt'));
   assert.ok(html.includes('select("year,budget_data,updated_at")'));
   assert.ok(html.includes('Unversioned local data preserved'));
