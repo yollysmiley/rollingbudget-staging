@@ -48,6 +48,7 @@ export async function mockSignedInBudget(page) {
               },
               insert(row) {
                 if (table === 'budget_ui_years') {
+                  if (row.user_id !== user.id) return Promise.resolve({ error: { message: 'forbidden' } });
                   const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
                   if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ error: { message: 'offline' } });
                   if (rows[String(row.year)]) return Promise.resolve({ error: { message: 'duplicate key' } });
@@ -70,7 +71,7 @@ export async function mockSignedInBudget(page) {
                       if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ data: null, error: { message: 'offline' } });
                       const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
                       const key = String(filters.year), row = rows[key];
-                      if (!row || row.updated_at !== filters.updated_at) return Promise.resolve({ data: [], error: null });
+                      if (filters.user_id !== user.id || !row || row.updated_at !== filters.updated_at) return Promise.resolve({ data: [], error: null });
                       rows[key] = { ...row, ...changes };
                       sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
                       return Promise.resolve({ data: [{ year: Number(key) }], error: null });
@@ -83,7 +84,8 @@ export async function mockSignedInBudget(page) {
                   eq(field, value) { filters[field] = value; return query; },
                   select() {
                     const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
-                    const matching = rows.filter(row => row.id === filters.id &&
+                    const matching = rows.filter(row => row.user_id === filters.user_id &&
+                      row.user_id === user.id && row.id === filters.id &&
                       JSON.stringify(row.versions) === filters.versions);
                     sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.map(row =>
                       matching.includes(row) ? { ...row, ...changes } : row)));
@@ -93,11 +95,20 @@ export async function mockSignedInBudget(page) {
                 return query;
               },
               delete() {
-                return { eq() { return { eq(_field, id) {
-                  const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
-                  sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.filter(row => row.id !== id)));
-                  return Promise.resolve({ error: null });
-                } }; } };
+                const filters = {};
+                const chain = {
+                  eq(field, value) { filters[field] = value; return chain; },
+                  select() {
+                    const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                    const matched = rows.filter(row => row.user_id === user.id &&
+                      row.user_id === filters.user_id && row.id === filters.id &&
+                      JSON.stringify(row.versions) === filters.versions);
+                    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(
+                      rows.filter(row => !matched.includes(row))));
+                    return Promise.resolve({ data: matched.map(row => ({ id: row.id })), error: null });
+                  }
+                };
+                return chain;
               },
               upsert(row) {
                 if (table === 'budget_ui_years' && sessionStorage.getItem('__mock_budget_cloud_failure') !== '1') {
