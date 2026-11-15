@@ -1,8 +1,7 @@
 import { previewRecurringYear } from './recurring-budget-preview.mjs';
 import { normalizeRecurringRule } from './recurring-foundation.mjs';
 
-// Read-only bridge. Historical imports are excluded until identity reconciliation
-// is approved; no generated transactions are saved to year documents.
+// Load owner-scoped rules; legacy imports are excluded from active scheduling.
 export async function loadRecurringPreviewRules(client, userId) {
   if (!client || !userId) throw new Error('Authenticated recurring preview requires a user');
   const { data, error } = await client.from('budget_recurring_rules')
@@ -82,9 +81,11 @@ export async function editRecurringRule(client, userId, id, changes, effectiveFr
   });
   const updated = [...versions.filter(version => version.effectiveFrom !== effectiveFrom), next]
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-  const { error: writeError } = await client.from('budget_recurring_rules')
-    .update({ versions: updated }).eq('user_id', userId).eq('id', id);
+  const { data: written, error: writeError } = await client.from('budget_recurring_rules')
+    .update({ versions: updated }).eq('user_id', userId).eq('id', id)
+    .eq('versions', JSON.stringify(row.versions)).select('id');
   if (writeError) throw writeError;
+  if (!Array.isArray(written) || written.length !== 1) throw new Error('Recurring rule changed on another device; reload before editing');
   return updated;
 }
 
