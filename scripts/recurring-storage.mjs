@@ -1,10 +1,20 @@
 import { collectLegacyRecurringRules } from './recurring-foundation.mjs';
 
-// Explicit migration entry point; caller must first verify all year documents are loaded.
-// Ignore duplicates makes retries safe. Never mutate or delete historical budget records.
-export async function migrateRecurringRules(client, userId, years) {
+// The caller must obtain expectedYears from an authoritative, complete year listing.
+// No migration occurs without an explicit manifest; a partial listing must not be
+// marked complete. All validation finishes before the first database write.
+export async function migrateRecurringRules(client, userId, years, manifest) {
   if (!client || !userId) throw new Error('Authenticated client and user ID required');
-  if (!years || typeof years !== 'object') throw new Error('Complete year documents required');
+  if (!years || typeof years !== 'object' || Array.isArray(years)) throw new Error('Complete year documents required');
+  if (!manifest || manifest.complete !== true || !Array.isArray(manifest.expectedYears)) {
+    throw new Error('Verified complete year manifest required');
+  }
+  const expected = manifest.expectedYears.map(String).sort();
+  const actual = Object.keys(years).sort();
+  if (new Set(expected).size !== expected.length || expected.length !== actual.length ||
+      expected.some((year, i) => year !== actual[i])) {
+    throw new Error('Incomplete or mismatched year history');
+  }
   const candidates = collectLegacyRecurringRules(years);
   if (!candidates.length) return { discovered: 0 };
   const rows = candidates.map(({ sourceRuleId, sourceYear, startDate, endDate, accountId, ...rule }) => ({
