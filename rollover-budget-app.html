@@ -689,7 +689,7 @@
     <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
   </div>
   <div class="desktop-settings-card" id="settingsYears">
-    <h3>Budget Years &amp; Rollover Automation</h3>
+    <h3>Budget Years</h3>
     <div class="controls" id="budgetSettingsControls">
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
@@ -739,8 +739,8 @@
       <div id="mobileSettingsAccounts" class="account-manager"></div>
     </div>
     <div class="card mobile-settings-section" style="padding:16px;box-shadow:none">
-      <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years &amp; Rollover</h3>
-      <div id="mobileSettingsControls"></div>
+      <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years</h3>
+      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p><button type="button" class="primary" onclick="openRecurringModal()">Recurring Rules</button></div><div class="card mobile-settings-section" style="padding:16px;box-shadow:none;display:none" aria-hidden="true"><div id="mobileSettingsLegacyMount"></div>
     </div>
     <div class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
@@ -1419,7 +1419,7 @@ function render() {
   const m = yearData.months[selectedIdx];
   const c = computed[selectedIdx];
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
-  document.getElementById("autoRollToggle").checked = yearData.autoCascade;
+  document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
@@ -1456,7 +1456,7 @@ function render() {
     </div>`;
   if (!document.body.dataset.mobileTabInitialized) { setMobileTab("overview"); document.body.dataset.mobileTabInitialized = "true"; }
 
-  document.getElementById("activeYearSelect").value = activeYear;
+  document.getElementById("activeYearSelect").value = activeYear; syncMobileSettingsControls();
 
   document.getElementById("rollingStrip").innerHTML = yearData.months.map((mo, idx) => {
     const co = computed[idx];
@@ -1866,19 +1866,20 @@ function setDesktopSettings(open) {
   if (budget) budget.hidden = false;
 }
 function syncMobileSettingsControls() {
-  const controls = document.getElementById("budgetSettingsControls");
-  const mobileMount = document.getElementById("mobileSettingsControls");
-  if (!controls || !mobileMount) return;
-  const mobile = window.matchMedia("(max-width: 768px)").matches;
-  const movable = Array.from(controls.children).filter(node => node.dataset.setting !== "recurring");
-  if (mobile) {
-    movable.forEach(node => mobileMount.appendChild(node));
-    setDesktopSettings(false);
-  } else {
-    movable.forEach(node => controls.appendChild(node));
+  const desktop = document.getElementById("activeYearSelect");
+  const mobile = document.getElementById("mobileActiveYearSelect");
+  if (desktop && mobile) {
+    mobile.replaceChildren(...Array.from(desktop.options, option => option.cloneNode(true)));
+    mobile.value = activeYear;
   }
+  const toggle = document.getElementById("mobileAutoRollToggle");
+  if (toggle && db?.[activeYear]) toggle.checked = Boolean(db[activeYear].autoCascade);
+  if (window.matchMedia("(max-width: 768px)").matches) setDesktopSettings(false);
 }
-
+async function setAutoCascade(enabled) {
+  const desktop = document.getElementById("autoRollToggle");
+  if (desktop) { desktop.checked = Boolean(enabled); desktop.dispatchEvent(new Event("change", { bubbles: true })); }
+}
 function setMobileTab(tab) {
   if (!["overview","plan","settings"].includes(tab)) return;
   closeRecurringModal();
