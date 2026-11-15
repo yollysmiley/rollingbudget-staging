@@ -161,7 +161,7 @@ test('mobile recurring manager has distinct date-based rule creation', async ({ 
   await form.locator('[data-rec-field="startDate"]').fill('2026-03-15');
   await form.locator('[data-rec-field="endDate"]').fill('2027-03-15');
   await form.locator('[data-rec-field="frequency"]').selectOption('annually');
-  await form.getByRole('button', { name: 'Add rule' }).click();
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect(page.locator('#mobileRulesList')).toContainText('Annual Insurance');
   await expect(page.locator('#mobileRulesList')).toContainText('2026-03-15');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -286,7 +286,7 @@ test('mobile automatic recurring backfill persists across desktop layout and rel
   await form.locator('[data-rec-field="name"]').fill('Verified expense');
   await form.locator('[data-rec-field="amount"]').fill('125');
   await form.locator('[data-rec-field="startDate"]').fill('2026-01-05');
-  await form.getByRole('button', { name: 'Add rule' }).click();
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.reload();
@@ -301,7 +301,7 @@ test('mobile recurring cloud failure does not add unsaved occurrences', async ({
   await form.locator('[data-rec-field="amount"]').fill('20');
   await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
   page.on('dialog', dialog => dialog.accept());
-  await form.getByRole('button', { name: 'Add rule' }).click();
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect(page.locator('#mobileRulesList')).toContainText('Cloud failure expense');
   expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Cloud failure expense').length)).toBe(0);
 });
@@ -316,7 +316,7 @@ test('mobile automatic backfill preserves existing manual transactions', async (
   await form.locator('[data-rec-field="name"]').fill('Rent');
   await form.locator('[data-rec-field="amount"]').fill('500');
   await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
-  await form.getByRole('button', { name: 'Add rule' }).click();
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect(page.locator('#mobileRulesList')).toContainText('Rent');
   const entries = await page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Rent'));
   expect(entries).toHaveLength(1);
