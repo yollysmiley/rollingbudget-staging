@@ -42,7 +42,8 @@ test('desktop automation controls are mounted in the automation screen, never hi
   assert.match(years, /id="activeYearSelect"/);
   assert.match(years, /onclick="createNewYear\(\)"/);
   assert.doesNotMatch(years, /id="autoRollToggle"|onclick="openRecurringModal\(\)"/);
-  assert.match(automation, /id="autoRollToggle"/);
+  assert.doesNotMatch(automation, /onclick="openRecurringModal\(\)"/);
+  assert.match(html, /id="desktopRecurringButton"[^>]*onclick="showDesktopPage\('recurring'\)"/);
   assert.doesNotMatch(automation, /onclick="openRecurringModal\(\)"/);
   assert.match(html, /id="desktopRecurringButton"/);
   assert.match(html, /data-mobile-action="recurring"/);
