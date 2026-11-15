@@ -34,7 +34,7 @@ test('migration writes normalized, owner-scoped records and preserves original d
     } };
   } };
   assert.deepEqual(await migrateReconciledRecurringRules(client, 'owner-a', years, manifest, decisions),
-    { discovered: 2, written: 2 });
+    { discovered: 2, attempted: 2 });
   await migrateReconciledRecurringRules(client, 'owner-a', years, manifest, decisions);
   assert.equal(stored.size, 2);
   assert.equal(calls, 2);
@@ -66,7 +66,7 @@ test('empty account writes nothing and database errors propagate', async () => {
   } };
   assert.deepEqual(await migrateReconciledRecurringRules(client, 'owner-a', {}, {
     complete: true, expectedYears: []
-  }, {}), { discovered: 0, written: 0 });
+  }, {}), { discovered: 0, attempted: 0 });
   assert.equal(calls, 0);
   await assert.rejects(() => migrateReconciledRecurringRules(client, 'owner-a', years, manifest, decisions), /offline/);
   assert.equal(calls, 1);
