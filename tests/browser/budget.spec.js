@@ -100,7 +100,8 @@ test('desktop recurring manager provides a route back to the budget overview', a
   await expect(page.locator('.main-grid')).toBeVisible();
   await page.locator('#desktopSettingsButton').click();
   await page.locator('[data-settings-section="automation"]').click();
-  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toHaveCount(0);
+  await expect(page.locator('#desktopRecurringButton')).toBeVisible();
 });
 
 test('desktop Settings exposes year, automation and recurring controls on separate screens', async ({ page }) => {
@@ -119,7 +120,8 @@ test('desktop Settings exposes year, automation and recurring controls on separa
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
   await page.locator('[data-settings-section="automation"]').click();
   await expect(page.locator('#autoRollToggle')).toBeVisible();
-  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toHaveCount(0);
+  await expect(page.locator('#desktopRecurringButton')).toBeVisible();
   await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
