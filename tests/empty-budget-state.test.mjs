@@ -32,8 +32,8 @@ test('new UI loads and saves its own cloud records without touching Release 2 da
 test('user-entered strings are HTML-escaped before entering markup', () => {
   assert.ok(html.includes('function esc(str)'));
   assert.ok(html.includes('.replace(/</g, "&lt;")'));
-  assert.ok(html.includes('esc(r.name)'));
-  assert.ok(html.includes('esc(r.due'));
+  assert.ok(html.includes('esc(rule.name)'));
+  assert.ok(html.includes('esc(rule.due'));
 });
 
 test('staging migration creates a separate RLS-protected table for the new UI', () => {
