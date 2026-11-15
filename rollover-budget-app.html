@@ -2000,7 +2000,7 @@ function recurringRuleItem(r){
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
 async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
-  const years = Object.keys(db).filter(year => /^\\d{4}$/.test(year) &&
+  const years = Object.keys(db).filter(year => /^\d{4}$/.test(year) &&
     year >= startDate.slice(0, 4) && (!endDate || year <= endDate.slice(0, 4)));
   const deferred = [];
   for (const year of years) {
