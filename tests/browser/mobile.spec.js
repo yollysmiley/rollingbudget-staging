@@ -433,3 +433,34 @@ test('mobile overview defaults to calendar month and keeps manual month selectio
   await page.evaluate(() => render());
   expect(await page.evaluate(() => selectedIdx)).toBe(7);
 });
+
+test('mobile SPA routes persist through refresh and browser history', async ({ page }) => {
+  const cases = [
+    ['overview', 'overview'],
+    ['plan', 'budget'],
+    ['settings', 'settings']
+  ];
+  for (const [tab, route] of cases) {
+    await page.locator('#mobileMenuButton').click();
+    await page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`[?&]page=${route}(?:&|$)`));
+    await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
+    await page.reload();
+    await expectAuthenticatedBudget(page);
+    await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
+  }
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('[data-mobile-action="recurring"]').click();
+  await expect(page).toHaveURL(/[?&]page=recurring-rules(?:&|$)/);
+  await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('body')).toHaveClass(/recurring-manager-open/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('body')).toHaveClass(/recurring-manager-open/);
+  await page.goBack();
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await expect(page.locator('body')).not.toHaveClass(/recurring-manager-open/);
+  await expect(page.locator('[data-mobile-tab="settings"]')).toHaveAttribute('aria-current', 'page');
+  await page.goForward();
+  await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
+});
