@@ -409,3 +409,30 @@ test('stale ordinary budget save cannot overwrite a newer cloud revision', async
   expect(outcome.revision).toBe('2026-11-15T12:00:00.000Z');
   expect(outcome.local).toContainEqual({ name: 'Unsynced local edit', amount: 19 });
 });
+
+test('desktop preserves an unresolved cloud conflict across reload and offers explicit recovery', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const year = activeYear, key = currentUser.id + ':' + year;
+    const cloud = structuredClone(db[year]);
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year: Number(year), budget_data: cloud, updated_at: '2026-11-15T12:00:00.000Z' }
+    }));
+    cloudBudgetVersions.set(key, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Local unsynced entry', amount: 35 });
+    const status = await saveDB();
+    return { status, marker: localStorage.getItem(conflictStorageKey(year)) };
+  });
+  expect(result).toEqual({ status: 'local-saved', marker: '1' });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
+  await expect(page.locator('#cloudSaveStatus button')).toHaveCount(2);
+  expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
+    entry => entry.name === 'Local unsynced entry'))).toBe(true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
+    entry => entry.name === 'Local unsynced entry'))).toBe(false);
+  expect(await page.evaluate(() => Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')))).toBe(true);
+});
