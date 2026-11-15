@@ -83,22 +83,9 @@ The additive `budget_recurring_rules` migration defines owner-scoped, RLS-protec
 
 Regression coverage: `tests/recurring-foundation.test.mjs`, plus the existing desktop/mobile recurring-rule and account tests. Staging schema and simulated authenticated cross-user RLS checks passed. Historical migration is not activated. Existing desktop/mobile behavior is unchanged.
 
-### Phase 4B historical reconciliation (draft PR #39)
 
-The read-only `inspectRecurringHistory(years, manifest)` preflight requires a verified complete year listing. It reports missing, duplicate, cross-year reused, and numeric legacy IDs without changing budgets or writing to Supabase. Numeric IDs are blocked until explicit normalization is implemented; reused IDs require explicit reconciliation. The scheduler is not connected to budget loading or migration yet. Do not enable automatic migration or merge PR #39 until the remaining integration work and regression checks pass.
+### Phase 4B shared recurring rules (draft PR #39)
 
-### Phase 4B.3 reconciled storage bridge
+New recurring rules are stored in the owner-scoped `budget_recurring_rules` table. Both desktop and mobile managers use the same service for creation, activation, and deletion. Existing budget transactions are preserved and are not rewritten when a recurring definition is disabled or removed. Legacy year-scoped recurring definitions are retired as an active source and are not migrated; no automatic historical reconciliation is performed. The scheduler generates stable occurrence identifiers and requires an explicit Apply action. Existing transactions without matching occurrence identifiers cannot be automatically deduplicated, so the user must review potential duplicates before applying.
 
-`migrateReconciledRecurringRules(client, userId, years, manifest, decisions)` is an opt-in API, not invoked by the app. The caller must provide the authenticated user, a verified complete year history, and explicit per-year source-ID mappings using JSON-encoded `[year,sourceId]` keys. Cross-year merged identities, missing IDs, duplicate IDs, incomplete history, and invalid rule definitions block all writes. The bridge preserves original year documents and historical transactions, and upserts only new user-owned recurring definitions with `ignoreDuplicates`. Its `attempted` count is not an inserted-row count. Existing source-identity uniqueness constraints may reject conflicting mappings, which must be resolved rather than bypassed. Do not enable automatic migration until end-to-end verification is complete.
-
-### Phase 4B.4 authenticated recurring preview
-
-The authenticated app now loads owner-scoped definitions through `scripts/recurring-app-service.mjs` after budget years load and shows a read-only occurrence preview in the desktop and mobile Recurring Rules Manager. Imported historical rules (`source_year` set) remain held for reconciliation. The preview does not write budget transactions, alter totals, or enable automatic migration. Failed loads show an unavailable status rather than generating entries. Browser and unit regression tests cover the new preview surface. Full CI must pass before any merge.
-
-### Phase 4B.5 explicit application of verified occurrences
-
-The desktop and mobile Recurring Rules Manager now offer **Apply scheduled entries** only when the shared preview finds new entries. Clicking refreshes owner-scoped definitions, excludes imported historical rules, asks for explicit confirmation, reruns duplicate checks, and persists the current year through the existing budget save queue. Stable `occurrenceId` values prevent repeated generation, and existing entries bearing matching `recurringRuleId` in any category of that month are preserved rather than overwritten. Legacy transactions lacking a rule ID cannot be automatically identified; users must review the preview before applying. The app does **not** automatically populate years on navigation or sign-in. Cloud save failures continue to retain the local copy and display the existing cloud sync warning. New-user test fixtures create entries explicitly. CI must validate desktop/mobile behavior before merging.
-
-### PR #39 review remediation (in progress)
-
-The explicit Apply action now distinguishes confirmed cloud persistence from local-only persistence and warns users when the cloud save fails. Browser coverage injects a cloud-write failure with a fresh account fixture. The legacy year-scoped rule manager and cross-year Supabase rule table are **not yet unified**; historical entries without stable identity remain a duplication risk. Do not merge this draft until the source-of-truth and historical-collision review items are resolved and CI passes.
+Cloud persistence is distinct from local-only persistence and failure is surfaced to the user. A cross-device stale-write safeguard and complete end-to-end browser verification remain merge gates. Do not merge until CI and these safeguards pass.
