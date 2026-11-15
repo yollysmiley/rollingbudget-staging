@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, setRecurringRuleActive, removeRecurringRule } from '../scripts/recurring-app-service.mjs';
+import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear } from '../scripts/recurring-app-service.mjs';
 
 const rule = { id: 'rent', name: 'Rent', category: 'fixed', amount: '500', due: '1st',
   account_id: null, frequency: 'monthly', start_date: '2026-12-01',
@@ -76,4 +76,36 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
   assert.deepEqual(calls[1], ['update', { active: false }, 'id', 'new-rent']);
   assert.deepEqual(calls[2], ['delete', 'id', 'new-rent']);
   assert.deepEqual(historical, snapshot);
+});
+
+test('recurring cloud commit rejects stale revisions without modifying source budgets', async () => {
+  const source = budget();
+  const rows = [{ year: 2027, budget_data: source, updated_at: '2026-11-15T00:00:00.000Z' }];
+  let conflicted = true;
+  const client = { from(table) {
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq() { return { async eq() { return { data: rows, error: null }; } }; } }; },
+      update(changes) {
+        assert.equal(changes.budget_data.months[0].fixed.length, 1);
+        return { eq() { return { eq() { return { eq(field, value) {
+          assert.equal(field, 'updated_at');
+          assert.equal(value, rows[0].updated_at);
+          return { async select() { return { data: conflicted ? [] : [{ year: 2027 }], error: null }; } };
+        } }; } }; } };
+      }
+    };
+  } };
+  const build = doc => {
+    const copy = structuredClone(doc);
+    copy.months[0].fixed.push({ name: 'Scheduled', amount: 10 });
+    return { document: copy, added: 1, skipped: [] };
+  };
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, build), /changed on another device/);
+  assert.equal(source.months[0].fixed.length, 0);
+  conflicted = false;
+  const saved = await commitRecurringYear(client, 'owner-a', 2027, build);
+  assert.equal(saved.saved, true);
+  assert.equal(saved.document.months[0].fixed.length, 1);
+  assert.equal(source.months[0].fixed.length, 0);
 });
