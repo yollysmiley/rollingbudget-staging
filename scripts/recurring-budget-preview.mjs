@@ -28,9 +28,13 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
       const index = Number(occurrence.scheduledMonth.slice(5, 7)) - 1;
       const target = TARGETS[occurrence.category];
       const list = months[index][target];
-      if (blocked.has(rule.id) || list.some(entry =>
-        entry.occurrenceId === occurrence.occurrenceId ||
-        entry.recurringRuleId === rule.id)) {
+      // A legacy occurrence may have moved categories after manual edits.
+      // Check every category for that month, not only the target category.
+      const alreadyPresent = Object.values(TARGETS).some(category =>
+        months[index][category].some(entry =>
+          entry.occurrenceId === occurrence.occurrenceId ||
+          entry.recurringRuleId === rule.id));
+      if (blocked.has(rule.id) || alreadyPresent) {
         skipped.push(occurrence.occurrenceId);
         continue;
       }
