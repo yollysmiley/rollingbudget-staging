@@ -1,6 +1,6 @@
 /* Phase 2 public marketing homepage: isolated from authenticated app views. */
 body{background:#f6f5fa}
-.public-header{background:rgba(255,255,255,.92);border-color:#ede9fe}
+.public-header{flex-wrap:wrap;background:rgba(255,255,255,.92);border-color:#ede9fe}
 .public-main{max-width:1200px;padding:56px 24px 72px}
 .public-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:clamp(28px,5vw,72px)}
 .public-hero h1{font-family:"Plus Jakarta Sans",Inter,system-ui,sans-serif;font-weight:800;font-size:clamp(2.65rem,4.4vw,3.5rem);max-width:610px}
