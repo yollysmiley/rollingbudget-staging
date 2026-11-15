@@ -25,6 +25,28 @@ export async function mockSignedInBudget(page) {
                   ? JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]') : [];
                 return Promise.resolve({ data: table === 'budget_recurring_rules' ? recurringRows : accountRows, error: null });
               },
+              insert(row) {
+                if (table === 'budget_recurring_rules') {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                  rows.push(row);
+                  sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows));
+                }
+                return Promise.resolve({ data: [row], error: null });
+              },
+              update(changes) {
+                return { eq() { return { eq(_field, id) {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                  sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.map(row => row.id === id ? { ...row, ...changes } : row)));
+                  return Promise.resolve({ error: null });
+                } }; } };
+              },
+              delete() {
+                return { eq() { return { eq(_field, id) {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                  sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.filter(row => row.id !== id)));
+                  return Promise.resolve({ error: null });
+                } }; } };
+              },
               upsert() { return Promise.resolve({ data: [], error: table === 'budget_ui_years' && sessionStorage.getItem('__mock_budget_cloud_failure') === '1' ? { message: 'offline' } : null }); }
             };
             return chain;
