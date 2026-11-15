@@ -378,14 +378,14 @@ test('desktop duplicate review skips ambiguous historical entries when user decl
   const dialogs = [];
   page.on('dialog', async dialog => {
     dialogs.push(dialog.message());
-    if (dialog.message().includes('possible duplicate recurring entries')) await dialog.dismiss();
+    if (dialog.message().includes('Possible duplicate for')) await dialog.dismiss();
     else await dialog.accept();
   });
   await page.locator('#desktopSettingsButton').click();
   await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
   await page.locator('#desktopApplyRecurringPreview').click();
-  await expect.poll(() => dialogs.some(message => message.includes('possible duplicate recurring entries'))).toBeTruthy();
+  await expect.poll(() => dialogs.some(message => message.includes('Possible duplicate for'))).toBeTruthy();
   await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
   const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
   expect(entries).toHaveLength(1);
