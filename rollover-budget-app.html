@@ -1014,7 +1014,7 @@ function renderAccounts() {
     <div class="account-manager-row" data-account-id="${esc(account.id)}">
       <strong>${esc(account.name)}</strong>
       <div class="account-manager-actions">
-        <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Included</label>
+        <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
         <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Rename</button>
         <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
       </div>
@@ -1360,7 +1360,7 @@ function parseDayNum(dueStr) {
 }
 
 function computeRolling(yrKey) {
-  if (accountBudgetModule && budgetAccounts.length) {
+  if (accountBudgetModule) {
     return accountBudgetModule.computeAccountBudget(db[yrKey], budgetAccounts);
   }
   const yearData = db[yrKey];
@@ -1567,7 +1567,7 @@ function render() {
   incHtml += m.income.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editInc(${idx}, 'name', this.value)" /></td>
-      <td class="num"><input class="inline-input num" aria-label="Income amount" type="number" step="0.01" value="${Number(item.amount ?? ((Number(item.cpm)||0)+(Number(item.usaa)||0))) || 0}" ${item.accountId ? '' : 'disabled title="Legacy income awaiting migration"'} onchange="editInc(${idx}, 'amount', this.value)" /></td>
+      <td class="num"><input class="inline-input num" aria-label="Income amount" type="number" step="0.01" value="${Number(item.amount ?? ((Number(item.cpm)||0)+(Number(item.usaa)||0))) || 0}" ${(!item.accountId && (Object.hasOwn(item, 'cpm') || Object.hasOwn(item, 'usaa'))) ? 'disabled title="Legacy income awaiting migration"' : ''} onchange="editInc(${idx}, 'amount', this.value)" /></td>
       <td>${accountPicker("income", idx, item.accountId)}<button class="del-btn" onclick="delItem('income', ${idx})">×</button></td>
     </tr>
   `).join("");

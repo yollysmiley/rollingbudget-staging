@@ -19,3 +19,11 @@ body{background:#f6f5fa}
 .public-header .btn,.public-hero .btn{min-height:46px}
 @media(max-width:768px){.public-main{padding:40px 20px 64px}.public-hero{grid-template-columns:1fr}.public-art{min-height:260px}.budget-scene{max-width:420px}.public-features{margin-top:44px}.public-header .brand{font-size:1.02rem}.public-header nav .btn{padding:10px 11px;font-size:.8rem}}
 @media(prefers-reduced-motion:no-preference){.public-art .scene-card{animation:scene-float 5s ease-in-out infinite alternate}@keyframes scene-float{to{transform:translateY(-8px)}}}
+
+/* Keep mobile authentication actions together at the right edge of the header. */
+@media(max-width:768px){
+  .public-header{flex-wrap:nowrap;gap:8px}
+  .public-header .brand{min-width:0;flex:0 1 auto}
+  .public-header nav[aria-label="Account"]{margin-left:auto;flex:0 0 auto;justify-content:flex-end;gap:6px}
+  .public-header nav .btn{white-space:nowrap;padding:10px 9px;font-size:.76rem}
+}

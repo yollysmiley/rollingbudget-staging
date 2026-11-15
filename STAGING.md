@@ -65,3 +65,12 @@ Desktop Settings keeps its existing section navigation and controls. Mobile Sett
 ### Phase 3A navigation revision
 
 The desktop header now exposes one **Budget** destination instead of separate Overview and Plan buttons. Desktop Settings uses four mutually exclusive submenu screens selected by sidebar buttons, rather than anchor scrolling. Mobile retains Overview and Plan in its navigation but Settings now opens a four-option menu; each option opens a dedicated detail screen with **Back to Settings**. Tests: `tests/desktop-settings-navigation.test.mjs`, `tests/browser/settings-navigation.spec.js`, and `tests/browser/mobile.spec.js`.
+
+
+## Phase 3B — Account inclusion in budget totals and homepage navigation
+
+The Accounts Manager exposes **Include in budget totals** for each account. Excluded income, expenses, credit-card payments, and loan payments do not contribute to monthly totals, pre-15 outflow, or subsequent auto-cascade rollover. Source entries remain intact, and re-including an account restores its contribution. Unassigned entries remain included. Account inclusion is persisted through the existing `budget_accounts.included` field; no schema migration is needed. Account-based computation is used even when no named accounts exist, so unassigned amount-based income remains visible.
+
+The public homepage header labels are **Login** and **Sign Up** and remain grouped at the right on mobile. The hero keeps **Get started** and removes the duplicate sign-in action. The authenticated budget navigation and authentication behavior are unchanged. Validation includes account calculation unit tests, desktop/mobile budget browser coverage, and responsive homepage tests.
+
+New-user browser fixtures begin with no accounts, and the desktop/mobile Accounts Manager must show the empty state. Historical CPM/USAA account fixtures are enabled only in explicitly marked legacy migration tests; no named account is created for a new user by default.

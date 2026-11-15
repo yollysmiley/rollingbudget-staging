@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('public sign-in and account creation restore approved branding', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'Sign In', exact: true }).click();
+  await page.getByRole('link', { name: 'Login', exact: true }).click();
   const dialog = page.locator('#accountDialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.account-brand')).toContainText('Rolling Budget');
@@ -27,7 +27,7 @@ test('homepage forgot password requests email before navigating to recovery page
     body: `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null},error:null}),resetPasswordForEmail:async(email,options)=>{window.__resetRequest={email,redirectTo:options.redirectTo};return {error:null};}}})};`
   }));
   await page.goto('/');
-  await page.getByRole('link', { name: 'Sign In', exact: true }).click();
+  await page.getByRole('link', { name: 'Login', exact: true }).click();
   const dialog = page.locator('#accountDialog');
   await dialog.locator('#accountForgot').click();
   await expect(dialog.locator('#accountTitle')).toHaveText('Reset your password');

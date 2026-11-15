@@ -18,7 +18,7 @@ export async function mockSignedInBudget(page) {
           from(table) {
             const chain = {
               select() { return chain; },
-              eq() { return Promise.resolve({ data: table === 'budget_accounts' ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [], error: null }); },
+              eq() { return Promise.resolve({ data: table === 'budget_accounts' && sessionStorage.getItem('__mock_legacy_accounts') === '1' ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [], error: null }); },
               upsert() { return Promise.resolve({ data: [], error: null }); }
             };
             return chain;
