@@ -1319,18 +1319,18 @@ async function applyRecurringPreview() {
     const loaded = await recurringAppService.loadRecurringPreviewRules(supabaseClient, owner);
     if (currentUser?.id !== owner || activeYear !== year) return;
     const initial = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
-    let approvedOccurrenceIds = [];
-    if (initial.ambiguous.length) {
-      const examples = initial.ambiguous.slice(0, 8).map(item =>
-        item.month + ': ' + item.name + ' (' + item.amount + ')' +
-        ' matches ' + item.matches.map(match => match.name + ' (' + match.amount + ')').join(', ')).join('\n');
-      const includeAmbiguous = confirm(
-        initial.ambiguous.length + ' possible duplicate recurring entries were found.\n' +
-        examples + (initial.ambiguous.length > 8 ? '\n...and more.' : '') +
-        '\n\nOK: explicitly include these possible duplicates.\n' +
-        'Cancel: keep existing transactions and skip all possible duplicates.'
-      );
-      if (includeAmbiguous) approvedOccurrenceIds = initial.ambiguous.map(item => item.occurrenceId);
+    const approvedOccurrenceIds = [];
+    for (const item of initial.ambiguous) {
+      if (currentUser?.id !== owner || activeYear !== year) return;
+      const matches = item.matches.map(match =>
+        match.category + ': ' + match.name + ' (' + match.amount +
+        ', account: ' + (match.accountId || 'none') + ')').join('\n');
+      if (confirm('Possible duplicate for ' + item.month + ': ' + item.name +
+        ' (' + item.amount + ', account: ' + (item.accountId || 'none') +
+        ').\nExisting entries:\n' + matches +
+        '\n\nOK: include this scheduled entry. Cancel: skip this entry.')) {
+        approvedOccurrenceIds.push(item.occurrenceId);
+      }
     }
     const options = { approvedOccurrenceIds };
     const result = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded, options);
