@@ -24,7 +24,17 @@ function harness() {
     db: { '2026': { months: [{ income: [{ cpm: 100 }] }] } },
     activeYear: '2026',
     currentUser: { id: 'owner' },
-    supabaseClient: { from: () => ({ upsert: row => new Promise(resolve => writes.push({ row, resolve })) }) },
+    supabaseClient: { from: () => ({
+      insert: row => new Promise(resolve => writes.push({ row, resolve })),
+      update: row => {
+        const filters = {};
+        const query = {
+          eq(field, value) { filters[field] = value; return query; },
+          select() { return new Promise(resolve => writes.push({ row, filters, resolve })); }
+        };
+        return query;
+      }
+    }) },
     alert: () => { throw new Error('unexpected local storage failure'); }
   };
   vm.createContext(context);
@@ -45,7 +55,8 @@ test('consecutive edits save immutable snapshots in order', async () => {
   await flush();
   assert.equal(writes.length, 2);
   assert.equal(writes[1].row.budget_data.months[0].income[0].cpm, 4321.25);
-  writes[1].resolve({ error: null });
+  assert.equal(writes[1].filters.updated_at, writes[0].row.updated_at);
+  writes[1].resolve({ data: [{ year: 2026 }], error: null });
   await Promise.all([first, second]);
 });
 test('failed cloud save retains local snapshot and shows warning', async () => {
@@ -55,6 +66,19 @@ test('failed cloud save retains local snapshot and shows warning', async () => {
   writes[0].resolve({ error: { message: 'synthetic error' } });
   await saving;
   assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].cpm, 100);
-  assert.match(status.textContent, /Cloud sync failed/);
+  assert.match(status.textContent, /Cloud save rejected or unavailable/);
   assert.equal(status.hidden, false);
+});
+
+test('stale revision rejects cloud write without losing local snapshot', async () => {
+  const { context, writes, store, status } = harness();
+  vm.runInContext("cloudBudgetVersions.set('owner:2026', '2026-01-01T00:00:00.000Z')", context);
+  const saving = vm.runInContext('saveDB()', context);
+  await flush();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].filters.updated_at, '2026-01-01T00:00:00.000Z');
+  writes[0].resolve({ data: [], error: null });
+  assert.equal(await saving, 'local-saved');
+  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].cpm, 100);
+  assert.match(status.textContent, /Cloud save rejected/);
 });
