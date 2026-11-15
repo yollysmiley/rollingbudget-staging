@@ -33,3 +33,7 @@ The public staging homepage is `/rollingbudget-staging/`. The authenticated budg
 Keep the required `build` and `validate` status checks stable when changing CI. Browser failure reports are retained for seven days; successful runs do not upload those reports. The built staging frontend remains available as a short-lived artifact. Live tests seed only modern `amount`/`accountId` income and a run-scoped account; dedicated unit/browser regressions test historical CPM/USAA migration separately. Cleanup must verify test-run ownership before deleting fixture records.
 
 **Reproducible installs:** `package-lock.json` is committed. All three workflows use `npm ci` and `actions/setup-node` npm caching keyed to the lockfile; the credentialed live workflow and secret-free validation retain `--ignore-scripts`. The cache contains npm download artifacts, not browser sessions or authenticated data.
+
+## Staging redesign — Phase 1
+
+The shared brand stylesheet is `styles/brand.css`; the staging build publishes it under both public and authenticated routes. Desktop and mobile navigation remain separate while using the same budget state. See [brand standards](docs/BRAND_GUIDELINES.md) and [staging configuration](STAGING.md).
