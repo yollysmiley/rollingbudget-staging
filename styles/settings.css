@@ -1,21 +1,25 @@
+/* Year selection lives beside the budget, not inside Settings. */
+.budget-year-toolbar{max-width:1400px;margin:14px auto 0;padding:0 24px;display:flex;justify-content:flex-end;align-items:center}
+.budget-year-picker{display:flex;align-items:center;gap:10px;min-width:0}
+.budget-year-picker label{font-weight:700;color:var(--text);font-size:.85rem}
+.budget-year-picker select{min-width:130px;min-height:44px;border:1px solid var(--rb-border);border-radius:10px;background:var(--rb-surface);color:var(--text);padding:8px 12px;font:inherit;font-weight:650}
+.budget-year-picker-mobile{display:none}
+body.desktop-settings-open .budget-year-toolbar,body.mobile-tab-settings .budget-year-toolbar,body.recurring-manager-open .budget-year-toolbar{display:none}
+@media(max-width:768px){
+  .budget-year-toolbar{margin:12px auto 0;padding:0 12px}
+  .budget-year-picker-desktop{display:none}
+  .budget-year-picker-mobile{display:flex;width:100%;justify-content:space-between}
+}
 /* Phase 3A: distinct Settings presentations, shared application state. */
 .settings-section-nav a[aria-current="location"]{background:#ede9fe;color:#5b21b6;box-shadow:inset 3px 0 0 var(--rb-accent)}
 .desktop-settings-panel .settings-sections{display:grid;gap:18px}
 .desktop-settings-panel .desktop-settings-card{min-width:0}
-.mobile-settings-controls{display:grid;gap:10px}
-.mobile-settings-controls label,.mobile-settings-toggle{font-weight:700;color:var(--text)}
-.mobile-settings-controls select,.mobile-settings-controls button{width:100%;min-height:44px}
+.mobile-settings-toggle{font-weight:700;color:var(--text)}
 .mobile-settings-toggle{display:flex;gap:12px;align-items:center;min-height:44px}
 .mobile-settings-toggle input{width:20px;height:20px;accent-color:var(--rb-accent)}
 .settings-help{color:var(--muted);font-size:.85rem;line-height:1.5;margin:5px 0 14px}
 @media(max-width:768px){#mobileSettingsPanel{max-width:100%;overflow-wrap:anywhere}#mobileSettingsPanel .mobile-settings-section{min-width:0}#mobileSettingsPanel button{min-height:44px}}
 @media(min-width:769px){#mobileSettingsPanel{display:none!important}}
-
-/* Override the legacy movable-control layout without touching budget forms. */
-#mobileSettingsControls{display:grid!important;gap:10px}
-#mobileSettingsControls > label{display:block!important}
-#mobileSettingsControls > select{display:block!important;width:100%}
-#mobileSettingsControls > button{display:block!important;width:100%}
 
 /* Settings navigation displays one content screen at a time. */
 .desktop-settings-card[hidden],.mobile-settings-section[hidden],#mobileSettingsDetail[hidden],#mobileSettingsMenu[hidden]{display:none!important}
