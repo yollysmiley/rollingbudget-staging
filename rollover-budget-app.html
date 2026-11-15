@@ -709,7 +709,7 @@
         <input type="checkbox" id="autoRollToggle" checked />
         <span>Auto-Cascade</span>
       </label>
-      <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+      
     </div>
   </div>
   <div class="desktop-settings-card" id="settingsProfile" hidden>
@@ -749,7 +749,7 @@
     </div>
     <div data-mobile-settings-section="years" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years</h3>
-      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p><button type="button" class="primary" onclick="openRecurringModal()">Recurring Rules</button></div>
+      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p></div>
     <div data-mobile-settings-section="security" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
