@@ -153,6 +153,15 @@ test('desktop shared recurring rules require explicit apply and disabling preser
   await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
   const after = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
   expect(after).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  const edits = ['90', 'monthly'];
+  page.on('dialog', dialog => dialog.accept(edits.shift()));
+  await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const rules = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+    return rules[0]?.versions?.at(-1)?.amount;
+  })).toBe(90);
+  const unchanged = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
+  expect(unchanged).toEqual(after);
 });
 
 test('legacy rule definitions are retired while existing budget entries remain intact', async ({ page }) => {
