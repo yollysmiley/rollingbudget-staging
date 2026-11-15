@@ -584,3 +584,58 @@ test('creating a budget year safely applies global recurring rules without savin
   }));
   expect(state).toEqual({ savedYears: ['2026', '2028'], count: 12, active: '2028' });
 });
+
+test('desktop recurring sync reports added entries and skips existing entries without offering retry', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Sync result expense');
+  await form.locator('[data-rec-field="amount"]').fill('19');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-05');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('Recurring synchronization complete: 12 entries added');
+  await expect(page.locator('#desktopRecurringSyncDetails')).toContainText('2026: 12 added');
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeHidden();
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-05'));
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('0 entries added');
+  await expect(page.locator('#desktopRecurringSyncDetails')).toContainText('12 already present');
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed)
+    .filter(x => x.name === 'Sync result expense').length)).toBe(12);
+});
+
+test('desktop recurring retry recovers from a transient cloud error without replaying entries', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Retry protected entry');
+  await form.locator('[data-rec-field="amount"]').fill('81');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed
+    .some(x => x.name === 'Retry protected entry'))).toBe(true);
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows['2026'].budget_data.months[11].fixed =
+      rows['2026'].budget_data.months[11].fixed.filter(x => x.name !== 'Retry protected entry');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    db['2026'] = structuredClone(rows['2026'].budget_data);
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: db['2026'], updatedAt: rows['2026'].updated_at
+    }));
+    sessionStorage.setItem('__mock_budget_cloud_failure', '1');
+  });
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-15'));
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('synchronization incomplete');
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeVisible();
+  expect(await page.evaluate(() => db['2026'].months[11].fixed
+    .filter(x => x.name === 'Retry protected entry').length)).toBe(0);
+  await page.reload();
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeVisible();
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
+  await page.locator('#desktopRetryRecurringSync').click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed
+    .filter(x => x.name === 'Retry protected entry').length)).toBe(1);
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeHidden();
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('Recurring synchronization complete');
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed)
+    .filter(x => x.name === 'Retry protected entry').length)).toBe(12);
+});

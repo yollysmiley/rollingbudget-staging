@@ -1,5 +1,7 @@
 ## Unreleased
 
+- PR #42 Phase 4 staging: show owner-scoped recurring sync results (added, already present, possible duplicates and deferred years) separately on desktop/mobile, persist incomplete date ranges within the session and provide safe retry that re-reads authoritative cloud data and preserves existing conflict checks. No manual preview or apply controls restored.
+
 - PR #42 Phase 3 staging: connect future-effective recurring edits and reactivation to automatic missing-entry synchronization; disabling preserves existing entries. Display upcoming changes in distinct desktop/mobile views, synchronize global rules on new budget-year creation, and prevent accidentally replacing an existing year. Add service and browser regression tests.
 
 - PR #42 staging: restrict automatic recurring backfill to owner-saved cloud years, explicitly save only the selected eligible year on rule creation, pin cloud revisions during synchronization, and preserve unsynced local changes with conflict recovery. Added service and desktop/mobile regression coverage. Existing saved entries are never rewritten; no production changes.

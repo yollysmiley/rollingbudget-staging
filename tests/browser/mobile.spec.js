@@ -500,3 +500,58 @@ test('mobile disable preserves saved entries; re-enable backfills missing future
   expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
     x => x.name === 'Mobile reactivation').length)).toBe(1);
 });
+
+test('mobile recurring synchronization identifies possible duplicates without changing manual entries', async ({ page }) => {
+  await page.evaluate(async () => {
+    db['2026'].months[0].fixed.push({ name: 'Mobile rental', amount: 70, accountId: null });
+    await saveDB();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-action="recurring"]').click();
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Mobile rental');
+  await form.locator('[data-rec-field="amount"]').fill('70');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
+  await expect(page.locator('#mobileRecurringSyncStatus')).toContainText('possible duplicate');
+  await expect(page.locator('#mobileRecurringSyncDetails')).toContainText('Skipped Mobile rental on 2026-01-15');
+  await expect(page.locator('#mobileRetryRecurringSync')).toBeHidden();
+  const january = await page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Mobile rental'));
+  expect(january).toHaveLength(1);
+  expect(january[0]).toEqual({ name: 'Mobile rental', amount: 70, accountId: null });
+});
+
+test('mobile recurring retry is scoped to the signed-in account and stays blocked on conflict', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-action="recurring"]').click();
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Mobile retry');
+  await form.locator('[data-rec-field="amount"]').fill('27');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed
+    .some(x => x.name === 'Mobile retry'))).toBe(true);
+  await page.evaluate(() => {
+    const year = '2026', key = currentUser.id + ':' + year;
+    db[year].months[1].fixed.push({ name: 'Local-only', amount: 14 });
+    markCloudConflict(key, year);
+  });
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-01'));
+  await expect(page.locator('#mobileRetryRecurringSync')).toBeVisible();
+  await page.locator('#mobileRetryRecurringSync').click();
+  await expect(page.locator('#mobileRecurringSyncStatus')).toContainText('synchronization incomplete');
+  const values = await page.evaluate(() => {
+    const owner = currentUser.id;
+    const own = recurringSyncScopes.length;
+    currentUser = { ...currentUser, id: 'other-test-owner' };
+    renderRecurringSyncStatus();
+    const other = recurringSyncScopes.length;
+    const hidden = document.getElementById('mobileRecurringSyncStatus').hidden;
+    currentUser = { ...currentUser, id: owner };
+    renderRecurringSyncStatus();
+    return { own, other, hidden };
+  });
+  expect(values).toEqual({ own: 1, other: 0, hidden: true });
+  expect(await page.evaluate(() => db['2026'].months[1].fixed
+    .some(x => x.name === 'Local-only'))).toBe(true);
+});

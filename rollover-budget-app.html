@@ -546,6 +546,13 @@
     .recurring-manager-heading p,.recurring-panel-heading p{color:var(--muted);font-size:.86rem}
     .recurring-eyebrow{color:var(--accent)!important;font-size:.7rem!important;font-weight:800;letter-spacing:.1em}
     .recurring-desktop-view{display:grid;gap:18px}.recurring-mobile-view{display:none}
+
+    .recurring-sync-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:grid;gap:8px;min-width:0}
+    .recurring-sync-box[hidden],.recurring-sync-box button[hidden]{display:none!important}
+    .recurring-sync-box p{color:var(--text);font-size:.86rem;font-weight:700}
+    .recurring-sync-box ul{padding-left:19px;color:var(--muted);font-size:.8rem;line-height:1.55;overflow-wrap:anywhere}
+    .recurring-sync-box button{justify-self:start;border:1px solid var(--accent);color:var(--accent);background:var(--panel);border-radius:9px;min-height:44px;padding:9px 15px;font-weight:750}
+    .recurring-sync-box button:disabled{opacity:.55;cursor:wait}
     .recurring-panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px;min-width:0}
     .recurring-panel-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
     .recurring-panel-heading h3,.recurring-mobile-section h3{font-size:1rem;font-weight:800}
@@ -956,6 +963,7 @@
 <div class="recurring-manager-shell">
 <div class="recurring-manager-heading"><div><p class="recurring-eyebrow">RECURRING RULES</p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" class="recurring-back-button" onclick="navigatePage('overview')">← Back to Overview</button></div>
 <div id="recurringDesktopView" class="recurring-desktop-view">
+<section id="desktopRecurringSyncStatus" class="recurring-sync-box" role="status" aria-live="polite" hidden><p id="desktopRecurringSyncMessage"></p><ul id="desktopRecurringSyncDetails"></ul><button id="desktopRetryRecurringSync" type="button" onclick="retryRecurringSynchronization()" hidden>Retry synchronization</button></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>Missing entries are added automatically from the start date.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
@@ -966,7 +974,7 @@
 <label>End date (optional)<input data-rec-field="endDate" type="date"></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><div class="recurring-form-actions"><button class="primary" type="button" onclick="addRecurringRule('desktop')">Add rule</button></div></section>
 </div>
-<div id="recurringMobileView" class="recurring-mobile-view"><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>Missing entries are added automatically from the start date.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
+<div id="recurringMobileView" class="recurring-mobile-view"><section id="mobileRecurringSyncStatus" class="recurring-sync-box" role="status" aria-live="polite" hidden><p id="mobileRecurringSyncMessage"></p><ul id="mobileRecurringSyncDetails"></ul><button id="mobileRetryRecurringSync" type="button" onclick="retryRecurringSynchronization()" hidden>Retry synchronization</button></section><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>Missing entries are added automatically from the start date.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
 <label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -1049,6 +1057,119 @@ let accountBudgetModule = null;
 let recurringAppService = null;
 let loadedRecurringPreview = { rules: [], held: 0 };
 let recurringPreviewError = '';
+
+let recurringSyncOwner = null;
+let recurringSyncScopes = [];
+let recurringSyncLastReport = null;
+let recurringSyncBusy = false;
+let recurringSyncRetryBusy = false;
+let recurringSyncQueue = Promise.resolve();
+function recurringSyncPendingKey(owner) {
+  return STAGING_STORAGE_PREFIX + ':recurring-sync-pending:' + encodeURIComponent(owner);
+}
+function validRecurringSyncScope(scope) {
+  return scope && /^\d{4}-\d{2}-\d{2}$/.test(scope.startDate) &&
+    (scope.endDate === null || /^\d{4}-\d{2}-\d{2}$/.test(scope.endDate)) &&
+    (!scope.endDate || scope.endDate >= scope.startDate);
+}
+function ensureRecurringSyncOwner(owner) {
+  if (owner === recurringSyncOwner) return;
+  recurringSyncOwner = owner;
+  recurringSyncScopes = [];
+  recurringSyncLastReport = null;
+  recurringSyncBusy = false;
+  if (!owner) return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(recurringSyncPendingKey(owner)) || '[]');
+    if (Array.isArray(saved)) {
+      recurringSyncScopes = saved.filter(validRecurringSyncScope)
+        .slice(0, 50).map(s => ({ startDate: s.startDate, endDate: s.endDate || null }));
+    }
+  } catch (error) { console.warn('Could not restore recurring sync status:', error); }
+}
+function rememberRecurringSyncScopes(owner) {
+  if (currentUser?.id !== owner) return;
+  try {
+    if (recurringSyncScopes.length) {
+      sessionStorage.setItem(recurringSyncPendingKey(owner), JSON.stringify(recurringSyncScopes));
+    } else {
+      sessionStorage.removeItem(recurringSyncPendingKey(owner));
+    }
+  } catch (error) { console.warn('Could not save recurring sync status:', error); }
+}
+function recurringSyncScopeMatches(a, b) {
+  return a.startDate === b.startDate && a.endDate === b.endDate;
+}
+function renderRecurringSyncStatus() {
+  const owner = currentUser?.id || null;
+  ensureRecurringSyncOwner(owner);
+  const pending = recurringSyncScopes.length;
+  const report = recurringSyncLastReport;
+  const details = [];
+  if (report) {
+    for (const year of report.years) {
+      details.push(year.year + ': ' + year.added + ' added; ' + year.existing +
+        ' already present; ' + year.ambiguous.length + ' possible duplicates skipped');
+      for (const occurrence of year.ambiguous.slice(0, 6)) {
+        details.push('Skipped ' + occurrence.name + ' on ' + occurrence.month +
+          ': possible existing transaction; no data was changed');
+      }
+      if (year.ambiguous.length > 6) details.push((year.ambiguous.length - 6) + ' additional possible duplicates skipped');
+    }
+    for (const item of report.deferred) {
+      details.push(item.year + ': synchronization incomplete; ' + item.reason);
+    }
+    if (report.discoveryFailed) details.push('Could not verify saved cloud budget years.');
+  }
+  let message = '';
+  if (recurringSyncBusy || recurringSyncRetryBusy) message = 'Synchronizing recurring entries…';
+  else if (pending) message = 'Recurring synchronization incomplete for ' + pending +
+    ' date range' + (pending === 1 ? '' : 's') + '. Resolve cloud conflicts before retrying.';
+  else if (report) {
+    const added = report.years.reduce((sum, item) => sum + item.added, 0);
+    const skipped = report.years.reduce((sum, item) => sum + item.ambiguous.length, 0);
+    message = report.years.length
+      ? 'Recurring synchronization complete: ' + added + ' entries added across ' +
+        report.years.length + ' saved budget year' + (report.years.length === 1 ? '' : 's') +
+        (skipped ? '; ' + skipped + ' possible duplicate' + (skipped === 1 ? '' : 's') + ' skipped.' : '.')
+      : 'No saved budget years are eligible for this recurring date range.';
+  } else if (pending) message = 'Recurring synchronization requires another attempt.';
+  for (const prefix of ['desktop', 'mobile']) {
+    const panel = document.getElementById(prefix + 'RecurringSyncStatus');
+    if (!panel) continue;
+    panel.hidden = !owner || (!message && !pending);
+    const text = document.getElementById(prefix + 'RecurringSyncMessage');
+    text.textContent = message;
+    const list = document.getElementById(prefix + 'RecurringSyncDetails');
+    list.replaceChildren();
+    for (const detail of details) {
+      const item = document.createElement('li');
+      item.textContent = detail;
+      list.appendChild(item);
+    }
+    const retry = document.getElementById(prefix + 'RetryRecurringSync');
+    retry.hidden = !pending || !owner;
+    retry.disabled = recurringSyncBusy || recurringSyncRetryBusy;
+  }
+}
+async function retryRecurringSynchronization() {
+  const owner = currentUser?.id;
+  if (!owner || recurringSyncRetryBusy || recurringSyncBusy) return;
+  ensureRecurringSyncOwner(owner);
+  const scopes = recurringSyncScopes.slice();
+  if (!scopes.length) return;
+  recurringSyncRetryBusy = true;
+  renderRecurringSyncStatus();
+  try {
+    for (const scope of scopes) {
+      if (currentUser?.id !== owner) return;
+      await backfillSavedRecurringYears(owner, scope.startDate, scope.endDate);
+    }
+  } finally {
+    if (currentUser?.id === owner) recurringSyncRetryBusy = false;
+    renderRecurringSyncStatus();
+  }
+}
 let recurringApplyBusy = false;
 let accountsBusy = false;
 let accountsMessage = '';
@@ -1208,6 +1329,7 @@ async function initApp() {
     if (event === "SIGNED_OUT" || !session?.user) {
       clearMonthPreferences(currentUser);
       currentUser = null;
+      ensureRecurringSyncOwner(null);
       db = {};
       document.documentElement.classList.remove("budget-authenticated");
       window.location.replace(home);
@@ -1975,7 +2097,7 @@ function openRecurringModal(){
   refreshAccountSelectors();
   document.querySelectorAll("[data-rec-field='startDate']").forEach(input => { if (!input.value) input.value = new Date().toISOString().slice(0,10); });
   document.querySelectorAll("[data-recurring-form]").forEach(form=>{form.querySelector("[data-rec-field='category']").value="fixed";form.querySelector("[data-rec-field='frequency']").value="monthly";});
-  toggleRecFields();renderRulesList();document.body.classList.add("recurring-manager-open");
+  toggleRecFields();renderRulesList();renderRecurringSyncStatus();document.body.classList.add("recurring-manager-open");
 }
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
 function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
@@ -2030,82 +2152,119 @@ function recurringRuleItem(r){
   return null;
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
+
 async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
-  if (currentUser?.id !== owner || !recurringAppService || !supabaseClient) return;
-  let years;
-  try {
-    // Global recurring rules apply only to years the owner has intentionally saved.
-    const { data, error } = await supabaseClient.from('budget_ui_years')
-      .select('year,updated_at').eq('user_id', owner);
-    if (error) throw error;
-    years = recurringAppService.selectRecurringCloudYears(data, startDate, endDate);
-  } catch (error) {
-    console.warn('Recurring budget-year discovery failed:', error);
-    if (currentUser?.id === owner) alert('Recurring rule saved, but cloud budget years could not be checked. Reload before retrying synchronization.');
-    return;
+  if (currentUser?.id !== owner || !recurringAppService || !supabaseClient) return null;
+  const scope = { startDate, endDate };
+  if (!validRecurringSyncScope(scope)) throw new Error('Invalid recurring sync date range');
+  ensureRecurringSyncOwner(owner);
+  if (!recurringSyncScopes.some(item => recurringSyncScopeMatches(item, scope))) {
+    recurringSyncScopes.push(scope);
   }
-  const deferred = [];
-  for (const year of years) {
-    if (currentUser?.id !== owner) return;
-    const key = owner + ':' + year;
-    let cloudCommitted = false;
+  rememberRecurringSyncScopes(owner);
+  renderRecurringSyncStatus();
+  // Serialize sync runs as well as individual cloud-year writes. Retry never
+  // reuses a stale preview; every run starts with owner-scoped cloud reads.
+  const operation = recurringSyncQueue.catch(() => {}).then(async () => {
+    if (currentUser?.id !== owner) return null;
+    recurringSyncBusy = true;
+    renderRecurringSyncStatus();
+    const report = { years: [], deferred: [], discoveryFailed: false };
     try {
-      await queueCloudSave(key, async () => {
-        if (currentUser?.id !== owner) throw new Error('Recurring sync owner changed');
-        const { data: rows, error: readError } = await supabaseClient.from('budget_ui_years')
-          .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
-        if (readError) throw readError;
-        if (!Array.isArray(rows) || rows.length !== 1 || !validYearData(rows[0].budget_data)) {
-          throw new Error('Saved cloud budget year is missing or invalid');
-        }
-        const source = rows[0];
-        const verifyLocalSnapshot = () => {
-          const raw = localStorage.getItem(storageKey(year));
-          const cached = raw === null ? null : parseLocalBudgetRecord(raw);
-          return recurringAppService.requireRecurringCloudSnapshot({
-            owner, activeOwner: currentUser?.id, cloudRow: source,
-            knownRevision: cloudBudgetVersions.get(key),
-            inMemoryBudget: db[year], cachedBudget: cached?.data,
-            hasLocalCache: raw !== null,
-            conflicted: cloudBudgetConflicts.has(key) ||
-              localStorage.getItem(conflictStorageKey(year)) === '1'
-          });
-        };
-        verifyLocalSnapshot();
-        const result = await recurringAppService.backfillRecurringYear(
-          supabaseClient, owner, Number(year),
-          { expectedUpdatedAt: source.updated_at, canCommit: verifyLocalSnapshot }
-        );
-        cloudCommitted = Boolean(result.saved);
-        if (currentUser?.id !== owner) return;
-        // The user can edit locally while a cloud request is in flight. Never
-        // replace their new local work with the earlier cloud snapshot.
-        verifyLocalSnapshot();
-        if (result.saved) {
-          localStorage.setItem(storageKey(year), JSON.stringify({
-            data: result.document, updatedAt: result.updatedAt
-          }));
-          db[year] = result.document;
-          cloudBudgetVersions.set(key, result.updatedAt);
-          if (activeYear === year) render();
-        }
-      });
-    } catch (error) {
-      if (currentUser?.id !== owner) return;
-      console.warn('Automatic recurring backfill deferred for ' + year + ':', error);
-      const reason = String(error?.message || '');
-      if (cloudCommitted || /Local budget differs|unverified or stale|changed since recurring|changed on another device|reconciliation/.test(reason)) {
-        try { markCloudConflict(key, year); }
-        catch (storageError) { console.warn('Could not retain recurring cloud conflict marker:', storageError); }
-        if (activeYear === year) showCloudSaveStatus('Unsynced local changes require reconciliation before recurring synchronization.');
+      let years;
+      try {
+        const { data, error } = await supabaseClient.from('budget_ui_years')
+          .select('year,updated_at').eq('user_id', owner);
+        if (error) throw error;
+        years = recurringAppService.selectRecurringCloudYears(data, startDate, endDate);
+      } catch (error) {
+        console.warn('Recurring budget-year discovery failed:', error);
+        report.discoveryFailed = true;
+        return report;
       }
-      deferred.push(year);
+      for (const year of years) {
+        if (currentUser?.id !== owner) return null;
+        const key = owner + ':' + year;
+        let cloudCommitted = false;
+        try {
+          await queueCloudSave(key, async () => {
+            if (currentUser?.id !== owner) throw new Error('Recurring sync owner changed');
+            const { data: rows, error: readError } = await supabaseClient.from('budget_ui_years')
+              .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
+            if (readError) throw readError;
+            if (!Array.isArray(rows) || rows.length !== 1 || !validYearData(rows[0].budget_data)) {
+              throw new Error('Saved cloud budget year is missing or invalid');
+            }
+            const source = rows[0];
+            const verifyLocalSnapshot = () => {
+              const raw = localStorage.getItem(storageKey(year));
+              const cached = raw === null ? null : parseLocalBudgetRecord(raw);
+              return recurringAppService.requireRecurringCloudSnapshot({
+                owner, activeOwner: currentUser?.id, cloudRow: source,
+                knownRevision: cloudBudgetVersions.get(key),
+                inMemoryBudget: db[year], cachedBudget: cached?.data,
+                hasLocalCache: raw !== null,
+                conflicted: cloudBudgetConflicts.has(key) ||
+                  localStorage.getItem(conflictStorageKey(year)) === '1'
+              });
+            };
+            verifyLocalSnapshot();
+            const result = await recurringAppService.backfillRecurringYear(
+              supabaseClient, owner, Number(year),
+              { expectedUpdatedAt: source.updated_at, canCommit: verifyLocalSnapshot }
+            );
+            cloudCommitted = Boolean(result.saved);
+            if (currentUser?.id !== owner) return;
+            verifyLocalSnapshot();
+            if (result.saved) {
+              localStorage.setItem(storageKey(year), JSON.stringify({
+                data: result.document, updatedAt: result.updatedAt
+              }));
+              db[year] = result.document;
+              cloudBudgetVersions.set(key, result.updatedAt);
+              if (activeYear === year) render();
+            }
+            const ambiguous = (result.ambiguous || []).filter(item =>
+              (result.skipped || []).includes(item.occurrenceId));
+            report.years.push({
+              year, added: result.added || 0, ambiguous: ambiguous.map(item => ({
+                month: item.month, name: item.name
+              })), existing: Math.max(0, (result.skipped || []).length - ambiguous.length)
+            });
+          });
+        } catch (error) {
+          if (currentUser?.id !== owner) return null;
+          console.warn('Automatic recurring backfill deferred for ' + year + ':', error);
+          const reason = String(error?.message || '');
+          if (cloudCommitted || /Local budget differs|unverified or stale|changed since recurring|changed on another device|reconciliation/.test(reason)) {
+            try { markCloudConflict(key, year); }
+            catch (storageError) { console.warn('Could not retain recurring cloud conflict marker:', storageError); }
+            if (activeYear === year) showCloudSaveStatus('Unsynced local changes require reconciliation before recurring synchronization.');
+          }
+          report.deferred.push({
+            year, reason: cloudBudgetConflicts.has(key) ||
+              localStorage.getItem(conflictStorageKey(year)) === '1'
+              ? 'reconcile this year’s cloud changes before retrying'
+              : 'check cloud connectivity and retry'
+          });
+        }
+      }
+      return report;
+    } finally {
+      if (currentUser?.id === owner) {
+        if (!report.discoveryFailed && !report.deferred.length) {
+          recurringSyncScopes = recurringSyncScopes.filter(item =>
+            !recurringSyncScopeMatches(item, scope));
+        }
+        recurringSyncLastReport = report;
+        rememberRecurringSyncScopes(owner);
+        recurringSyncBusy = false;
+        renderRecurringSyncStatus();
+      }
     }
-  }
-  if (deferred.length && currentUser?.id === owner) {
-    alert('Recurring rule saved, but entries could not be synchronized for ' +
-      deferred.join(', ') + '. Resolve cloud sync or reload before retrying.');
-  }
+  });
+  recurringSyncQueue = operation;
+  return operation;
 }
 async function addRecurringRule(view) {
   const form = document.querySelector(`[data-recurring-form="${view}"]`);
