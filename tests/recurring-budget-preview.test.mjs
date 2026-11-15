@@ -73,3 +73,37 @@ test('untagged historical same-name transactions block duplicate generation with
   assert.deepEqual(result.document.months[0].fixed, []);
   assert.deepEqual(source.months[0].fixed, []);
 });
+
+test('ambiguous renamed historical entry is skipped until explicitly approved', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
+  const before = structuredClone(source);
+  const pending = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(pending.added, 11);
+  assert.equal(pending.ambiguous.length, 1);
+  assert.equal(pending.ambiguous[0].matches[0].category, 'variable');
+  assert.deepEqual(source, before);
+  const approved = previewRecurringYear(source, 2027, [rule()],
+    { approvedOccurrenceIds: [pending.ambiguous[0].occurrenceId] });
+  assert.equal(approved.added, 12);
+  assert.equal(approved.document.months[0].fixed.length, 1);
+  assert.deepEqual(source, before);
+});
+
+test('different amounts or accounts do not create ambiguous matches', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: 'Rent payment', amount: 200, accountId: 'other' });
+  const result = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(result.ambiguous.length, 0);
+  assert.equal(result.added, 12);
+});
+
+test('exact-name historical entries remain blocked even when approved', () => {
+  const source = budget();
+  source.months[0].fixed.push({ name: 'Rent', amount: 500 });
+  const result = previewRecurringYear(source, 2027, [rule()],
+    { approvedOccurrenceIds: [JSON.stringify(['rent', '2027-01-01'])] });
+  assert.equal(result.added, 11);
+  assert.equal(result.ambiguous.length, 0);
+  assert.deepEqual(result.document.months[0].fixed, source.months[0].fixed);
+});
