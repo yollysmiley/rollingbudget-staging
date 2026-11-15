@@ -48,3 +48,4 @@ Each desktop/mobile manager displays synchronization results and warns about pos
 
 The PR build uses isolated Playwright Supabase mocks; the credentialed live staging workflow is restricted to staging `main`, so live authenticated recurring-rule persistence must be independently verified before approving a release.
 
+Budget year selection is available directly above the authenticated budget on desktop and mobile. The current year plus two future years are automatically selectable without creating empty cloud records. Older saved years remain available; unsynced local years are retained for explicit recovery. The Settings menu no longer contains a Budget Years section. A future year is saved on its first edit, after which existing global recurring rules are applied to that saved year.

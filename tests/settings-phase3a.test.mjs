@@ -7,54 +7,52 @@ const build = readFileSync(new URL('../scripts/build-staging.mjs', import.meta.u
 const css = readFileSync(new URL('../styles/settings.css', import.meta.url), 'utf8');
 const desktop = html.split('<section id="desktopSettingsPanel"')[1]?.split('</section>')[0] ?? '';
 const mobile = html.split('<section id="mobileSettingsPanel"')[1]?.split('</section>')[0] ?? '';
+const yearToolbar = html.split('<section class="budget-year-toolbar"')[1]?.split('</section>')[0] ?? '';
 
-test('desktop Settings retains four sections and original control IDs', () => {
-  for (const id of ['settingsAccounts','settingsYears','settingsAutomation','settingsProfile','activeYearSelect','autoRollToggle']) {
+test('desktop Settings retains accounts, automation and security without a year submenu', () => {
+  for (const id of ['settingsAccounts','settingsAutomation','settingsProfile','autoRollToggle']) {
     assert.match(desktop, new RegExp('id="' + id + '"'));
   }
+  assert.doesNotMatch(desktop, /settingsYears|activeYearSelect|createNewYear|data-settings-section="years"/);
 });
-test('mobile Settings owns distinct year and rollover controls', () => {
-  for (const id of ['mobileSettingsAccounts','mobileSettingsControls','mobileActiveYearSelect','mobileAutoRollToggle']) {
-    assert.match(mobile, new RegExp('id="' + id + '"'));
+
+test('independent desktop and mobile year selectors are mounted outside Settings', () => {
+  for (const id of ['activeYearSelect', 'mobileActiveYearSelect']) {
+    assert.match(yearToolbar, new RegExp('id="' + id + '"'));
   }
-  assert.doesNotMatch(mobile, /id="activeYearSelect"|id="autoRollToggle"/);
+  assert.doesNotMatch(desktop + mobile, /activeYearSelect|mobileActiveYearSelect|Budget Years/);
+  assert.doesNotMatch(html, /onclick="createNewYear\(\)"/);
+});
+
+test('mobile Settings keeps distinct rollover controls and no years section', () => {
+  assert.match(mobile, /id="mobileAutoRollToggle"/);
   assert.match(mobile, /Rollover &amp; Automation/);
   assert.match(mobile, /Profile &amp; Security/);
+  assert.doesNotMatch(mobile, /data-mobile-settings-section="years"|mobileSettingsControls/);
 });
-test('responsive state synchronization does not move DOM controls between views', () => {
-  const sync = html.split('function syncMobileSettingsControls()')[1]?.split('function setMobileTab(tab)')[0] ?? '';
-  assert.match(sync, /cloneNode\(true\)/);
-  assert.match(sync, /mobile\.value = activeYear/);
+
+test('responsive year controls share state but never move DOM controls between views', () => {
+  const sync = html.split('function syncMobileSettingsControls()')[1]?.split('async function setAutoCascade')[0] ?? '';
+  assert.match(sync, /\['activeYearSelect', 'mobileActiveYearSelect'\]/);
+  assert.match(sync, /select\.replaceChildren/);
+  assert.match(sync, /select\.value = activeYear/);
   assert.match(sync, /toggle\.checked/);
-  assert.doesNotMatch(sync, /appendChild\(|append\(/);
-  assert.match(html, /function setAutoCascade\(enabled\)/);
+  assert.doesNotMatch(sync, /cloneNode\(|appendChild\(/);
+  assert.match(html, /async function setAutoCascade\(enabled\)/);
 });
-test('settings stylesheet is published for the authenticated app', () => {
+
+test('year toolbar is styled responsively and Settings CSS is deployed', () => {
   assert.match(html, /styles\/settings\.css/);
   assert.match(build, /dist\/app\/styles\/settings\.css/);
+  assert.match(css, /budget-year-picker-mobile/);
   assert.match(css, /@media\(max-width:768px\)/);
   assert.match(css, /@media\(min-width:769px\)/);
 });
 
-test('desktop automation controls are mounted in the automation screen, never hidden in Budget Years', () => {
-  const years = desktop.split('id="settingsYears"')[1]?.split('id="settingsAutomation"')[0] ?? '';
+test('recurring navigation remains separate from automation Settings', () => {
   const automation = desktop.split('id="settingsAutomation"')[1]?.split('id="settingsProfile"')[0] ?? '';
-  assert.match(years, /id="activeYearSelect"/);
-  assert.match(years, /onclick="createNewYear\(\)"/);
-  assert.doesNotMatch(years, /id="autoRollToggle"|onclick="openRecurringModal\(\)"/);
-  assert.doesNotMatch(automation, /onclick="openRecurringModal\(\)"/);
-  assert.match(html, /id="desktopRecurringButton"[^>]*onclick="showDesktopPage\('recurring'\)"/);
   assert.match(automation, /id="autoRollToggle"/);
+  assert.doesNotMatch(automation, /openRecurringModal\(\)/);
   assert.match(html, /id="desktopRecurringButton"/);
   assert.match(html, /data-mobile-action="recurring"/);
-});
-
-test('auto-cascade writes shared state without synthetic desktop events', () => {
-  const setter = html.split('async function setAutoCascade(enabled)')[1]?.split('function setMobileTab(tab)')[0] ?? '';
-  assert.match(setter, /db\[activeYear\]\.autoCascade = Boolean\(enabled\)/);
-  assert.match(setter, /await saveDB\(\)/);
-  assert.match(setter, /render\(\)/);
-  assert.doesNotMatch(setter, /dispatchEvent/);
-  assert.match(html, /if \(mobile\) showMobileSettingsMenu\(\)/);
-  assert.match(html, /function setMobileTab\(tab\)[\s\S]*?navigatePage\(page\)/);
 });

@@ -104,32 +104,25 @@ test('desktop recurring manager provides a route back to the budget overview', a
   await expect(page.locator('#desktopRecurringButton')).toBeVisible();
 });
 
-test('desktop Settings exposes year, automation and recurring controls on separate screens', async ({ page }) => {
-  await expect(page.locator('#desktopSettingsButton')).toBeVisible();
-  await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
+test('desktop Settings omits years while direct budget year selection remains available', async ({ page }) => {
+  const nextYear = String(new Date().getFullYear() + 1);
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
+  await page.locator('#activeYearSelect').selectOption(nextYear);
+  await expect(page.locator('#activeYearSelect')).toHaveValue(nextYear);
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
-  await expect(page.locator('.main-grid')).toBeHidden();
   await expect(page.locator('#settingsAccounts')).toBeVisible();
-  await expect(page.locator('#settingsYears')).toBeHidden();
-  await page.locator('[data-settings-section="years"]').click();
-  await expect(page.locator('#activeYearSelect')).toBeVisible();
-  await expect(page.locator('#desktopSettingsPanel button[onclick="createNewYear()"]')).toBeVisible();
-  await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#settingsYears')).toHaveCount(0);
+  await expect(page.locator('[data-settings-section="years"]')).toHaveCount(0);
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('[data-settings-section="automation"]').click();
   await expect(page.locator('#autoRollToggle')).toBeVisible();
   await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toHaveCount(0);
   await expect(page.locator('#desktopRecurringButton')).toBeVisible();
-  await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
-  await expect(page.locator('.main-grid')).toBeVisible();
-  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'false');
-  await page.locator('#desktopSettingsButton').click();
-  await page.locator('[data-settings-section="years"]').click();
-  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue(nextYear);
+  await expect(page.locator('#activeYearSelect')).toBeVisible();
 });
 
 test('desktop recurring rule dates are saved and automatically backfilled without duplicates', async ({ page }) => {
@@ -167,46 +160,53 @@ test('legacy rule definitions are retired while existing budget entries remain i
   expect(entries).toHaveLength(1);
 });
 
-test('year switching in mobile Settings and narrow viewport remain usable', async ({ page }) => {
+test('mobile year selection is directly accessible and fits narrow viewports', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-
-  // On mobile, year controls live in the slide-out Settings panel rather than the header.
-  await page.locator('#mobileMenuButton').click();
-  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
-  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
-  await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
-  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Years' }).click();
   await expect(page.locator('#mobileActiveYearSelect')).toBeVisible();
-
-  await page.locator('#mobileActiveYearSelect').selectOption('2027');
-  await expect(page.locator('#mobileActiveYearSelect')).toHaveValue('2027');
-  const size = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
-  expect(size.content).toBeLessThanOrEqual(size.width + 1);
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
+  await expect(page.locator('#mobileSettingsMenu')).toBeHidden();
+  await page.locator('#mobileActiveYearSelect').selectOption(String(new Date().getFullYear() + 1));
+  await expect(page.locator('#mobileOverview')).toContainText(String(new Date().getFullYear() + 1));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
-test('timestamp comparison selects the newest budget copy', async ({ page }) => {
-  const result = await page.evaluate(() => {
-    const local = { data: { id: 'local' }, updatedAt: Date.parse('2026-11-13T10:00:00Z') };
-    const newerCloud = { data: { id: 'cloud' }, updatedAt: Date.parse('2026-11-13T11:00:00Z') };
-    const newerLocal = { data: { id: 'local-new' }, updatedAt: Date.parse('2026-11-13T12:00:00Z') };
-    const unversionedLocal = { data: { id: 'legacy-local' }, updatedAt: null, legacy: true };
-    return {
-      cloudWins: chooseNewestBudget(local, newerCloud).data.id,
-      localWins: chooseNewestBudget(newerLocal, newerCloud).data.id,
-      legacyYields: chooseNewestBudget(unversionedLocal, newerCloud).data.id,
-      localOnly: chooseNewestBudget(local, null).data.id,
-      cloudOnly: chooseNewestBudget(null, newerCloud).data.id
-    };
-  });
-  expect(result).toEqual({
-    cloudWins: 'cloud',
-    localWins: 'local-new',
-    legacyYields: 'cloud',
-    localOnly: 'local',
-    cloudOnly: 'cloud'
-  });
+test('rolling future years are selectable without creating empty cloud records', async ({ page }) => {
+  const current = new Date().getFullYear();
+  const expected = [current, current + 1, current + 2].map(String);
+  expect(await page.locator('#activeYearSelect option').evaluateAll(options => options.map(option => option.value))).toEqual(expected);
+  const before = await page.evaluate(() => Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')));
+  await page.locator('#activeYearSelect').selectOption(String(current + 2));
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(String(current + 2));
+  expect(await page.evaluate(() => Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')))).toEqual(before);
 });
 
+test('older saved years and divergent unsynced custom years are restored without overwriting local data', async ({ page }) => {
+  await page.evaluate(() => {
+    const original = structuredClone(db[activeYear]);
+    const local = structuredClone(original);
+    local.months[0].fixed.push({ name: 'LOCAL-2034', amount: 75, due: '1st' });
+    const cloud = structuredClone(original);
+    cloud.months[0].fixed.push({ name: 'CLOUD-2034', amount: 80, due: '1st' });
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
+    rows['2034'] = { year: 2034, budget_data: cloud, updated_at: '2026-11-15T12:00:00.000Z' };
+    rows['2023'] = { year: 2023, budget_data: original, updated_at: '2026-11-15T12:00:00.000Z' };
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    localStorage.setItem(storageKey('2034'), JSON.stringify({ data: local, updatedAt: '2026-11-15T11:00:00.000Z' }));
+  });
+  await page.reload();
+  await expect(page.locator('#activeYearSelect option[value="2023"]')).toHaveCount(1);
+  await expect(page.locator('#activeYearSelect option[value="2034"]')).toContainText('Unsynced');
+  await page.locator('#activeYearSelect').selectOption('2034');
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced');
+  const result = await page.evaluate(() => ({
+    localInMemory: db['2034'].months[0].fixed[0].name,
+    localInCache: JSON.parse(localStorage.getItem(storageKey('2034'))).data.months[0].fixed[0].name,
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2034'].budget_data.months[0].fixed[0].name,
+    marker: localStorage.getItem(conflictStorageKey('2034'))
+  }));
+  expect(result).toEqual({ localInMemory: 'LOCAL-2034', localInCache: 'LOCAL-2034', cloud: 'CLOUD-2034', marker: '1' });
+});
 
 test('desktop header uses the approved email branding', async ({ page }) => {
   const brand = page.locator('header .title-group');
@@ -288,24 +288,20 @@ test('unassigned income amount can be edited and persists after reload', async (
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
-test('desktop primary navigation follows the reference hierarchy without losing budget state', async ({ page }) => {
+test('desktop primary navigation and year selection retain shared budget state', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
   await expect(nav.locator('button')).toHaveText(['Overview', 'Budget', 'Recurring Rules', 'Settings']);
+  await page.locator('#activeYearSelect').selectOption(String(new Date().getFullYear() + 1));
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#settingsAccounts')).toBeVisible();
-  await expect(page.locator('#settingsYears')).toBeHidden();
+  await expect(page.locator('#settingsYears')).toHaveCount(0);
   await expect(page.locator('#settingsAutomation')).toBeHidden();
-  await expect(page.locator('#settingsProfile')).toBeHidden();
-  await page.locator('[data-settings-section="years"]').click();
-  await page.locator('#activeYearSelect').selectOption('2027');
   await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
   await expect(page.locator('#rollingStrip')).toBeVisible();
-  await page.locator('#desktopSettingsButton').click();
-  await page.locator('[data-settings-section="years"]').click();
-  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear() + 1));
 });
 
 test('account exclusions update dashboard totals without removing entries on desktop or mobile', async ({ page }) => {
@@ -562,7 +558,7 @@ test('desktop edit only fills missing future entries and preserves existing amou
     x => x.name === 'Future price edit').map(x => x.amount))).toEqual([150]);
 });
 
-test('creating a budget year safely applies global recurring rules without saving other templates', async ({ page }) => {
+test('first edit in a virtual future year saves it and safely applies global recurring rules', async ({ page }) => {
   await page.locator('#desktopRecurringButton').click();
   const form = page.locator('[data-recurring-form="desktop"]');
   await form.locator('[data-rec-field="name"]').fill('Future year payment');
@@ -571,18 +567,22 @@ test('creating a budget year safely applies global recurring rules without savin
   await page.getByRole('button', { name: 'Add rule' }).first().click();
   await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
     entry => entry.name === 'Future year payment').length)).toBe(1);
-  await page.locator('#desktopSettingsButton').click();
-  await page.locator('[data-settings-section="years"]').click();
-  page.once('dialog', dialog => dialog.accept('2028'));
-  await page.locator('button[onclick="createNewYear()"]').first().click();
-  await expect.poll(() => page.evaluate(() => db['2028']?.months?.[0].fixed.filter(
-    entry => entry.name === 'Future year payment').length)).toBe(1);
-  const state = await page.evaluate(() => ({
-    savedYears: Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))).sort(),
-    count: db['2028'].months.flatMap(month => month.fixed).filter(x => x.name === 'Future year payment').length,
-    active: activeYear
-  }));
-  expect(state).toEqual({ savedYears: ['2026', '2028'], count: 12, active: '2028' });
+  await page.locator('#desktopBudgetButton').click();
+  const targetYear = String(new Date().getFullYear() + 2);
+  await page.locator('#activeYearSelect').selectOption(targetYear);
+  expect(await page.evaluate(year => JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[year] || null, targetYear)).toBe(null);
+  await page.evaluate(async year => {
+    db[year].months[0].fixed.push({ id: 'future-note', name: 'First future edit', amount: 1, due: '1st' });
+    await saveDB();
+  }, targetYear);
+  await expect.poll(() => page.evaluate(year => db[year].months[0].fixed.filter(
+    entry => entry.name === 'Future year payment').length, targetYear)).toBe(1);
+  const state = await page.evaluate(year => ({
+    saved: Boolean(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[year]),
+    count: db[year].months.flatMap(month => month.fixed).filter(x => x.name === 'Future year payment').length,
+    includedManual: db[year].months[0].fixed.some(x => x.name === 'First future edit')
+  }), targetYear);
+  expect(state).toEqual({ saved: true, count: 12, includedManual: true });
 });
 
 test('desktop recurring sync reports added entries and skips existing entries without offering retry', async ({ page }) => {
