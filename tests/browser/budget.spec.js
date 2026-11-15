@@ -40,7 +40,7 @@ test('new budget UI starts empty and renders the redesigned dashboard', async ({
 
 test('income and expenses recalculate the rollover', async ({ page }) => {
   await page.locator('#newIncName').fill('Paycheck');
-  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAccount').selectOption('');
   await page.locator('#newIncAmount').fill('3000');
   await page.locator('button[onclick="addIncome()"]').click();
   await expect(page.locator('#incTotalBadge')).toHaveText('$3,000.00');
@@ -55,7 +55,7 @@ test('income and expenses recalculate the rollover', async ({ page }) => {
 
 test('new UI saves and restores the guest budget after reload', async ({ page }) => {
   await page.locator('#newIncName').fill('SAVE-RELOAD-TEST');
-  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAccount').selectOption('');
   await page.locator('#newIncAmount').fill('2713.45');
   await page.locator('button[onclick="addIncome()"]').click();
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SAVE-RELOAD-TEST');
@@ -67,7 +67,7 @@ test('new UI saves and restores the guest budget after reload', async ({ page })
 
 test('authenticated storage is owner-scoped and existing browser keys are preserved', async ({ page }) => {
   await page.locator('#newIncName').fill('Stored');
-  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAccount').selectOption('');
   await page.locator('#newIncAmount').fill('10');
   await page.locator('button[onclick="addIncome()"]').click();
   const result = await page.evaluate(() => Object.keys(localStorage));
@@ -245,6 +245,7 @@ test('cancelling desktop sign-out keeps the authenticated budget visible', async
 
 test('legacy mixed income migrates automatically once and survives reload', async ({ page }) => {
   await page.evaluate(async () => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
     db[activeYear].months[0].income = [{ name: 'Legacy Pay', cpm: 200, usaa: 300, recurringRuleId: 'legacy-rule' }];
     await saveDB();
   });
@@ -268,7 +269,7 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
 
 test('account-based income amount can be edited and persists after reload', async ({ page }) => {
   await page.locator('#newIncName').fill('Edited Pay');
-  await page.locator('#newIncAccount').selectOption('cpm');
+  await page.locator('#newIncAccount').selectOption('');
   await page.locator('#newIncAmount').fill('200');
   await page.locator('button[onclick="addIncome()"]').click();
   const amount = page.locator('#incomeBody input[aria-label="Income amount"]').first();
@@ -304,30 +305,45 @@ test('desktop primary navigation follows the reference hierarchy without losing 
 test('account exclusions update dashboard totals without removing entries on desktop or mobile', async ({ page }) => {
   await page.evaluate(() => {
     const month = db[activeYear].months[0];
-    month.income.push({ name: 'Included pay', accountId: 'cpm', amount: 400 });
-    month.income.push({ name: 'Excluded pay', accountId: 'usaa', amount: 500 });
-    month.fixed.push({ name: 'Excluded rent', accountId: 'usaa', amount: 100, due: '1st' });
-    budgetAccounts = budgetAccounts.map(account => ({ ...account, included: account.id !== 'usaa' }));
+    budgetAccounts = [{ id: 'checking', name: 'Checking', included: true }, { id: 'savings', name: 'Savings', included: false }];
+    month.income.push({ name: 'Included pay', accountId: 'checking', amount: 400 });
+    month.income.push({ name: 'Excluded pay', accountId: 'savings', amount: 500 });
+    month.fixed.push({ name: 'Excluded rent', accountId: 'savings', amount: 100, due: '1st' });
+    budgetAccounts = budgetAccounts.map(account => ({ ...account, included: account.id !== 'savings' }));
     renderAccounts();
     render();
   });
   await expect(page.locator('#incTotalBadge')).toHaveText('$400.00');
   await expect(page.locator('#fixTotalBadge')).toHaveText('$0.00');
   await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopAccountsManager [data-account-action="included"][data-account-id="usaa"]')).not.toBeChecked();
+  await expect(page.locator('#desktopAccountsManager [data-account-action="included"][data-account-id="savings"]')).not.toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
-  await expect(page.locator('#mobileSettingsAccounts [data-account-action="included"][data-account-id="usaa"]')).not.toBeChecked();
+  await expect(page.locator('#mobileSettingsAccounts [data-account-action="included"][data-account-id="savings"]')).not.toBeChecked();
   await page.evaluate(() => {
     budgetAccounts = budgetAccounts.map(account => ({ ...account, included: true }));
     renderAccounts();
     render();
   });
-  await expect(page.locator('#mobileSettingsAccounts [data-account-action="included"][data-account-id="usaa"]')).toBeChecked();
+  await expect(page.locator('#mobileSettingsAccounts [data-account-action="included"][data-account-id="savings"]')).toBeChecked();
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
   await expect(page.locator('#mobileOverview')).toContainText('$900.00');
   expect(await page.evaluate(() => db[activeYear].months[0].income.length)).toBe(2);
+});
+
+test('new users see no default accounts on desktop and mobile', async ({ page }) => {
+  await expect(page.locator('#newIncAccount option')).toHaveCount(1);
+  await expect(page.locator('#newIncAccount')).toHaveValue('');
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager')).toContainText('No accounts yet.');
+  await expect(page.locator('#desktopAccountsManager [data-account-id]')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsAccounts')).toContainText('No accounts yet.');
+  await expect(page.locator('#mobileSettingsAccounts [data-account-id]')).toHaveCount(0);
 });
