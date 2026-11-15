@@ -62,3 +62,14 @@ test('a manually moved recurring entry blocks duplicate creation in another cate
   assert.equal(result.document.months[0].variable[0].amount, 275);
   assert.deepEqual(source.months[0].variable, result.document.months[0].variable);
 });
+
+test('untagged historical same-name transactions block duplicate generation without being changed', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: '  RENT ', amount: 650 });
+  const result = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(result.added, 11);
+  assert.equal(result.skipped.length, 1);
+  assert.deepEqual(result.document.months[0].variable, source.months[0].variable);
+  assert.deepEqual(result.document.months[0].fixed, []);
+  assert.deepEqual(source.months[0].fixed, []);
+});
