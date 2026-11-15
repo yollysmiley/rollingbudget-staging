@@ -1212,6 +1212,7 @@ function chooseNewestBudget(localRecord, cloudRecord) {
   return (localRecord.updatedAt ?? 0) > (cloudRecord.updatedAt ?? 0) ? localRecord : cloudRecord;
 }
 async function loadAllYears() {
+  cloudBudgetVersions.clear();
   const all = {};
   const localRecords = {};
   for (const yr of ["2026", "2027"]) {
@@ -1231,6 +1232,7 @@ async function loadAllYears() {
       for (const row of data || []) {
         const year = String(row.year);
         if (!validYearData(row.budget_data)) continue;
+        cloudBudgetVersions.set(currentUser.id + ':' + year, row.updated_at);
         const cloudTime = row.updated_at ? Date.parse(row.updated_at) : NaN;
         const cloudRecord = { data: row.budget_data, updatedAt: Number.isFinite(cloudTime) ? cloudTime : null, legacy: false };
         const localRecord = localRecords[year];
@@ -1286,6 +1288,7 @@ function recurringPreviewStatus(year) {
   }
 }
 const cloudSaveQueues = new Map();
+const cloudBudgetVersions = new Map();
 function showCloudSaveStatus(message) {
   let status = document.getElementById("cloudSaveStatus");
   if (!status) {
@@ -1356,6 +1359,7 @@ async function applyRecurringPreview() {
     if (!current.saved) return;
     if (currentUser?.id !== owner || activeYear !== year) return;
     db[year] = current.document;
+    cloudBudgetVersions.set(owner + ':' + year, current.updatedAt);
     try {
       localStorage.setItem(storageKey(year), JSON.stringify({
         data: current.document, updatedAt: current.updatedAt
@@ -1391,19 +1395,30 @@ async function saveDB() {
   const key = userId + ":" + year;
   try {
     await queueCloudSave(key, async () => {
-      const { error } = await client.from("budget_ui_years").upsert({
-        user_id: userId,
-        year: Number(year),
-        budget_data: snapshot,
-        updated_at: updatedAt
-      }, { onConflict: "user_id,year" });
-      if (error) throw error;
+      const version = cloudBudgetVersions.get(key);
+      if (version) {
+        const { data, error } = await client.from("budget_ui_years")
+          .update({ budget_data: snapshot, updated_at: updatedAt })
+          .eq("user_id", userId).eq("year", Number(year))
+          .eq("updated_at", version).select("year");
+        if (error) throw error;
+        if (!Array.isArray(data) || data.length !== 1) {
+          throw new Error("Budget changed on another device; reload before saving");
+        }
+      } else {
+        // Unique (user_id, year) prevents a concurrent first save from replacing a row.
+        const { error } = await client.from("budget_ui_years").insert({
+          user_id: userId, year: Number(year), budget_data: snapshot, updated_at: updatedAt
+        });
+        if (error) throw error;
+      }
+      cloudBudgetVersions.set(key, updatedAt);
     });
     if (currentUser?.id === userId) showCloudSaveStatus("");
     return 'cloud-saved';
   } catch (error) {
     console.error("Cloud sync error; local copy was retained:", error);
-    if (currentUser?.id === userId) showCloudSaveStatus("Cloud sync failed. Changes are saved on this device only. Please check your connection.");
+    if (currentUser?.id === userId) showCloudSaveStatus("Cloud save rejected or unavailable. Local changes were preserved; reload and reconcile before saving again.");
     return 'local-saved';
   }
 }
