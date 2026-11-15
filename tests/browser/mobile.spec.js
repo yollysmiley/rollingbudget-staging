@@ -397,3 +397,18 @@ test('mobile preserves an unresolved cloud conflict across reload and offers exp
     entry => entry.name === 'Local unsynced entry'))).toBe(false);
   expect(await page.evaluate(() => Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')))).toBe(true);
 });
+
+test('browser cloud fixture rejects another owner\'s conditional budget update', async ({ page }) => {
+  const outcome = await page.evaluate(async () => {
+    const year = Number(activeYear);
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year, budget_data: structuredClone(db[activeYear]), updated_at: '2026-11-15T00:00:00.000Z' }
+    }));
+    const { data } = await supabaseClient.from('budget_ui_years')
+      .update({ updated_at: '2026-11-15T01:00:00.000Z' })
+      .eq('user_id', 'another-owner').eq('year', year)
+      .eq('updated_at', '2026-11-15T00:00:00.000Z').select('year');
+    return { written: data.length, after: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[year].updated_at };
+  });
+  expect(outcome).toEqual({ written: 0, after: '2026-11-15T00:00:00.000Z' });
+});
