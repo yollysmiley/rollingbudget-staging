@@ -698,16 +698,19 @@
         </select>
       </div>
       <button onclick="createNewYear()">+ New Year</button>
+
+    </div>
+  </div>
+  <div class="desktop-settings-card" id="settingsAutomation" hidden>
+    <h3>Rollover &amp; Automation</h3>
+    <p>Control how unspent funds carry forward and manage recurring budget rules.</p>
+    <div class="controls" id="desktopAutomationControls">
       <label class="toggle-pill" title="Auto-cascade surplus into next month">
         <input type="checkbox" id="autoRollToggle" checked />
         <span>Auto-Cascade</span>
       </label>
       <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
     </div>
-  </div>
-  <div class="desktop-settings-card" id="settingsAutomation" hidden>
-    <h3>Rollover &amp; Automation</h3>
-    <p>Manage your auto-cascade setting above. Recurring rules are available from the primary navigation.</p>
   </div>
   <div class="desktop-settings-card" id="settingsProfile" hidden>
     <h3>Profile &amp; Security</h3>
