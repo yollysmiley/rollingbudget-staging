@@ -51,6 +51,19 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
     assert.equal(table, 'budget_recurring_rules');
     return {
       async insert(row) { calls.push(['insert', row]); return { error: null }; },
+      select() { return { eq(field, owner) {
+        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+        return { async eq(key, id) {
+          assert.equal(key, 'id'); assert.equal(id, 'new-rent');
+          return { data: [{
+            id, name: 'Rent', category: 'fixed', amount: 1000, due: '',
+            account_id: null, frequency: 'monthly', start_date: '2027-01-01',
+            end_date: null, active: true,
+            versions: [{ effectiveFrom: '2027-01-01', name: 'Rent', amount: 1000,
+              due: '', accountId: null, frequency: 'monthly' }]
+          }], error: null };
+        } };
+      } }; },
       update(changes) { return { eq(field, owner) {
         assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
         return { async eq(key, id) { calls.push(['update', changes, key, id]); return { error: null }; } };
@@ -71,9 +84,11 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
   assert.equal(created.id, 'new-rent');
   assert.equal(calls[0][1].user_id, 'owner-a');
   assert.equal(calls[0][1].source_year, null);
-  await setRecurringRuleActive(client, 'owner-a', 'new-rent', false);
+  await setRecurringRuleActive(client, 'owner-a', 'new-rent', false, '2027-03-01');
   await removeRecurringRule(client, 'owner-a', 'new-rent');
-  assert.deepEqual(calls[1], ['update', { active: false }, 'id', 'new-rent']);
+  assert.equal(calls[1][0], 'update');
+  assert.equal(calls[1][1].versions[1].effectiveFrom, '2027-03-01');
+  assert.equal(calls[1][1].versions[1].enabled, false);
   assert.deepEqual(calls[2], ['delete', 'id', 'new-rent']);
   assert.deepEqual(historical, snapshot);
 });
