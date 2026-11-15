@@ -47,6 +47,13 @@ export async function mockSignedInBudget(page) {
                 return Promise.resolve({ data: accountRows, error: null });
               },
               insert(row) {
+                if (table === 'budget_ui_years') {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
+                  if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ error: { message: 'offline' } });
+                  if (rows[String(row.year)]) return Promise.resolve({ error: { message: 'duplicate key' } });
+                  rows[String(row.year)] = { year: row.year, budget_data: structuredClone(row.budget_data), updated_at: row.updated_at };
+                  sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+                }
                 if (table === 'budget_recurring_rules') {
                   const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
                   rows.push(row);
@@ -71,11 +78,19 @@ export async function mockSignedInBudget(page) {
                   };
                   return query;
                 }
-                return { eq() { return { eq(_field, id) {
-                  const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
-                  sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.map(row => row.id === id ? { ...row, ...changes } : row)));
-                  return Promise.resolve({ error: null });
-                } }; } };
+                const filters = {};
+                const query = {
+                  eq(field, value) { filters[field] = value; return query; },
+                  select() {
+                    const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                    const matching = rows.filter(row => row.id === filters.id &&
+                      JSON.stringify(row.versions) === filters.versions);
+                    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.map(row =>
+                      matching.includes(row) ? { ...row, ...changes } : row)));
+                    return Promise.resolve({ data: matching.map(row => ({ id: row.id })), error: null });
+                  }
+                };
+                return query;
               },
               delete() {
                 return { eq() { return { eq(_field, id) {
