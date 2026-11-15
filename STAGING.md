@@ -61,3 +61,7 @@ The public landing page uses `styles/homepage.css` and a split hero with a budge
 ## Phase 3A — Settings presentation separation
 
 Desktop Settings keeps its existing section navigation and controls. Mobile Settings now has independent year selection, year creation, and auto-cascade controls rather than moving desktop DOM nodes between responsive views. Both views use the existing `activeYear`, `db`, `switchYear`, `createNewYear`, and auto-cascade persistence logic. `styles/settings.css` is scoped to the Settings views and copied to `dist/app/styles/settings.css` by the staging build. Tests: `tests/settings-phase3a.test.mjs` and `tests/browser/mobile.spec.js`. Account exclusion calculations, year cloning, and profile/security functionality remain for Phases 3B–3D; this PR does not change those contracts.
+
+### Phase 3A navigation revision
+
+The desktop header now exposes one **Budget** destination instead of separate Overview and Plan buttons. Desktop Settings uses four mutually exclusive submenu screens selected by sidebar buttons, rather than anchor scrolling. Mobile retains Overview and Plan in its navigation but Settings now opens a four-option menu; each option opens a dedicated detail screen with **Back to Settings**. Tests: `tests/desktop-settings-navigation.test.mjs`, `tests/browser/settings-navigation.spec.js`, and `tests/browser/mobile.spec.js`.
