@@ -390,3 +390,22 @@ test('desktop duplicate review skips ambiguous historical entries when user decl
   const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
   expect(entries).toHaveLength(1);
 });
+
+test('stale ordinary budget save cannot overwrite a newer cloud revision', async ({ page }) => {
+  const outcome = await page.evaluate(async () => {
+    const year = activeYear;
+    const cloud = { year: Number(year), budget_data: structuredClone(db[year]),
+      updated_at: '2026-11-15T12:00:00.000Z' };
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({ [year]: cloud }));
+    cloudBudgetVersions.set(currentUser.id + ':' + year, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Unsynced local edit', amount: 19 });
+    const status = await saveDB();
+    const after = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[year];
+    return { status, cloud: after.budget_data.months[0].fixed, revision: after.updated_at,
+      local: db[year].months[0].fixed };
+  });
+  expect(outcome.status).toBe('local-saved');
+  expect(outcome.cloud).toEqual([]);
+  expect(outcome.revision).toBe('2026-11-15T12:00:00.000Z');
+  expect(outcome.local).toContainEqual({ name: 'Unsynced local edit', amount: 19 });
+});
