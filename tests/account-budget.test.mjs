@@ -76,3 +76,9 @@ test('new budgets with no named accounts still count unassigned amount-based inc
   assert.equal(result.newIncome, 300);
   assert.equal(result.totalAvailable, 300);
 });
+
+test('zero-valued legacy columns do not require unseeded legacy accounts', () => {
+  const year = { autoCascade: true, months: [month([{ name: 'Current pay', amount: 125, cpm: 0, usaa: 0 }])] };
+  assert.equal(computeAccountBudget(year, [])[0].newIncome, 125);
+  assert.equal(incomeAmount({ amount: 125, cpm: 0, usaa: 0 }, []), 125);
+});
