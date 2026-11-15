@@ -267,3 +267,13 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#mobileAutoRollToggle')).toBeChecked();
 });
+
+test('recurring preview status is shared but displayed in distinct mobile and desktop managers', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('Recurring preview');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('#recurringDesktopView')).toBeVisible();
+  await expect(page.locator('#desktopRecurringPreviewStatus')).toContainText('Recurring preview');
+  await expect(page.locator('#recurringMobileView')).toBeHidden();
+});
