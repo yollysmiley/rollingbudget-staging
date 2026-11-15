@@ -10,3 +10,9 @@
 .settings-help{color:var(--muted);font-size:.85rem;line-height:1.5;margin:5px 0 14px}
 @media(max-width:768px){#mobileSettingsPanel{max-width:100%;overflow-wrap:anywhere}#mobileSettingsPanel .mobile-settings-section{min-width:0}#mobileSettingsPanel button{min-height:44px}}
 @media(min-width:769px){#mobileSettingsPanel{display:none!important}}
+
+/* Override the legacy movable-control layout without touching budget forms. */
+#mobileSettingsControls{display:grid!important;gap:10px}
+#mobileSettingsControls > label{display:block!important}
+#mobileSettingsControls > select{display:block!important;width:100%}
+#mobileSettingsControls > button{display:block!important;width:100%}
