@@ -95,9 +95,17 @@ export async function setRecurringRuleActive(client, userId, id, active, effecti
 
 export async function removeRecurringRule(client, userId, id) {
   if (!client || !userId || !id) throw new Error('Authenticated recurring rule delete required');
-  const { error } = await client.from('budget_recurring_rules')
-    .delete().eq('user_id', userId).eq('id', id);
+  const { data: rows, error: readError } = await client.from('budget_recurring_rules')
+    .select('id,versions').eq('user_id', userId).eq('id', id);
+  if (readError) throw readError;
+  if (!Array.isArray(rows) || rows.length !== 1) throw new Error('Recurring rule not found');
+  const { data: deleted, error } = await client.from('budget_recurring_rules')
+    .delete().eq('user_id', userId).eq('id', id)
+    .eq('versions', JSON.stringify(rows[0].versions)).select('id');
   if (error) throw error;
+  if (!Array.isArray(deleted) || deleted.length !== 1) {
+    throw new Error('Recurring rule changed on another device; reload before deleting');
+  }
 }
 
 export async function commitRecurringYear(client, userId, year, buildPreview) {
