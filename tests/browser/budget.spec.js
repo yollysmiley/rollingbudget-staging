@@ -694,3 +694,29 @@ test('desktop recurring form only shows start and optional end dates', async ({ 
   await expect(form.getByLabel(/Due day|Start month/i)).toHaveCount(0);
   await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
 });
+
+test('desktop plan copy confirms, skips recurring entries, persists and prevents overwrites', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year)+1);
+  await page.evaluate(y => { db[y].months[0].fixed.push({name:'Rent plan',amount:900,due:'1st'}); db[y].months[0].fixed.push({name:'Generated',amount:30,occurrenceId:'occ',recurringRuleId:'rule'}); }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#desktopCopyPreviousYear').click();
+  expect(await page.evaluate(y => db[y].months[0].fixed.length, next)).toBe(0);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.map(e => e.name), next)).toEqual(['Rent plan']);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].fixed[0].name, next)).toBe('Rent plan');
+});
+
+test('copy action is hidden for conflicted target years', async ({ page }) => {
+  const year=String(new Date().getFullYear());
+  await page.evaluate(y => db[y].months[0].income.push({name:'Salary',amount:1000}), year);
+  await page.locator('#activeYearSelect').selectOption(String(Number(year)+1));
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.evaluate(() => { markCloudConflict(currentUser.id+':'+activeYear,activeYear);render(); });
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+});
