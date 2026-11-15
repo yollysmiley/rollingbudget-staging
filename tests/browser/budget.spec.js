@@ -685,3 +685,12 @@ test('desktop recurring backfill accepts PostgreSQL-style jsonb ordering and tim
   expect(await page.evaluate(() => localStorage.getItem(conflictStorageKey('2026')))).toBe(null);
   await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('1 entries added');
 });
+
+test('desktop recurring form only shows start and optional end dates', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await expect(form.getByLabel('Start date')).toBeVisible();
+  await expect(form.getByLabel('End date (optional)')).toBeVisible();
+  await expect(form.getByLabel(/Due day|Start month/i)).toHaveCount(0);
+  await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
+});

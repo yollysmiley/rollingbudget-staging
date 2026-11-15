@@ -391,6 +391,15 @@ test('mobile SPA routes persist through refresh and browser history', async ({ p
   ];
   for (const [tab, route] of cases) {
     await page.locator('#mobileMenuButton').click();
+    const sidebar = page.locator('#mobileSidebar');
+    await expect(sidebar).toHaveClass(/open/);
+    // Wait for the slide-in transform to finish before interacting with the link.
+    // A CSS-visible element can still be outside the viewport during animation.
+    await expect.poll(async () => {
+      const rect = await sidebar.boundingBox();
+      const viewport = page.viewportSize();
+      return Boolean(rect && viewport && rect.x >= -1 && rect.x + rect.width <= viewport.width + 1);
+    }).toBe(true);
     await page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`).click();
     await expect(page).toHaveURL(new RegExp(`[?&]page=${route}(?:&|$)`));
     await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
@@ -590,4 +599,14 @@ test('mobile recurring status remains successful after a jsonb-reordered cloud r
   expect(await page.evaluate(() => localStorage.getItem(conflictStorageKey('2026')))).toBe(null);
   await expect(page.locator('#mobileRetryRecurringSync')).toBeHidden();
   await expect(page.locator('#mobileRecurringSyncStatus')).toContainText('1 entries added');
+});
+
+test('mobile recurring form only shows start and optional end dates', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-action="recurring"]').click();
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await expect(form.getByLabel('Start date')).toBeVisible();
+  await expect(form.getByLabel('End date (optional)')).toBeVisible();
+  await expect(form.getByLabel(/Due day|Start month/i)).toHaveCount(0);
+  await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
 });
