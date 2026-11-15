@@ -19,7 +19,8 @@ test('income keeps historical values and offers only account-based new income', 
 });
 test('recurring rule items carry account identity across categories', () => {
   assert.match(html, /const accountId = r\.accountId \|\| r\.acct \|\| null/);
-  assert.match(html, /accountId:acct,startMonth,frequency/);
+  assert.match(html, /accountId: get\('account'\) \|\| null, frequency, active: true/);
+  assert.match(html, /recurringAppService\.createRecurringRule\(supabaseClient, currentUser\.id/);
   assert.match(html, /refreshAccountSelectors\(\);/);
 });
 test('account selectors reject IDs absent from authenticated account list', () => {
