@@ -60,12 +60,12 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
       const possible = Object.values(TARGETS).flatMap(category =>
         months[index][category].filter(entry => isPossibleDuplicate(entry, occurrence))
           .map(entry => ({ category, name: entry.name, amount: amountOf(entry), accountId: accountOf(entry) })));
-      if (possible.length) {
+      if (possible.length && !alreadyPresent) {
         ambiguous.push({ occurrenceId: occurrence.occurrenceId, month: occurrence.scheduledMonth,
           name: occurrence.name, amount: occurrence.amount, accountId: occurrence.accountId ?? null,
           matches: possible });
       }
-      if (possible.length && !approved.has(occurrence.occurrenceId)) {
+      if (possible.length && !alreadyPresent && !approved.has(occurrence.occurrenceId)) {
         skipped.push(occurrence.occurrenceId);
         continue;
       }
