@@ -41,11 +41,11 @@ export async function migrateReconciledRecurringRules(client, userId, years, man
       source_rule_id: normalized.sourceRuleId
     });
   }
-  if (!rows.length) return { discovered: 0, written: 0 };
+  if (!rows.length) return { discovered: 0, attempted: 0 };
   // ignoreDuplicates preserves existing rule definitions on retries.
   const { error } = await client.from('budget_recurring_rules').upsert(rows, {
     onConflict: 'user_id,id', ignoreDuplicates: true
   });
   if (error) throw error;
-  return { discovered: rows.length, written: rows.length };
+  return { discovered: rows.length, attempted: rows.length };
 }
