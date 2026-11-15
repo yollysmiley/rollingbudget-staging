@@ -23,7 +23,8 @@ test('desktop Settings contains existing year and rollover controls', () => {
   assert.match(panel, /id="activeYearSelect"/);
   assert.match(panel, /createNewYear\(\)/);
   assert.match(panel, /id="autoRollToggle"/);
-  assert.match(panel, /openRecurringModal\(\)/);
+  assert.doesNotMatch(panel, /openRecurringModal\(\)/);
+  assert.match(header, /id="desktopRecurringButton"/);
 });
 
 test('desktop Settings is reversible and mobile controls retain a separate mount', () => {

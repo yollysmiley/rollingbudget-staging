@@ -100,7 +100,8 @@ test('desktop recurring manager provides a route back to the budget overview', a
   await expect(page.locator('.main-grid')).toBeVisible();
   await page.locator('#desktopSettingsButton').click();
   await page.locator('[data-settings-section="automation"]').click();
-  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toHaveCount(0);
+  await expect(page.locator('#desktopRecurringButton')).toBeVisible();
 });
 
 test('desktop Settings exposes year, automation and recurring controls on separate screens', async ({ page }) => {
@@ -119,7 +120,8 @@ test('desktop Settings exposes year, automation and recurring controls on separa
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
   await page.locator('[data-settings-section="automation"]').click();
   await expect(page.locator('#autoRollToggle')).toBeVisible();
-  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toHaveCount(0);
+  await expect(page.locator('#desktopRecurringButton')).toBeVisible();
   await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
@@ -257,12 +259,14 @@ test('cancelling desktop sign-out keeps the authenticated budget visible', async
 });
 
 test('legacy mixed income migrates automatically once and survives reload', async ({ page }) => {
+  await page.evaluate(() => selectMonth(0));
   await page.evaluate(async () => {
     sessionStorage.setItem('__mock_legacy_accounts', '1');
     db[activeYear].months[0].income = [{ name: 'Legacy Pay', cpm: 200, usaa: 300, recurringRuleId: 'legacy-rule' }];
     await saveDB();
   });
   await page.reload();
+  await page.evaluate(() => selectMonth(0));
   // The rollover summary row has its own numeric input; target income entry rows only.
   const migratedNames = page.locator('#incomeBody tr:not(.roll-row) input.inline-input:not([type])');
   await expect(migratedNames).toHaveCount(2);
@@ -317,6 +321,7 @@ test('desktop primary navigation follows the reference hierarchy without losing 
 });
 
 test('account exclusions update dashboard totals without removing entries on desktop or mobile', async ({ page }) => {
+  await page.evaluate(() => selectMonth(0));
   await page.evaluate(() => {
     const month = db[activeYear].months[0];
     budgetAccounts = [{ id: 'checking', name: 'Checking', included: true }, { id: 'savings', name: 'Savings', included: false }];
@@ -472,4 +477,24 @@ test('desktop explicitly keeping local changes resolves a conflict with conditio
       backup: Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')) };
   });
   expect(result).toEqual({ present: true, backup: true });
+});
+
+
+test('desktop overview selects the current month for current year and January for other years', async ({ page }) => {
+  const initial = await page.evaluate(() => ({ year: activeYear, month: selectedIdx, nowYear: new Date().getFullYear(), nowMonth: new Date().getMonth() }));
+  expect(initial.month).toBe(initial.year === String(initial.nowYear) ? initial.nowMonth : 0);
+  await page.evaluate(() => selectMonth(4));
+  await page.evaluate(() => render());
+  expect(await page.evaluate(() => selectedIdx)).toBe(4);
+  const otherYear = String(initial.nowYear === 2026 ? 2027 : 2026);
+  await page.evaluate(year => switchYear(year), otherYear);
+  expect(await page.evaluate(() => selectedIdx)).toBe(0);
+  await page.evaluate(year => switchYear(year), String(initial.nowYear));
+  expect(await page.evaluate(() => selectedIdx)).toBe(initial.nowMonth);
+});
+
+test('recurring manager heading is global and contains no budget year', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('.recurring-eyebrow')).toHaveText('RECURRING RULES');
+  await expect(page.locator('#recurringYearLabel')).toHaveCount(0);
 });

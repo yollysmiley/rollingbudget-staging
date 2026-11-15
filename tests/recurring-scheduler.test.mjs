@@ -78,3 +78,23 @@ test('effective-dated disable and frequency changes affect only later occurrence
     ['2027-01-01', '2027-02-01', '2027-05-01']);
   assert.equal(scheduledOccurrences(input, 2026).length, 2);
 });
+
+
+test('uses calendar start day, clamps short months, and stops at optional end date', () => {
+  const input = rule({ startDate: '2027-01-31', endDate: '2027-04-29', versions: [
+    { effectiveFrom: '2027-01-01', name: 'Rent', amount: 900, accountId: 'checking', frequency: 'monthly' }
+  ] });
+  assert.deepEqual(scheduledOccurrences(input, 2027).map(x => x.scheduledMonth),
+    ['2027-01-31', '2027-02-28', '2027-03-31']);
+  assert.deepEqual(scheduledOccurrences(input, 2027).map(x => x.due), ['31', '28', '31']);
+});
+
+test('preserves stable calendar occurrence identifiers for repeated generation', () => {
+  const input = rule({ startDate: '2028-02-29', versions: [
+    { effectiveFrom: '2028-02-01', name: 'Rent', amount: 900, frequency: 'annually' }
+  ] });
+  // Monthly frequency comes from the first rule version, not the top-level fallback.
+  const occurrences = scheduledOccurrences(input, 2028);
+  assert.equal(occurrences[0].scheduledMonth, '2028-02-29');
+  assert.deepEqual(appendMissingOccurrences(occurrences, occurrences), occurrences);
+});

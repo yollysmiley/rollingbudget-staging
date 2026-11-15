@@ -709,7 +709,7 @@
         <input type="checkbox" id="autoRollToggle" checked />
         <span>Auto-Cascade</span>
       </label>
-      <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+      
     </div>
   </div>
   <div class="desktop-settings-card" id="settingsProfile" hidden>
@@ -749,7 +749,7 @@
     </div>
     <div data-mobile-settings-section="years" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years</h3>
-      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p><button type="button" class="primary" onclick="openRecurringModal()">Recurring Rules</button></div>
+      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p></div>
     <div data-mobile-settings-section="security" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
@@ -939,7 +939,7 @@
 
 <section id="recurringManagerPage" class="recurring-manager-page" aria-label="Recurring Rules Manager">
 <div class="recurring-manager-shell">
-<div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" class="recurring-back-button" onclick="closeRecurringModal()">← Back to Overview</button></div>
+<div class="recurring-manager-heading"><div><p class="recurring-eyebrow">RECURRING RULES</p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" class="recurring-back-button" onclick="closeRecurringModal()">← Back to Overview</button></div>
 <div id="recurringDesktopView" class="recurring-desktop-view">
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span><span id="desktopRecurringPreviewStatus" role="status"></span><button type="button" id="desktopApplyRecurringPreview" onclick="applyRecurringPreview()" disabled>Apply scheduled entries</button></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
@@ -995,7 +995,10 @@ const BASELINE_2026 = {
 };
 
 let activeYear = "2026";
-let selectedIdx = 0;
+function defaultMonthIndex(year, now = new Date()) {
+  return String(year) === String(now.getFullYear()) ? now.getMonth() : 0;
+}
+let selectedIdx = defaultMonthIndex(activeYear);
 let db = {};
 let budgetAccounts = [];
 let accountService = null;
@@ -1506,7 +1509,7 @@ async function saveDB() {
 }
 function switchYear(yr) {
   activeYear = yr;
-  selectedIdx = 0;
+  selectedIdx = defaultMonthIndex(activeYear);
   if (!db[activeYear]) {
     db[activeYear] = JSON.parse(JSON.stringify(BASELINE_2026));
     db[activeYear].recurringRules = [];
@@ -1543,6 +1546,7 @@ async function createNewYear() {
   }
   sel.value = newYr;
   activeYear = newYr;
+  selectedIdx = defaultMonthIndex(activeYear);
   await saveDB();
   render();
 }
@@ -1989,7 +1993,6 @@ async function submitAuth() {
 const RECURRING_FREQUENCIES={monthly:{label:"Monthly",interval:1},"every-2-months":{label:"Every 2 months",interval:2},quarterly:{label:"Quarterly",interval:3},"every-6-months":{label:"Every 6 months",interval:6},annually:{label:"Annually",interval:12}};
 function openRecurringModal(){
   refreshAccountSelectors();
-  document.getElementById("recurringYearLabel").textContent=activeYear;
   document.querySelectorAll("[data-rec-field='startMonth']").forEach(select=>{select.innerHTML=db[activeYear].months.map((m,i)=>`<option value="${i}">${esc(m.name)}</option>`).join("");select.value="0";});
   document.querySelectorAll("[data-recurring-form]").forEach(form=>{form.querySelector("[data-rec-field='category']").value="fixed";form.querySelector("[data-rec-field='frequency']").value="monthly";});
   toggleRecFields();renderRulesList();document.body.classList.add("recurring-manager-open");

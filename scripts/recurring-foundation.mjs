@@ -4,12 +4,13 @@ export const FREQUENCY_MONTHS = Object.freeze({
   'every-6-months': 6, annually: 12
 });
 const CATEGORIES = new Set(['income', 'fixed', 'variable', 'loan', 'cc']);
-const DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-01$/;
+const DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 function validMonthDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
-  const [year, month] = value.split('-').map(Number);
-  return year >= 1900 && year <= 2200 && month >= 1 && month <= 12;
+  const [year, month, day] = value.split('-').map(Number);
+  return year >= 1900 && year <= 2200 && month >= 1 && month <= 12 &&
+    day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 export function normalizeRecurringRule(rule) {
@@ -33,7 +34,7 @@ export function normalizeRecurringRule(rule) {
   return {
     id, name, category, amount, due, accountId,
     frequency, startDate, endDate, active: rule.active !== false,
-    versions: [{ effectiveFrom: startDate, name, amount, due, accountId, frequency }]
+    versions: [{ effectiveFrom: startDate.slice(0, 7) + '-01', name, amount, due, accountId, frequency }]
   };
 }
 

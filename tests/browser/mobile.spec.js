@@ -247,12 +247,14 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await expect(page.locator('#autoRollToggle')).not.toBeChecked();
   await page.reload();
   await page.locator('#mobileMenuButton').click();
-  // The sidebar animates in from off-screen; a visible element may still be outside the viewport.
+  // Wait for the sidebar transition to finish before using its navigation.
   await expect(page.locator('#mobileSidebar')).toHaveAttribute('aria-hidden', 'false');
-  await expect.poll(async () => {
-    const box = await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').boundingBox();
-    return Boolean(box && box.x >= 0 && box.x + box.width <= page.viewportSize().width);
-  }).toBe(true);
+  await page.locator('#mobileSidebar').evaluate(element => new Promise(resolve => {
+    if (getComputedStyle(element).transform === 'none') return resolve();
+    const done = () => resolve();
+    element.addEventListener('transitionend', done, { once: true });
+    setTimeout(done, 1000);
+  }));
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
@@ -411,4 +413,23 @@ test('browser cloud fixture rejects another owner\'s conditional budget update',
     return { written: data.length, after: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[year].updated_at };
   });
   expect(outcome).toEqual({ written: 0, after: '2026-11-15T00:00:00.000Z' });
+});
+
+
+test('mobile automation settings omit duplicate recurring action while sidebar keeps access', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
+  await expect(page.locator('[data-mobile-settings-section="automation"] button[onclick="openRecurringModal()"]')).toHaveCount(0);
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]')).toBeVisible();
+});
+
+
+test('mobile overview defaults to calendar month and keeps manual month selection', async ({ page }) => {
+  const initial = await page.evaluate(() => ({ year: activeYear, month: selectedIdx, nowYear: new Date().getFullYear(), nowMonth: new Date().getMonth() }));
+  expect(initial.month).toBe(initial.year === String(initial.nowYear) ? initial.nowMonth : 0);
+  await page.evaluate(() => selectMonth(7));
+  await page.evaluate(() => render());
+  expect(await page.evaluate(() => selectedIdx)).toBe(7);
 });
