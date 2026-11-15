@@ -75,7 +75,11 @@ writeFileSync('dist/styles/settings.css', readFileSync(new URL('../styles/settin
 writeFileSync('dist/app/styles/settings.css', readFileSync(new URL('../styles/settings.css', import.meta.url), 'utf8'));
 writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
-for (const path of ['account-model.mjs', 'account-storage.mjs', 'account-budget.mjs']) {
+for (const path of [
+  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs',
+  'recurring-foundation.mjs', 'recurring-scheduler.mjs',
+  'recurring-budget-preview.mjs', 'recurring-app-service.mjs'
+]) {
   const source = readFileSync(new URL('./' + path, import.meta.url));
   mkdirSync('dist/scripts', { recursive: true });
   mkdirSync('dist/app/scripts', { recursive: true });
