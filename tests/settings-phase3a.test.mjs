@@ -45,3 +45,12 @@ test('desktop automation controls are mounted in the automation screen, never hi
   assert.match(automation, /id="autoRollToggle"/);
   assert.match(automation, /onclick="openRecurringModal\(\)"/);
 });
+
+test('auto-cascade writes shared state without synthetic desktop events', () => {
+  const setter = html.split('async function setAutoCascade(enabled)')[1]?.split('function setMobileTab(tab)')[0] ?? '';
+  assert.match(setter, /db\[activeYear\]\.autoCascade = Boolean\(enabled\)/);
+  assert.match(setter, /await saveDB\(\)/);
+  assert.match(setter, /render\(\)/);
+  assert.doesNotMatch(setter, /dispatchEvent/);
+  assert.match(html, /if \(tab === "settings"\) showMobileSettingsMenu\(\)/);
+});
