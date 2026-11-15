@@ -153,6 +153,7 @@ test('mobile recurring manager uses its distinct card layout and supports rule c
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringMobileView')).toBeVisible();
   await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('Recurring preview');
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeDisabled();
   await expect(page.locator('#recurringDesktopView')).toBeHidden();
   const form=page.locator('[data-recurring-form="mobile"]');
   await form.locator('[data-rec-field="name"]').fill('Annual Insurance');
@@ -275,5 +276,43 @@ test('recurring preview status is shared but displayed in distinct mobile and de
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator('#recurringDesktopView')).toBeVisible();
   await expect(page.locator('#desktopRecurringPreviewStatus')).toContainText('Recurring preview');
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeDisabled();
   await expect(page.locator('#recurringMobileView')).toBeHidden();
+});
+
+test('mobile apply action saves verified entries once and desktop sees the same budget', async ({ page }) => {
+  await page.evaluate(() => {
+    const verifiedRule = {
+      id: 'verified-demo', name: 'Verified expense', category: 'fixed', amount: 125,
+      due: '5th', accountId: null, frequency: 'monthly', startDate: '2026-01-01',
+      endDate: null, active: true, versions: [{
+        effectiveFrom: '2026-01-01', name: 'Verified expense', amount: 125,
+        due: '5th', accountId: null, frequency: 'monthly'
+      }]
+    };
+    recurringAppService.loadRecurringPreviewRules = async () => ({
+      rules: [verifiedRule], held: 0
+    });
+    loadedRecurringPreview = { rules: [verifiedRule], held: 0 };
+    recurringPreviewError = '';
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#mobileApplyRecurringPreview').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeDisabled();
+  const snapshot = await page.evaluate(() => ({
+    entries: db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'verified-demo'),
+    year: activeYear
+  }));
+  expect(snapshot.entries).toHaveLength(1);
+  expect(snapshot.entries[0].amount).toBe(125);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeDisabled();
+  await page.reload();
+  const saved = await page.evaluate(() =>
+    db['2026'].months[0].fixed.filter(entry => entry.recurringRuleId === 'verified-demo'));
+  expect(saved).toHaveLength(1);
+  expect(saved[0].occurrenceId).toBe(JSON.stringify(['verified-demo', '2026-01-01']));
 });
