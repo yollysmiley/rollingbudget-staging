@@ -59,7 +59,7 @@ export async function createRecurringRule(client, userId, input) {
 }
 
 export async function editRecurringRule(client, userId, id, changes, effectiveFrom) {
-  if (!client || !userId || !id || !/^\\d{4}-(0[1-9]|1[0-2])-01$/.test(effectiveFrom)) {
+  if (!client || !userId || !id || !/^\d{4}-(0[1-9]|1[0-2])-01$/.test(effectiveFrom)) {
     throw new Error('Authenticated effective-dated rule edit required');
   }
   const { data: rows, error: readError } = await client.from('budget_recurring_rules')
