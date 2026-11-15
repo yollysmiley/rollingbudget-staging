@@ -25,7 +25,7 @@ export async function mockSignedInBudget(page) {
                   ? JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]') : [];
                 return Promise.resolve({ data: table === 'budget_recurring_rules' ? recurringRows : accountRows, error: null });
               },
-              upsert() { return Promise.resolve({ data: [], error: null }); }
+              upsert() { return Promise.resolve({ data: [], error: table === 'budget_ui_years' && sessionStorage.getItem('__mock_budget_cloud_failure') === '1' ? { message: 'offline' } : null }); }
             };
             return chain;
           }
