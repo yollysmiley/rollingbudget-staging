@@ -123,3 +123,29 @@ test('individual approvals include only selected ambiguous occurrences', () => {
   assert.equal(approved.document.months[1].fixed.length, 0);
   assert.deepEqual(source.months[1].variable[0], { name: 'Rent invoice', amount: 700, accountId: 'other' });
 });
+
+test('unrelated descriptions sharing a generic word do not block scheduling', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: 'Monthly groceries', amount: 120, accountId: 'other' });
+  const named = { ...rule(), name: 'Monthly Internet',
+    versions: [{ ...rule().versions[0], name: 'Monthly Internet' }] };
+  const result = previewRecurringYear(source, 2027, [named]);
+  assert.equal(result.ambiguous.length, 0);
+  assert.equal(result.added, 12);
+});
+
+test('distinctive renamed transaction with same amount and account is reviewed', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: 'Rent apartment', amount: 500 });
+  const result = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(result.ambiguous.length, 1);
+  assert.equal(result.added, 11);
+});
+
+test('different amounts with exact or distinctive leading names still require review', () => {
+  const source = budget();
+  source.months[0].variable.push({ name: 'Rent', amount: 850, accountId: 'new-account' });
+  const result = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(result.ambiguous.length, 1);
+  assert.equal(result.added, 11);
+});
