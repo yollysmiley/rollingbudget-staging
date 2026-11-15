@@ -28,7 +28,7 @@ test('desktop Settings contains existing year and rollover controls', () => {
 test('desktop Settings is reversible and mobile controls retain a separate mount', () => {
   assert.match(html, /function setDesktopSettings\(open\)/);
   assert.match(html, /function showDesktopPage\(page\)/);
-  assert.match(html, /id="mobileSettingsPanel"[\\s\\S]*id="mobileSettingsControls"/);
+  assert.match(html, /id="mobileSettingsPanel"[\s\S]*id="mobileSettingsControls"/);
   assert.match(html, /desktop-settings-open/);
   assert.match(html, /function syncMobileSettingsControls\(\)/);
   assert.match(html, /id="mobileSettingsControls"/);
