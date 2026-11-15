@@ -53,3 +53,7 @@ In the staging Supabase dashboard, add that exact URL under **Authentication →
 ## Phase 1 navigation and brand foundation
 
 `styles/brand.css` is copied by `scripts/build-staging.mjs` to both public and authenticated staging routes. Desktop primary navigation follows Overview, Plan, Recurring Rules, Settings, with anchored Settings sections. Mobile retains a separate hamburger navigation and displays year/rollover controls on its Settings page. Budget storage and authentication remain unchanged. Phase 1 is a navigation foundation; the full reference-based page redesigns are separate phases.
+
+## Phase 2 public homepage and authentication
+
+The public landing page uses `styles/homepage.css` and a split hero with a budget illustration and feature cards, based on the approved homepage reference. The staging build copies the stylesheet to `dist/styles/homepage.css`. Authentication continues to use the existing Supabase modal handlers and confirmation/recovery redirect pages. The authenticated budget remains at `/app/`, with desktop and mobile app views unchanged. Tests: `tests/homepage-phase2.test.mjs` and `tests/browser/homepage.spec.js`.
