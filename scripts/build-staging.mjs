@@ -39,6 +39,10 @@ assert.ok(!html.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Unconfigured storage p
 assert.ok(!html.includes('awalptqpsjflrahkrjzk'), 'Production project reference remains');
 assert.ok(!html.includes('sb_secret_'), 'Secret key marker found');
 assert.ok(!html.includes('localStorage.removeItem(storageKey('), 'Build must not delete budget records');
+assert.ok(html.includes('budget-year-toolbar'), 'Budget year selector must be present outside Settings');
+assert.ok(!html.includes('data-settings-section="years"') &&
+  !html.includes('data-mobile-settings-section="years"'), 'Year submenu must be removed from both Settings views');
+assert.ok(!html.includes('onclick="createNewYear()"'), 'Manual year creation must not return');
 assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year))"), 'Conflict marker cleanup must remain scoped');
 assert.ok(html.includes('function esc(str)') && html.includes('&lt;'), 'HTML text escaping is missing');
 
@@ -89,7 +93,7 @@ writeFileSync('dist/app/styles/settings.css', readFileSync(new URL('../styles/se
 writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
 for (const path of [
-  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs',
+  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs', 'year-discovery.mjs',
   'recurring-foundation.mjs', 'recurring-scheduler.mjs',
   'recurring-budget-preview.mjs', 'recurring-app-service.mjs'
 ]) {
