@@ -464,3 +464,24 @@ test('mobile SPA routes persist through refresh and browser history', async ({ p
   await page.goForward();
   await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
 });
+
+test('mobile planning month persists during session and is independent by year', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('[data-mobile-tab="plan"]').click();
+  await page.evaluate(() => selectMonth(6));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Jul');
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('[data-mobile-tab="overview"]').click();
+  await expect(page.locator('#mobileOverview')).toContainText('Jul');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#mobileOverview')).toContainText('Jul');
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#mobileOverview')).toContainText('Jan');
+  await page.evaluate(() => selectMonth(2));
+  await expect(page.locator('#mobileOverview')).toContainText('Mar');
+  await page.evaluate(() => switchYear('2026'));
+  await expect(page.locator('#mobileOverview')).toContainText('Jul');
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#mobileOverview')).toContainText('Mar');
+});
