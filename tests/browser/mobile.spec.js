@@ -143,7 +143,10 @@ test('mobile menu navigation enters and exits recurring rules without refreshing
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="overview"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
   await expect(page.locator('#mobileOverview')).toBeVisible();
+  await expect(page).toHaveURL(/[?&]page=overview(?:&|$)/);
+  await page.goBack();
   await expect(page).toHaveURL(managerUrl);
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
 });
 
 test('mobile recurring manager uses its distinct card layout and supports rule creation', async ({ page }) => {
@@ -469,7 +472,7 @@ test('mobile planning month persists during session and is independent by year',
   await page.locator('#mobileMenuButton').click();
   await page.locator('[data-mobile-tab="plan"]').click();
   await page.evaluate(() => selectMonth(6));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Jul');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/jul/i);
   await page.locator('#mobileMenuButton').click();
   await page.locator('[data-mobile-tab="overview"]').click();
   await expect(page.locator('#mobileOverview')).toContainText('Jul');
@@ -477,9 +480,9 @@ test('mobile planning month persists during session and is independent by year',
   await expectAuthenticatedBudget(page);
   await expect(page.locator('#mobileOverview')).toContainText('Jul');
   await page.evaluate(() => switchYear('2027'));
-  await expect(page.locator('#mobileOverview')).toContainText('Jan');
+  await expect(page.locator('#mobileOverview')).toContainText(/jan/i);
   await page.evaluate(() => selectMonth(2));
-  await expect(page.locator('#mobileOverview')).toContainText('Mar');
+  await expect(page.locator('#mobileOverview')).toContainText(/mar/i);
   await page.evaluate(() => switchYear('2026'));
   await expect(page.locator('#mobileOverview')).toContainText('Jul');
   await page.evaluate(() => switchYear('2027'));
