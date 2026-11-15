@@ -11,7 +11,7 @@ assert(start >= 0 && end > start, 'Cloud save implementation must be present');
 function harness() {
   const writes = [];
   const store = new Map();
-  const status = { textContent: '', hidden: true, setAttribute() {}, style: {}, replaceChildren() {}, append() {} };
+  const status = { textContent: '', hidden: true, setAttribute() {}, style: {}, replaceChildren(node) { this.textContent = node.textContent; }, append() {} };
   const document = {
     getElementById: () => status,
     querySelector: () => ({ insertAdjacentElement() {} }),
