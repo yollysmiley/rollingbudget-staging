@@ -40,6 +40,7 @@ assert.ok(!html.includes('awalptqpsjflrahkrjzk'), 'Production project reference 
 assert.ok(!html.includes('sb_secret_'), 'Secret key marker found');
 assert.ok(!html.includes('localStorage.removeItem(storageKey('), 'Build must not delete budget records');
 assert.ok(html.includes('budget-year-toolbar'), 'Budget year selector must be present outside Settings');
+assert.ok(html.includes('id="desktopCopyPreviousYear"') && html.includes('id="mobileCopyPreviousYear"'), 'Both budget plan copy controls must be present');
 assert.ok(!html.includes('data-settings-section="years"') &&
   !html.includes('data-mobile-settings-section="years"'), 'Year submenu must be removed from both Settings views');
 assert.ok(!html.includes('onclick="createNewYear()"'), 'Manual year creation must not return');
@@ -93,7 +94,7 @@ writeFileSync('dist/app/styles/settings.css', readFileSync(new URL('../styles/se
 writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
 for (const path of [
-  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs', 'year-discovery.mjs',
+  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs', 'year-discovery.mjs', 'year-plan.mjs',
   'recurring-foundation.mjs', 'recurring-scheduler.mjs',
   'recurring-budget-preview.mjs', 'recurring-app-service.mjs'
 ]) {
