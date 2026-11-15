@@ -400,3 +400,70 @@ test('loaded rules expose next-month scheduling independently of current status'
   assert.equal(loaded.rules[0].upcomingAmount, 650);
   assert.equal(loaded.rules[0].upcomingEffectiveFrom, nextMonth);
 });
+
+test('cloud snapshot accepts semantically equal PostgreSQL jsonb and timestamptz values', () => {
+  const localBudget = {
+    months: [{ recordedLeftover: 0, income: [], fixed: [{ name: 'Rent', amount: 120 }] }],
+    autoCascade: true, recurringRules: []
+  };
+  const reorderedCloudBudget = {
+    recurringRules: [], autoCascade: true,
+    months: [{ fixed: [{ amount: 120, name: 'Rent' }], income: [], recordedLeftover: 0 }]
+  };
+  const args = {
+    owner: 'owner-a', activeOwner: 'owner-a',
+    knownRevision: '2026-11-15T12:00:00.123Z',
+    cloudRow: { updated_at: '2026-11-15T07:00:00.123000-05:00', budget_data: reorderedCloudBudget },
+    inMemoryBudget: localBudget, cachedBudget: structuredClone(localBudget), hasLocalCache: true
+  };
+  assert.equal(requireRecurringCloudSnapshot(args), true);
+  assert.throws(() => requireRecurringCloudSnapshot({
+    ...args, cloudRow: { ...args.cloudRow, updated_at: '2026-11-15T12:00:00.123001+00:00' }
+  }), /revision is unverified or stale/);
+  const changed = structuredClone(localBudget);
+  changed.months[0].fixed[0].amount = 121;
+  assert.throws(() => requireRecurringCloudSnapshot({ ...args, cachedBudget: changed }),
+    /Local budget differs/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...args, inMemoryBudget: changed }),
+    /Local budget differs/);
+});
+
+test('cloud backfill CAS uses authoritative revision after equivalent timestamp formatting', async () => {
+  const cloud = budget();
+  const cloudUpdatedAt = '2026-11-15T12:00:00.123456+00:00';
+  const expectedUpdatedAt = '2026-11-15T07:00:00.123456-05:00';
+  let written = false;
+  const client = { from(table) {
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq() { return { async eq() {
+        return { data: [{ year: 2027, budget_data: cloud, updated_at: cloudUpdatedAt }], error: null };
+      } }; } }; },
+      update(change) {
+        const filters = {}, q = {
+          eq(field, value) { filters[field] = value; return q; },
+          async select() {
+            assert.equal(filters.user_id, 'owner-a');
+            assert.equal(filters.year, 2027);
+            assert.equal(filters.updated_at, cloudUpdatedAt);
+            assert.equal(change.budget_data.months[0].fixed.length, 1);
+            written = true;
+            return { data: [{ year: 2027 }], error: null };
+          }
+        };
+        return q;
+      }
+    };
+  } };
+  const builder = document => {
+    const copy = structuredClone(document);
+    copy.months[0].fixed.push({ name: 'Scheduled', amount: 60 });
+    return { document: copy, added: 1, skipped: [], ambiguous: [] };
+  };
+  const result = await commitRecurringYear(client, 'owner-a', 2027, builder,
+    { expectedUpdatedAt, canCommit: () => true });
+  assert.equal(result.saved, true);
+  assert.equal(written, true);
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, builder,
+    { expectedUpdatedAt: '2026-11-15T12:00:00.123455Z' }), /changed since recurring/);
+});

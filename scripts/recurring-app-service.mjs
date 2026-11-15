@@ -135,16 +135,44 @@ export function selectRecurringCloudYears(rows, startDate, endDate = null) {
     .map(row => String(row.year)))].sort();
 }
 
+function sameRecurringRevision(known, cloud) {
+  if (typeof known !== 'string' || typeof cloud !== 'string') return false;
+  if (known === cloud) return true;
+  // PostgREST may return a timestamptz with a numeric timezone offset and
+  // microseconds while browser-written revisions use ISO Z and milliseconds.
+  // Preserve full fractional precision; distinct concurrent revisions must
+  // never be treated as equal merely because Date.parse truncates fractions.
+  const revisionNanos = value => {
+    const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/i.exec(value);
+    if (!match) return null;
+    const milliseconds = Date.parse(match[1] + match[3]);
+    if (!Number.isFinite(milliseconds)) return null;
+    return BigInt(milliseconds) * 1000000n + BigInt((match[2] || '').padEnd(9, '0'));
+  };
+  const left = revisionNanos(known), right = revisionNanos(cloud);
+  return left !== null && left === right;
+}
+
+function sameRecurringBudgetData(left, right) {
+  // PostgreSQL jsonb intentionally does not retain object-key ordering.
+  // Compare canonical JSON content while preserving array order and values.
+  const canonical = value => JSON.stringify(value, (_key, entry) =>
+    entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, entry[key]]))
+      : entry
+  );
+  return canonical(left) === canonical(right);
+}
+
 export function requireRecurringCloudSnapshot({ owner, activeOwner, cloudRow, knownRevision,
   inMemoryBudget, cachedBudget, hasLocalCache = false, conflicted = false }) {
   if (!owner || activeOwner !== owner) throw new Error('Recurring sync owner changed');
   if (conflicted) throw new Error('Unsynced local changes require reconciliation');
-  if (!cloudRow || !knownRevision || knownRevision !== cloudRow.updated_at || !cloudRow.budget_data) {
+  if (!cloudRow || !sameRecurringRevision(knownRevision, cloudRow.updated_at) || !cloudRow.budget_data) {
     throw new Error('Cloud budget revision is unverified or stale');
   }
-  const expected = JSON.stringify(cloudRow.budget_data);
-  if (!inMemoryBudget || JSON.stringify(inMemoryBudget) !== expected ||
-      (hasLocalCache && (!cachedBudget || JSON.stringify(cachedBudget) !== expected))) {
+  if (!inMemoryBudget || !sameRecurringBudgetData(inMemoryBudget, cloudRow.budget_data) ||
+      (hasLocalCache && (!cachedBudget || !sameRecurringBudgetData(cachedBudget, cloudRow.budget_data)))) {
     throw new Error('Local budget differs from cloud; reconcile before recurring sync');
   }
   return true;
@@ -163,7 +191,7 @@ export async function commitRecurringYear(client, userId, year, buildPreview, op
     throw new Error('Budget year must be cloud-saved before applying recurring entries');
   }
   const source = rows[0];
-  if (options.expectedUpdatedAt && source.updated_at !== options.expectedUpdatedAt) {
+  if (options.expectedUpdatedAt && !sameRecurringRevision(source.updated_at, options.expectedUpdatedAt)) {
     throw new Error('Cloud budget changed since recurring synchronization was checked');
   }
   const preview = buildPreview(source.budget_data);
