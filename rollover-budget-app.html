@@ -679,6 +679,16 @@
 
   </div>
 </header>
+<section class="budget-year-toolbar" aria-label="Budget year selection">
+  <div class="budget-year-picker budget-year-picker-desktop">
+    <label for="activeYearSelect">Budget year</label>
+    <select id="activeYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
+  </div>
+  <div class="budget-year-picker budget-year-picker-mobile">
+    <label for="mobileActiveYearSelect">Budget year</label>
+    <select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
+  </div>
+</section>
 
 <div id="mobileSidebarBackdrop" class="mobile-sidebar-backdrop" onclick="toggleMobileSidebar(false)" hidden></div>
 <aside id="mobileSidebar" class="mobile-sidebar" aria-label="Mobile navigation" aria-hidden="true">
@@ -699,7 +709,6 @@
   <div class="settings-layout">
     <nav class="settings-section-nav" aria-label="Settings sections">
 <button type="button" data-settings-section="accounts" aria-controls="settingsAccounts" onclick="showSettingsSection('accounts')">Budget Accounts</button>
-<button type="button" data-settings-section="years" aria-controls="settingsYears" onclick="showSettingsSection('years')">Budget Years</button>
 <button type="button" data-settings-section="automation" aria-controls="settingsAutomation" onclick="showSettingsSection('automation')">Rollover &amp; Automation</button>
 <button type="button" data-settings-section="security" aria-controls="settingsProfile" onclick="showSettingsSection('security')">Profile &amp; Security</button>
 </nav>
@@ -708,20 +717,6 @@
     <h3>Budget Accounts</h3>
     <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
     <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
-  </div>
-  <div class="desktop-settings-card" id="settingsYears" hidden>
-    <h3>Budget Years</h3>
-    <div class="controls" id="budgetSettingsControls">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
-        <select id="activeYearSelect" onchange="switchYear(this.value)">
-          <option value="2026">2026 (Active Budget)</option>
-          <option value="2027">2027 (Planning Mode)</option>
-        </select>
-      </div>
-      <button onclick="createNewYear()">+ New Year</button>
-
-    </div>
   </div>
   <div class="desktop-settings-card" id="settingsAutomation" hidden>
     <h3>Rollover &amp; Automation</h3>
@@ -760,7 +755,6 @@
     <p class="mobile-settings-intro">Choose a section to manage your budget preferences.</p>
 <nav id="mobileSettingsMenu" class="mobile-settings-menu" aria-label="Settings sections">
 <button type="button" onclick="showMobileSettingsSection('accounts')">Budget Accounts</button>
-<button type="button" onclick="showMobileSettingsSection('years')">Budget Years</button>
 <button type="button" onclick="showMobileSettingsSection('automation')">Rollover &amp; Automation</button>
 <button type="button" onclick="showMobileSettingsSection('security')">Profile &amp; Security</button>
 </nav>
@@ -769,9 +763,7 @@
       <h3 style="font-size:.95rem;margin-bottom:8px">Budget Accounts</h3>
       <div id="mobileSettingsAccounts" class="account-manager"></div>
     </div>
-    <div data-mobile-settings-section="years" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
-      <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years</h3>
-      <div id="mobileSettingsControls" class="mobile-settings-controls"><label for="mobileActiveYearSelect">Budget year</label><select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select><button type="button" onclick="createNewYear()">+ New Year</button></div></div><div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p></div>
+<div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p></div>
     <div data-mobile-settings-section="security" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
@@ -1017,7 +1009,7 @@ const BASELINE_2026 = {
   })
 };
 
-let activeYear = "2026";
+let activeYear = String(new Date().getFullYear());
 function defaultMonthIndex(year, now = new Date()) {
   return String(year) === String(now.getFullYear()) ? now.getMonth() : 0;
 }
@@ -1048,6 +1040,9 @@ function clearMonthPreferences(user) {
       if (key.startsWith(prefix)) sessionStorage.removeItem(key);
     }
   } catch (error) { console.warn("Could not clear month preferences", error); }
+}
+function selectedYearSessionKey(user = currentUser) {
+  return user?.id ? 'rollingbudget_selected_year:' + encodeURIComponent(user.id) : null;
 }
 let selectedIdx = defaultMonthIndex(activeYear);
 let db = {};
@@ -1205,7 +1200,9 @@ let accountMigrationModule = null;
 async function migrateLoadedIncome() {
   if (!currentUser || !accountMigrationModule || !budgetAccounts.length) return;
   const owner = currentUser.id;
+  if (!cloudYearLoadSucceeded) return; // Never migrate without an authoritative cloud read.
   for (const [year, original] of Object.entries(db)) {
+    if (cloudBudgetConflicts.has(owner + ':' + year)) continue;
     const migrated = accountMigrationModule.migrateLegacyYear(original, budgetAccounts);
     if (!migrated.changed) continue;
     const backupKey = storageKey(year) + '_pre_income_migration';
@@ -1386,60 +1383,92 @@ function chooseNewestBudget(localRecord, cloudRecord) {
   return (localRecord.updatedAt ?? 0) > (cloudRecord.updatedAt ?? 0) ? localRecord : cloudRecord;
 }
 async function loadAllYears() {
+  const { availableBudgetYears, sameBudgetDocument } = await import('./scripts/year-discovery.mjs');
   cloudBudgetVersions.clear();
   cloudBudgetConflicts.clear();
+  cloudYearLoadSucceeded = false;
+  const owner = currentUser?.id;
+  if (!owner) return;
   const all = {};
   const localRecords = {};
-  for (const yr of ["2026", "2027"]) {
+  const unreadableLocalYears = new Set();
+  const ownedPrefix = STAGING_STORAGE_PREFIX + '_' + owner + '_budget_';
+  let keys = [];
+  try { keys = Object.keys(localStorage); }
+  catch (error) { console.warn('Local year discovery unavailable; cloud years will still load:', error); }
+  const years = availableBudgetYears(new Date().getFullYear(), [], keys, ownedPrefix);
+  for (const yr of years) {
     all[yr] = JSON.parse(JSON.stringify(BASELINE_2026));
     try {
-      const record = parseLocalBudgetRecord(localStorage.getItem(storageKey(yr)));
+      const raw = localStorage.getItem(storageKey(yr));
+      const record = parseLocalBudgetRecord(raw);
       if (record) {
         localRecords[yr] = record;
         all[yr] = record.data;
+      } else if (raw !== null) {
+        // Never replace an unreadable local snapshot during a cloud refresh.
+        unreadableLocalYears.add(yr);
       }
-    } catch (error) { console.warn("Could not read local budget data for", yr, "; original storage was preserved.", error); }
+    } catch (error) { console.warn('Could not read local budget data for', yr, '; original storage was preserved.', error); }
   }
-  if (supabaseClient && currentUser) {
+  if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.from("budget_ui_years").select("year,budget_data,updated_at").eq("user_id", currentUser.id);
+      const { data, error } = await supabaseClient.from("budget_ui_years").select("year,budget_data,updated_at").eq("user_id", owner);
       if (error) throw error;
+      if (currentUser?.id !== owner) return;
+      cloudYearLoadSucceeded = true;
       for (const row of data || []) {
         const year = String(row.year);
-        if (!validYearData(row.budget_data)) continue;
-        cloudBudgetVersions.set(currentUser.id + ':' + year, row.updated_at);
-        const cloudTime = row.updated_at ? Date.parse(row.updated_at) : NaN;
-        const cloudRecord = { data: row.budget_data, updatedAt: Number.isFinite(cloudTime) ? cloudTime : null, legacy: false };
-        const localRecord = localRecords[year];
-        // Preserve an unversioned local copy before preferring a timestamped cloud record.
-        if (localRecord?.legacy && cloudRecord.updatedAt !== null) {
-          const backupKey = storageKey(year) + "_legacy_backup";
-          try {
-            if (localStorage.getItem(backupKey) === null) {
-              localStorage.setItem(backupKey, JSON.stringify({ data: localRecord.data, backedUpAt: new Date().toISOString(), reason: "Unversioned local data preserved while loading timestamped cloud data." }));
-            }
-          } catch (backupError) { console.warn("Could not create legacy local budget backup; cloud data remains unchanged.", backupError); }
+        if (!/^\\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) continue;
+        if (!all[year]) all[year] = JSON.parse(JSON.stringify(BASELINE_2026));
+        const key = owner + ':' + year;
+        if (!validYearData(row.budget_data)) {
+          markCloudConflict(key, year);
+          continue;
         }
-        const conflictKey = storageKey(year) + '_cloud_conflict';
-        const pendingConflict = localStorage.getItem(conflictKey) === '1';
-        const newest = pendingConflict && localRecord ? localRecord : chooseNewestBudget(localRecord, cloudRecord);
-        if (pendingConflict) {
-          cloudBudgetConflicts.add(currentUser.id + ':' + year);
-          showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
+        cloudBudgetVersions.set(key, row.updated_at);
+        const local = localRecords[year];
+        const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
+        const divergent = local && !sameBudgetDocument(local.data, row.budget_data);
+        if (pending || divergent || unreadableLocalYears.has(year)) {
+          // A timestamp cannot prove that two documents share a cloud revision.
+          // Keep the local copy and block writes until explicit reconciliation.
+          markCloudConflict(key, year);
+          if (local) all[year] = local.data;
+          else all[year] = row.budget_data;
+          continue;
         }
-        all[year] = newest.data;
-        // Normalize the chosen copy to the timestamped envelope so future loads compare versions.
-        if (newest === cloudRecord) {
-          try { localStorage.setItem(storageKey(year), JSON.stringify({ data: cloudRecord.data, updatedAt: row.updated_at })); }
-          catch (storageError) { console.warn("Could not cache cloud budget locally:", storageError); }
-        }
+        all[year] = row.budget_data;
+        try {
+          localStorage.setItem(storageKey(year), JSON.stringify({ data: row.budget_data, updatedAt: row.updated_at }));
+        } catch (storageError) { console.warn('Could not cache cloud budget locally:', storageError); }
       }
-    } catch (error) { console.error("Cloud load error; local data was retained:", error); }
+    } catch (error) { console.error('Cloud load error; local data was retained:', error); }
   }
+  for (const year of Object.keys(all)) {
+    try {
+      if (unreadableLocalYears.has(year) || localStorage.getItem(conflictStorageKey(year)) === '1') {
+        markCloudConflict(owner + ':' + year, year);
+      }
+    } catch (error) { console.warn('Could not inspect saved budget conflicts:', error); }
+  }
+  if (currentUser?.id !== owner) return;
   db = all;
-  if (currentUser && localStorage.getItem(conflictStorageKey(activeYear)) === '1') {
-    cloudBudgetConflicts.add(currentUser.id + ':' + activeYear);
-    showCloudSaveStatus('Unsynced local changes require reconciliation before cloud saving.');
+  const calendarYear = String(new Date().getFullYear());
+  let preference = null;
+  try {
+    const key = selectedYearSessionKey();
+    preference = key ? sessionStorage.getItem(key) : null;
+  } catch (error) { console.warn('Could not restore budget year preference:', error); }
+  activeYear = preference && Object.hasOwn(db, preference) ? preference :
+    (Object.hasOwn(db, calendarYear) ? calendarYear : Object.keys(db).sort()[0]);
+  selectedIdx = restoreSelectedMonth(activeYear);
+  if (localStorage.getItem(conflictStorageKey(activeYear)) === '1') {
+    showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
+  } else if (cloudBudgetConflicts.size) {
+    showCloudSaveStatus('Another budget year has unsynced changes; select it to reconcile.');
+  } else {
+    showCloudSaveStatus('');
   }
   await refreshRecurringPreview();
 }
@@ -1457,6 +1486,7 @@ async function refreshRecurringPreview() {
 }
 const cloudSaveQueues = new Map();
 const cloudBudgetVersions = new Map();
+let cloudYearLoadSucceeded = false;
 const cloudBudgetConflicts = new Set();
 function conflictStorageKey(year) { return storageKey(year) + '_cloud_conflict'; }
 function markCloudConflict(key, year) {
@@ -1595,57 +1625,19 @@ async function saveDB() {
   }
 }
 function switchYear(yr) {
-  activeYear = yr;
+  const next = String(yr);
+  if (!/^\\d{4}$/.test(next) || !Object.hasOwn(db, next)) return;
+  activeYear = next;
   selectedIdx = restoreSelectedMonth(activeYear);
-  if (!db[activeYear]) {
-    db[activeYear] = JSON.parse(JSON.stringify(BASELINE_2026));
-    db[activeYear].recurringRules = [];
-  }
+  try {
+    const key = selectedYearSessionKey();
+    if (key) sessionStorage.setItem(key, activeYear);
+  } catch (error) { console.warn('Could not remember selected budget year:', error); }
   render();
-}
-
-async function createNewYear() {
-  const newYr = prompt("Enter new year to plan (e.g. 2028):", String(parseInt(activeYear) + 1));
-  if (!newYr) return;
-  if (!/^\d{4}$/.test(newYr) || Number(newYr) < 1900 || Number(newYr) > 2200) {
-    alert("Enter a valid four-digit budget year."); return;
+  if (currentUser) {
+    const conflicted = localStorage.getItem(conflictStorageKey(activeYear)) === '1';
+    showCloudSaveStatus(conflicted ? 'Unsynced local budget changes require reconciliation before cloud saving.' : '');
   }
-  if (db[newYr]) { alert("That budget year already exists. Select it instead."); return; }
-  const owner = currentUser?.id;
-  if (!owner) return;
-  const computed = computeRolling(activeYear);
-  const decEnding = computed[11].endingRollover;
-
-  db[newYr] = JSON.parse(JSON.stringify(BASELINE_2026));
-  db[newYr].recurringRules = [];
-  db[newYr].months[0].recordedLeftover = decEnding;
-  for(let i=1; i<12; i++) {
-    db[newYr].months[i].recordedLeftover = 0;
-    db[newYr].months[i].income = [];
-    db[newYr].months[i].fixed = [];
-    db[newYr].months[i].variable = [];
-    db[newYr].months[i].creditCards = [];
-    db[newYr].months[i].loans = [];
-  }
-
-  const sel = document.getElementById("activeYearSelect");
-  if (![...sel.options].some(o => o.value === newYr)) {
-    const opt = document.createElement("option");
-    opt.value = newYr;
-    opt.textContent = newYr + " (Planning)";
-    sel.appendChild(opt);
-  }
-  sel.value = newYr;
-  activeYear = newYr;
-  selectedIdx = restoreSelectedMonth(activeYear);
-  const status = await saveDB();
-  if (currentUser?.id !== owner) return;
-  if (status === 'cloud-saved') {
-    await backfillSavedRecurringYears(owner, newYr + '-01-01', newYr + '-12-31');
-  } else {
-    alert("Budget year created locally, but recurring entries were not synchronized. Resolve the cloud save before retrying.");
-  }
-  if (currentUser?.id === owner) render();
 }
 
 function fmt(n) {
@@ -1765,7 +1757,7 @@ function render() {
     </div>`;
   if (!document.body.dataset.mobileTabInitialized) { document.body.dataset.mobileTabInitialized = "true"; }
 
-  document.getElementById("activeYearSelect").value = activeYear; syncMobileSettingsControls();
+  syncMobileSettingsControls();
 
   document.getElementById("rollingStrip").innerHTML = yearData.months.map((mo, idx) => {
     const co = computed[idx];
@@ -2373,7 +2365,7 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
-const settingsSectionIds = { accounts: "settingsAccounts", years: "settingsYears", automation: "settingsAutomation", security: "settingsProfile" };
+const settingsSectionIds = { accounts: "settingsAccounts", automation: "settingsAutomation", security: "settingsProfile" };
 let activeSettingsSection = "accounts";
 function showSettingsSection(section) {
   if (!settingsSectionIds[section]) return;
@@ -2462,16 +2454,33 @@ function setDesktopSettings(open) {
   if (settings) settings.setAttribute("aria-expanded", String(enabled));
 }
 function syncMobileSettingsControls() {
-  const desktop = document.getElementById("activeYearSelect");
-  const mobile = document.getElementById("mobileActiveYearSelect");
-  if (desktop && mobile) {
-    mobile.replaceChildren(...Array.from(desktop.options, option => option.cloneNode(true)));
-    mobile.value = activeYear;
+  const years = Object.keys(db).filter(year =>
+    /^\\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200
+  ).sort((a, b) => Number(a) - Number(b));
+  for (const id of ['activeYearSelect', 'mobileActiveYearSelect']) {
+    const select = document.getElementById(id);
+    if (!select) continue;
+    const existing = Array.from(select.options, option => option.value);
+    if (existing.join(',') !== years.join(',')) {
+      select.replaceChildren(...years.map(year => {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year + (cloudBudgetConflicts.has((currentUser?.id || '') + ':' + year) ? ' (Unsynced)' : '');
+        return option;
+      }));
+    } else {
+      for (const option of select.options) {
+        option.textContent = option.value +
+          (cloudBudgetConflicts.has((currentUser?.id || '') + ':' + option.value) ? ' (Unsynced)' : '');
+      }
+    }
+    select.value = activeYear;
   }
   const toggle = document.getElementById("mobileAutoRollToggle");
   if (toggle && db?.[activeYear]) toggle.checked = Boolean(db[activeYear].autoCascade);
   if (window.matchMedia("(max-width: 768px)").matches) setDesktopSettings(false);
 }
+
 async function setAutoCascade(enabled) {
   if (!db?.[activeYear]) return;
   db[activeYear].autoCascade = Boolean(enabled);
