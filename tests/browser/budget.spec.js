@@ -99,23 +99,28 @@ test('desktop recurring manager provides a route back to the budget overview', a
   await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('.main-grid')).toBeVisible();
   await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="automation"]').click();
   await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
 });
 
-test('desktop Settings contains year, cascade and recurring controls and returns to overview', async ({ page }) => {
+test('desktop Settings exposes year, automation and recurring controls on separate screens', async ({ page }) => {
   await expect(page.locator('#desktopSettingsButton')).toBeVisible();
   await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
-  await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
   await expect(page.locator('.main-grid')).toBeHidden();
+  await expect(page.locator('#settingsAccounts')).toBeVisible();
+  await expect(page.locator('#settingsYears')).toBeHidden();
+  await page.locator('[data-settings-section="years"]').click();
   await expect(page.locator('#activeYearSelect')).toBeVisible();
-  await expect(page.locator('#autoRollToggle')).toBeVisible();
   await expect(page.locator('#desktopSettingsPanel button[onclick="createNewYear()"]')).toBeVisible();
-  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
   await page.locator('#activeYearSelect').selectOption('2027');
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await page.locator('[data-settings-section="automation"]').click();
+  await expect(page.locator('#autoRollToggle')).toBeVisible();
+  await expect(page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]')).toBeVisible();
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
   await page.locator('#desktopBudgetButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
   await expect(page.locator('.main-grid')).toBeVisible();
