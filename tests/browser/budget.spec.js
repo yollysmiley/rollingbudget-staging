@@ -259,12 +259,14 @@ test('cancelling desktop sign-out keeps the authenticated budget visible', async
 });
 
 test('legacy mixed income migrates automatically once and survives reload', async ({ page }) => {
+  await page.evaluate(() => selectMonth(0));
   await page.evaluate(async () => {
     sessionStorage.setItem('__mock_legacy_accounts', '1');
     db[activeYear].months[0].income = [{ name: 'Legacy Pay', cpm: 200, usaa: 300, recurringRuleId: 'legacy-rule' }];
     await saveDB();
   });
   await page.reload();
+  await page.evaluate(() => selectMonth(0));
   // The rollover summary row has its own numeric input; target income entry rows only.
   const migratedNames = page.locator('#incomeBody tr:not(.roll-row) input.inline-input:not([type])');
   await expect(migratedNames).toHaveCount(2);
@@ -319,6 +321,7 @@ test('desktop primary navigation follows the reference hierarchy without losing 
 });
 
 test('account exclusions update dashboard totals without removing entries on desktop or mobile', async ({ page }) => {
+  await page.evaluate(() => selectMonth(0));
   await page.evaluate(() => {
     const month = db[activeYear].months[0];
     budgetAccounts = [{ id: 'checking', name: 'Checking', included: true }, { id: 'savings', name: 'Savings', included: false }];
