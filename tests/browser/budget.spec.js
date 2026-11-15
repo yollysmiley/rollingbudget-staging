@@ -130,38 +130,42 @@ test('desktop Settings exposes year, automation and recurring controls on separa
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
-test('recurring manager applies quarterly rules and disabling removes generated items', async ({ page }) => {
+test('desktop shared recurring rules require explicit apply and disabling preserves saved entries', async ({ page }) => {
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
   await page.locator('#desktopRecurringButton').click();
-  await expect(page.locator('#recurringManagerPage')).toBeVisible();
-  await expect(page.locator('#recurringDesktopView')).toBeVisible();
-  const form=page.locator('[data-recurring-form="desktop"]');
+  const form = page.locator('[data-recurring-form="desktop"]');
   await form.locator('[data-rec-field="name"]').fill('Quarterly Internet');
   await form.locator('[data-rec-field="amount"]').fill('80');
   await form.locator('[data-rec-field="due"]').fill('10th');
   await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
-  await page.getByRole('button',{name:'Add rule'}).first().click();
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly');
-  const occurrences=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
-  expect(occurrences).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
-  await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
+  const before = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
+  expect(before).toEqual(Array(12).fill(0));
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#desktopApplyRecurringPreview').click();
+  await expect.poll(() => page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length)))
+    .toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  await page.locator('#desktopRulesList button').filter({ hasText: 'Disable' }).click();
   await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  const disabled=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
-  expect(disabled).toEqual(Array(12).fill(0));
+  const after = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
+  expect(after).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
 });
 
-test('legacy recurring rules remain visible and disabling preserves existing budget entries', async ({ page }) => {
-  await page.evaluate(async()=>{db[activeYear].recurringRules=[{id:123,cat:'fixed',name:'Legacy Rent',amount:900,due:'1st',start:0,end:11}];db[activeYear].months[0].fixed.push({name:'Legacy Rent',due:'1st',amount:900});await saveDB();});
+test('legacy rule definitions are retired while existing budget entries remain intact', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].recurringRules = [{ id: 123, cat: 'fixed', name: 'Legacy Rent', amount: 900, due: '1st', start: 0, end: 11 }];
+    db[activeYear].months[0].fixed.push({ name: 'Legacy Rent', due: '1st', amount: 900 });
+    await saveDB();
+  });
   await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
   await page.locator('#desktopRecurringButton').click();
-  await expect(page.locator('#desktopRulesList')).toContainText('Legacy Rent');
-  await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
-  await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
-  await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  await expect(page.locator('#fixedBody input:not([type])').first()).toHaveValue('Legacy Rent');
+  await expect(page.locator('#desktopRulesList')).not.toContainText('Legacy Rent');
+  const entries = await page.evaluate(() => db[activeYear].months[0].fixed.filter(x => x.name === 'Legacy Rent'));
+  expect(entries).toHaveLength(1);
 });
 
 test('year switching in mobile Settings and narrow viewport remain usable', async ({ page }) => {
