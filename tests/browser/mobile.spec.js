@@ -246,15 +246,15 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await page.locator('#mobileAutoRollToggle').uncheck();
   await expect(page.locator('#autoRollToggle')).not.toBeChecked();
   await page.reload();
+  // Initial render calls setMobileTab('overview'), which closes the sidebar.
+  // Wait for initialization so it cannot race with opening the menu after reload.
+  await expect.poll(() => page.evaluate(() => document.body.dataset.mobileTabInitialized)).toBe('true');
   await page.locator('#mobileMenuButton').click();
-  // Wait for the sidebar transition to finish before using its navigation.
-  await expect(page.locator('#mobileSidebar')).toHaveAttribute('aria-hidden', 'false');
-  await page.locator('#mobileSidebar').evaluate(element => new Promise(resolve => {
-    if (getComputedStyle(element).transform === 'none') return resolve();
-    const done = () => resolve();
-    element.addEventListener('transitionend', done, { once: true });
-    setTimeout(done, 1000);
-  }));
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await expect.poll(async () => {
+    const box = await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').boundingBox();
+    return Boolean(box && box.x >= 0 && box.x + box.width <= page.viewportSize().width);
+  }).toBe(true);
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
