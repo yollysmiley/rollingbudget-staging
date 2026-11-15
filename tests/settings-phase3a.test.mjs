@@ -43,7 +43,9 @@ test('desktop automation controls are mounted in the automation screen, never hi
   assert.match(years, /onclick="createNewYear\(\)"/);
   assert.doesNotMatch(years, /id="autoRollToggle"|onclick="openRecurringModal\(\)"/);
   assert.match(automation, /id="autoRollToggle"/);
-  assert.match(automation, /onclick="openRecurringModal\(\)"/);
+  assert.doesNotMatch(automation, /onclick="openRecurringModal\(\)"/);
+  assert.match(html, /id="desktopRecurringButton"/);
+  assert.match(html, /data-mobile-action="recurring"/);
 });
 
 test('auto-cascade writes shared state without synthetic desktop events', () => {
