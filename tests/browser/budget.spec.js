@@ -88,7 +88,7 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
 test('desktop recurring manager provides a route back to the budget overview', async ({ page }) => {
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
-  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('header')).toBeVisible();
   const backButton = page.getByRole('button', { name: '← Back to Overview' });
@@ -121,13 +121,14 @@ test('desktop Settings contains year, cascade and recurring controls and returns
   await expect(page.locator('.main-grid')).toBeVisible();
   await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-expanded', 'false');
   await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="years"]').click();
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
 test('recurring manager applies quarterly rules and disabling removes generated items', async ({ page }) => {
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
-  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringDesktopView')).toBeVisible();
   const form=page.locator('[data-recurring-form="desktop"]');
@@ -150,7 +151,7 @@ test('legacy recurring rules remain visible and disabling preserves existing bud
   await page.evaluate(async()=>{db[activeYear].recurringRules=[{id:123,cat:'fixed',name:'Legacy Rent',amount:900,due:'1st',start:0,end:11}];db[activeYear].months[0].fixed.push({name:'Legacy Rent',due:'1st',amount:900});await saveDB();});
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
-  await page.locator('#desktopSettingsPanel button[onclick="openRecurringModal()"]').click();
+  await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#desktopRulesList')).toContainText('Legacy Rent');
   await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
   await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
@@ -166,10 +167,11 @@ test('year switching in mobile Settings and narrow viewport remain usable', asyn
   await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
-  await expect(page.locator('#activeYearSelect')).toBeVisible();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Years' }).click();
+  await expect(page.locator('#mobileActiveYearSelect')).toBeVisible();
 
-  await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await page.locator('#mobileActiveYearSelect').selectOption('2027');
+  await expect(page.locator('#mobileActiveYearSelect')).toHaveValue('2027');
   const size = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
   expect(size.content).toBeLessThanOrEqual(size.width + 1);
 });
@@ -276,12 +278,13 @@ test('account-based income amount can be edited and persists after reload', asyn
 
 test('desktop primary navigation follows the reference hierarchy without losing budget state', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-  await expect(nav.locator('button')).toHaveText(['Overview', 'Plan', 'Recurring Rules', 'Settings']);
+  await expect(nav.locator('button')).toHaveText(['Budget', 'Recurring Rules', 'Settings']);
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#settingsAccounts')).toBeVisible();
-  await expect(page.locator('#settingsYears')).toBeVisible();
-  await expect(page.locator('#settingsAutomation')).toBeVisible();
-  await expect(page.locator('#settingsProfile')).toBeVisible();
+  await expect(page.locator('#settingsYears')).toBeHidden();
+  await expect(page.locator('#settingsAutomation')).toBeHidden();
+  await expect(page.locator('#settingsProfile')).toBeHidden();
+  await page.locator('[data-settings-section="years"]').click();
   await page.locator('#activeYearSelect').selectOption('2027');
   await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
@@ -289,5 +292,6 @@ test('desktop primary navigation follows the reference hierarchy without losing 
   await expect(page.locator('#recurringManagerPage')).toBeHidden();
   await expect(page.locator('#rollingStrip')).toBeVisible();
   await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="years"]').click();
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
