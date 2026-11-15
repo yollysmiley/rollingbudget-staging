@@ -1278,7 +1278,8 @@ function recurringPreviewStatus(year) {
   try {
     const result = recurringPreviewResult(year);
     return result.added + ' potential recurring entries (preview only, not saved)' +
-      (result.held ? '; ' + result.held + ' historical rules awaiting review' : '');
+      (result.ambiguous?.length ? '; ' + result.ambiguous.length + ' possible duplicate(s) require review' : '') +
+      (result.held ? '; ' + result.held + ' historical rules excluded' : '');
   } catch (error) {
     console.warn('Recurring preview validation failed:', error);
     return 'Recurring preview unavailable';
@@ -1317,13 +1318,29 @@ async function applyRecurringPreview() {
     // a preview cached during sign-in.
     const loaded = await recurringAppService.loadRecurringPreviewRules(supabaseClient, owner);
     if (currentUser?.id !== owner || activeYear !== year) return;
-    const result = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
+    const initial = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
+    let approvedOccurrenceIds = [];
+    if (initial.ambiguous.length) {
+      const examples = initial.ambiguous.slice(0, 8).map(item =>
+        item.month + ': ' + item.name + ' (' + item.amount + ')' +
+        ' matches ' + item.matches.map(match => match.name + ' (' + match.amount + ')').join(', ')).join('\\n');
+      const includeAmbiguous = confirm(
+        initial.ambiguous.length + ' possible duplicate recurring entries were found.\\n' +
+        examples + (initial.ambiguous.length > 8 ? '\\n...and more.' : '') +
+        '\\n\\nOK: explicitly include these possible duplicates.\\n' +
+        'Cancel: keep existing transactions and skip all possible duplicates.'
+      );
+      if (includeAmbiguous) approvedOccurrenceIds = initial.ambiguous.map(item => item.occurrenceId);
+    }
+    const options = { approvedOccurrenceIds };
+    const result = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded, options);
     if (!result.added) {
       loadedRecurringPreview = loaded;
       return;
     }
     const accepted = confirm('Add ' + result.added + ' scheduled entries to ' + year +
-      '? Existing entries will not be changed. Review your budget first: older transactions without recurring IDs may be duplicated.');
+      '? Existing entries will not be changed. ' + initial.ambiguous.length +
+      ' potential duplicate(s) were reviewed; ' + approvedOccurrenceIds.length + ' approved for addition.');
     if (!accepted || currentUser?.id !== owner || activeYear !== year) return;
     // Recalculate immediately before applying to avoid duplication from
     // user edits while the confirmation dialogue was open.
@@ -1333,7 +1350,7 @@ async function applyRecurringPreview() {
         if (JSON.stringify(cloudDocument) !== JSON.stringify(db[year])) {
           throw new Error('Local budget differs from the cloud version; sync or reload before applying');
         }
-        return recurringAppService.previewLoadedRecurringYear(cloudDocument, year, loaded);
+        return recurringAppService.previewLoadedRecurringYear(cloudDocument, year, loaded, options);
       }
     );
     if (!current.saved) return;
