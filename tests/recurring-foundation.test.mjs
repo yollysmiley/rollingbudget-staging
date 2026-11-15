@@ -29,7 +29,7 @@ test('legacy rules gain calendar dates and stable source identifiers without mut
 test('validation rejects invalid dates, frequencies and amounts', () => {
   const rule = { id: 'a', name: 'Rent', category: 'fixed', amount: 100, startDate: '2026-01-01' };
   assert.equal(normalizeRecurringRule(rule).versions[0].effectiveFrom, '2026-01-01');
-  assert.throws(() => normalizeRecurringRule({ ...rule, startDate: '2026-02-15' }), /Start date/);
+  assert.throws(() => normalizeRecurringRule({ ...rule, startDate: '2026-02-15' }), /start date/);
   assert.throws(() => normalizeRecurringRule({ ...rule, endDate: '2025-01-01' }), /end date/);
   assert.throws(() => normalizeRecurringRule({ ...rule, frequency: 'weekly' }), /frequency/);
   assert.throws(() => normalizeRecurringRule({ ...rule, amount: -1 }), /amount/);
