@@ -1,6 +1,7 @@
 ## Unreleased
 
-- PR #42 staging: restrict automatic recurring backfill to owner-saved cloud years, explicitly save only the selected eligible year on rule creation, pin cloud revisions during synchronization, and preserve unsynced local changes with conflict recovery. Added service and desktop/mobile regression coverage. Existing saved entries are never rewritten; no production changes.\n
+- PR #42 staging: restrict automatic recurring backfill to owner-saved cloud years, explicitly save only the selected eligible year on rule creation, pin cloud revisions during synchronization, and preserve unsynced local changes with conflict recovery. Added service and desktop/mobile regression coverage. Existing saved entries are never rewritten; no production changes.
+
 - Temporarily permitted protected manual live integration on PR #33 for pre-merge verification; restored the workflow's main-only execution gate before merging.
 
 - Adopt the committed npm v3 lockfile in all staging CI workflows with `npm ci` and lockfile-keyed npm download caching; retain `--ignore-scripts` for secret-free and credentialed live validation. No change to required check names or deployment gates.

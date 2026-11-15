@@ -506,3 +506,16 @@ test('recurring cloud synchronization cannot replace unsaved local desktop chang
   expect(after.local).toBe(true);
   expect(after.conflict).toBe('1');
 });
+
+test('cloud fixture discovers only explicitly saved years for the authenticated owner', async ({ page }) => {
+  const initial = await page.evaluate(async () =>
+    supabaseClient.from('budget_ui_years').select('year,updated_at').eq('user_id', currentUser.id));
+  expect(initial.data).toEqual([]);
+  expect(await page.evaluate(() => saveDB())).toBe('cloud-saved');
+  const rows = await page.evaluate(async () => {
+    const own = await supabaseClient.from('budget_ui_years').select('year,updated_at').eq('user_id', currentUser.id);
+    const other = await supabaseClient.from('budget_ui_years').select('year,updated_at').eq('user_id', 'other-owner');
+    return { own: own.data.map(row => row.year), other: other.data };
+  });
+  expect(rows).toEqual({ own: [2026], other: [] });
+});
