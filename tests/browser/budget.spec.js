@@ -132,40 +132,28 @@ test('desktop Settings exposes year, automation and recurring controls on separa
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
-test('desktop shared recurring rules require explicit apply and disabling preserves saved entries', async ({ page }) => {
-  await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+test('desktop recurring rule dates are saved and automatically backfilled without duplicates', async ({ page }) => {
   await page.locator('#desktopRecurringButton').click();
   const form = page.locator('[data-recurring-form="desktop"]');
   await form.locator('[data-rec-field="name"]').fill('Quarterly Internet');
   await form.locator('[data-rec-field="amount"]').fill('80');
-  await form.locator('[data-rec-field="due"]').fill('10th');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-10');
+  await form.locator('[data-rec-field="endDate"]').fill('2026-12-31');
   await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
-  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await form.getByRole('button', { name: 'Add rule' }).click();
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
-  await expect(page.locator('#desktopRulesList')).toContainText('Quarterly');
-  const before = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
-  expect(before).toEqual(Array(12).fill(0));
-  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
-  page.once('dialog', dialog => dialog.accept());
-  await page.locator('#desktopApplyRecurringPreview').click();
-  await expect.poll(() => page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length)))
+  await expect(page.locator('#desktopRulesList')).toContainText('2026-01-10');
+  await expect.poll(() => page.evaluate(() => db['2026'].months.map(m =>
+    m.fixed.filter(x => x.name === 'Quarterly Internet').length)))
     .toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  const count = await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Quarterly Internet').length);
+  await page.reload();
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Quarterly Internet').length)).toBe(count);
+  await page.locator('#desktopRecurringButton').click();
   await page.locator('#desktopRulesList button').filter({ hasText: 'Disable' }).click();
   await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  const after = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
-  expect(after).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
-  const edits = ['90', 'monthly'];
-  page.on('dialog', dialog => dialog.accept(edits.shift()));
-  await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
-  await expect.poll(() => page.evaluate(() => {
-    const rules = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
-    return rules[0]?.versions?.at(-1)?.amount;
-  })).toBe(90);
-  const unchanged = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
-  expect(unchanged).toEqual(after);
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Quarterly Internet').length)).toBe(count);
 });
-
 test('legacy rule definitions are retired while existing budget entries remain intact', async ({ page }) => {
   await page.evaluate(async () => {
     db[activeYear].recurringRules = [{ id: 123, cat: 'fixed', name: 'Legacy Rent', amount: 900, due: '1st', start: 0, end: 11 }];
@@ -367,35 +355,14 @@ test('new users see no default accounts on desktop and mobile', async ({ page })
   await expect(page.locator('#mobileSettingsAccounts [data-account-id]')).toHaveCount(0);
 });
 
-test('desktop duplicate review skips ambiguous historical entries when user declines', async ({ page }) => {
-  await page.evaluate(async () => {
-    db[activeYear].months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
-    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
-      id: 'rent-review', name: 'Rent', category: 'fixed', amount: 500,
-      due: '1st', account_id: null, frequency: 'monthly',
-      start_date: '2026-01-01', end_date: null, active: true, source_year: null,
-      versions: [{ effectiveFrom: '2026-01-01', name: 'Rent', amount: 500,
-        due: '1st', accountId: null, frequency: 'monthly' }]
-    }]));
-    await saveDB();
-  });
-  await page.reload();
-  const dialogs = [];
-  page.on('dialog', async dialog => {
-    dialogs.push(dialog.message());
-    if (dialog.message().includes('Possible duplicate for')) await dialog.dismiss();
-    else await dialog.accept();
-  });
-  await page.locator('#desktopSettingsButton').click();
+test('desktop recurring manager does not expose removed preview actions or due-day fields', async ({ page }) => {
   await page.locator('#desktopRecurringButton').click();
-  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
-  await page.locator('#desktopApplyRecurringPreview').click();
-  await expect.poll(() => dialogs.some(message => message.includes('Possible duplicate for'))).toBeTruthy();
-  await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
-  const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
-  expect(entries).toHaveLength(1);
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await expect(form.locator('[data-rec-field="startDate"]')).toBeVisible();
+  await expect(form.locator('[data-rec-field="endDate"]')).toBeVisible();
+  await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
+  await expect(page.locator('#desktopApplyRecurringPreview, #desktopRecurringPreviewStatus')).toHaveCount(0);
 });
-
 test('stale ordinary budget save cannot overwrite a newer cloud revision', async ({ page }) => {
   const outcome = await page.evaluate(async () => {
     const year = activeYear;
