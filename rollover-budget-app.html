@@ -1906,11 +1906,11 @@ function renderRulesList(){
   }
   const startOf = rule => Number(rule.startDate.slice(5,7)) - 1;
   document.getElementById('desktopRulesList').innerHTML = rules.map((rule, i) => {
-    const on = rule.active !== false;
+    const on = rule.displayActive !== false;
     return `<tr><td><strong>${esc(rule.name)}</strong><div>${esc(rule.due || 'Due day not set')}</div></td><td>${esc(rule.category.toUpperCase())}</td><td>${fmt(rule.amount)}</td><td>${esc(recurringRuleFrequency(rule))}</td><td>${esc(db[activeYear].months[startOf(rule)]?.name || '—')}</td><td><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable' : 'Enable'}</button><button type="button" onclick="deleteRecurringRule(${i})">Delete</button></td></tr>`;
   }).join('');
   document.getElementById('mobileRulesList').innerHTML = rules.map((rule, i) => {
-    const on = rule.active !== false;
+    const on = rule.displayActive !== false;
     return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(rule.name)}</h4><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(rule.category.toUpperCase())}</strong></div><div>Amount<strong>${fmt(rule.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(rule))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(rule)]?.name || '—')}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable rule' : 'Enable rule'}</button><button type="button" onclick="deleteRecurringRule(${i})">Delete rule</button></article>`;
   }).join('');
 }
@@ -1949,7 +1949,7 @@ async function toggleRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
   try {
-    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.active);
+    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.displayActive);
     await refreshRecurringPreview();
     renderRulesList();
   } catch (error) {
