@@ -84,8 +84,10 @@ The additive `budget_recurring_rules` migration defines owner-scoped, RLS-protec
 Regression coverage: `tests/recurring-foundation.test.mjs`, plus the existing desktop/mobile recurring-rule and account tests. Staging schema and simulated authenticated cross-user RLS checks passed. Historical migration is not activated. Existing desktop/mobile behavior is unchanged.
 
 
-### Phase 4B shared recurring rules (draft PR #39)
+### Unified recurring rules and duplicate review (draft PR #39)
 
-New recurring rules are stored in the owner-scoped `budget_recurring_rules` table. Both desktop and mobile managers use the same service for creation, effective-dated amount/frequency editing, activation, and deletion. Existing budget transactions are preserved and are not rewritten when a recurring definition is disabled or removed. Legacy year-scoped recurring definitions are retired as an active source and are not migrated; no automatic historical reconciliation is performed. The scheduler generates stable occurrence identifiers and requires an explicit Apply action. Existing untagged same-name transactions in the same month block generation conservatively; different-name historical duplicates still require user review.
+Desktop and mobile recurring managers use owner-scoped Supabase `budget_recurring_rules` definitions. Existing year-scoped recurring definitions are retired, not migrated; existing budget transactions remain untouched. Historical migration utilities have been removed from the active codebase. The scheduler uses stable occurrence IDs and effective-dated changes. Apply requires a cloud-version conditional write and refuses stale local budgets.
 
-Cloud persistence is distinct from local-only persistence and failure is surfaced to the user. Recurring Apply uses a cloud version-conditional update, refuses unsynced local changes, and never silently falls back to a local-only scheduled commit. Browser and full CI validation remain merge gates. Do not merge until those checks pass.
+The preview checks every budget category in each scheduled month. Existing occurrence IDs and exact same-name historical entries block duplicates. Similar-name entries with matching amounts and account IDs are flagged as ambiguous and skipped by default. The user reviews a list of possible matches and can explicitly include them before the final Apply confirmation. This is conservative, not perfect: different-name or different-amount historical duplicates may remain undetected. Existing entries are never deleted or overwritten by this process.
+
+Validation gate: run unit, security, rendering, desktop/mobile browser, lint/type checks, and required CI workflows. Keep PR #39 draft until all checks pass and merge is explicitly approved.
