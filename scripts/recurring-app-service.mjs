@@ -135,3 +135,17 @@ export async function commitRecurringYear(client, userId, year, buildPreview) {
   }
   return { ...preview, saved: true, updatedAt };
 }
+
+
+// Automatically backfill owner-scoped recurring occurrences from authoritative cloud data.
+// Ambiguous historical matches are skipped, never silently duplicated or overwritten.
+// The conditional cloud commit preserves concurrent budget edits.
+export async function backfillRecurringYear(client, userId, year) {
+  if (!client || !userId || !Number.isInteger(Number(year))) {
+    throw new Error('Authenticated recurring backfill requires a year');
+  }
+  const loaded = await loadRecurringPreviewRules(client, userId);
+  if (!loaded.rules.length) return { added: 0, saved: false, ambiguous: [], held: loaded.held };
+  return commitRecurringYear(client, userId, year,
+    document => previewLoadedRecurringYear(document, year, loaded));
+}
