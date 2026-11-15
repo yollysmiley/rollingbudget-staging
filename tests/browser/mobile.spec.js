@@ -422,3 +422,12 @@ test('mobile automation settings omit duplicate recurring action while sidebar k
   await page.locator('#mobileMenuButton').click();
   await expect(page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]')).toBeVisible();
 });
+
+
+test('mobile overview defaults to calendar month and keeps manual month selection', async ({ page }) => {
+  const initial = await page.evaluate(() => ({ year: activeYear, month: selectedIdx, nowYear: new Date().getFullYear(), nowMonth: new Date().getMonth() }));
+  expect(initial.month).toBe(initial.year === String(initial.nowYear) ? initial.nowMonth : 0);
+  await page.evaluate(() => selectMonth(7));
+  await page.evaluate(() => render());
+  expect(await page.evaluate(() => selectedIdx)).toBe(7);
+});
