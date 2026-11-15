@@ -24,6 +24,16 @@ assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,update
 assert.ok(html.includes('from("budget_ui_years").insert('), 'New cloud year insert is missing');
 assert.ok(html.includes('from("budget_ui_years")') && html.includes('.eq("updated_at", version).select("year")'),
   'Conditional cloud revision saving is missing');
+// Guard both distinct recurring-manager forms in the deployed HTML, not only source tests.
+for (const view of ['desktop', 'mobile']) {
+  const form = html.match(new RegExp('data-recurring-form="' + view + '"[^>]*>([\\s\\S]*?)(?:</div>\\s*<div class="recurring-form-actions"|</div>\\s*<button class="primary recurring-mobile-add-button")'));
+  assert.ok(form, view + ' recurring form missing from staging build');
+  assert.match(form[1], /data-rec-field="startDate"[^>]*type="date"/, view + ' Start date missing');
+  assert.match(form[1], /data-rec-field="endDate"[^>]*type="date"/, view + ' optional End date missing');
+  assert.doesNotMatch(form[1], /data-rec-field="(?:due|startMonth)"|>\\s*(?:Due day|Start month)\\s*</i,
+    view + ' legacy recurring date fields must not be deployed');
+}
+
 assert.ok(!html.includes('YOUR_SUPABASE_'), 'Unconfigured Supabase placeholder remains');
 assert.ok(!html.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Unconfigured storage placeholder remains');
 assert.ok(!html.includes('awalptqpsjflrahkrjzk'), 'Production project reference remains');
