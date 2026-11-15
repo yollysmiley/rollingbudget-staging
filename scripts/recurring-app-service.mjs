@@ -26,6 +26,10 @@ export async function loadRecurringPreviewRules(client, userId) {
     if (!Array.isArray(rule.versions) || !rule.versions.length) {
       throw new Error('Recurring rule versions missing');
     }
+    const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
+    const currentVersion = rule.versions.filter(version => version.effectiveFrom <= currentMonth)
+      .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
+    rule.active = row.active !== false && (currentVersion?.enabled !== false);
     rules.push(rule);
   }
   return { rules, held };
@@ -50,11 +54,38 @@ export async function createRecurringRule(client, userId, input) {
   return rule;
 }
 
-export async function setRecurringRuleActive(client, userId, id, active) {
-  if (!client || !userId || !id) throw new Error('Authenticated recurring rule update required');
-  const { error } = await client.from('budget_recurring_rules')
-    .update({ active: Boolean(active) }).eq('user_id', userId).eq('id', id);
-  if (error) throw error;
+export async function editRecurringRule(client, userId, id, changes, effectiveFrom) {
+  if (!client || !userId || !id || !/^\\d{4}-(0[1-9]|1[0-2])-01$/.test(effectiveFrom)) {
+    throw new Error('Authenticated effective-dated rule edit required');
+  }
+  const { data: rows, error: readError } = await client.from('budget_recurring_rules')
+    .select('id,name,category,amount,due,account_id,frequency,start_date,end_date,active,versions')
+    .eq('user_id', userId).eq('id', id);
+  if (readError) throw readError;
+  if (!Array.isArray(rows) || rows.length !== 1) throw new Error('Recurring rule not found');
+  const row = rows[0];
+  if (effectiveFrom < row.start_date) throw new Error('Effective date precedes rule start');
+  const versions = structuredClone(row.versions);
+  if (!Array.isArray(versions) || !versions.length) throw new Error('Recurring rule versions missing');
+  const current = versions.filter(version => version.effectiveFrom <= effectiveFrom)
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
+  if (!current) throw new Error('No applicable recurring version');
+  const next = { ...current, ...changes, effectiveFrom };
+  normalizeRecurringRule({
+    id, name: next.name, category: row.category, amount: next.amount,
+    due: next.due, accountId: next.accountId, frequency: next.frequency,
+    startDate: effectiveFrom
+  });
+  const updated = [...versions.filter(version => version.effectiveFrom !== effectiveFrom), next]
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const { error: writeError } = await client.from('budget_recurring_rules')
+    .update({ versions: updated }).eq('user_id', userId).eq('id', id);
+  if (writeError) throw writeError;
+  return updated;
+}
+
+export async function setRecurringRuleActive(client, userId, id, active, effectiveFrom = new Date().toISOString().slice(0, 7) + '-01') {
+  return editRecurringRule(client, userId, id, { enabled: Boolean(active) }, effectiveFrom);
 }
 
 export async function removeRecurringRule(client, userId, id) {
