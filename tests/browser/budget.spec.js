@@ -451,3 +451,25 @@ test('browser cloud fixture rejects another owner\'s conditional budget update',
   });
   expect(outcome).toEqual({ written: 0, after: '2026-11-15T00:00:00.000Z' });
 });
+
+test('desktop explicitly keeping local changes resolves a conflict with conditional cloud update', async ({ page }) => {
+  await page.evaluate(async () => {
+    const year = activeYear, key = currentUser.id + ':' + year;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year: Number(year), budget_data: structuredClone(db[year]),
+        updated_at: '2026-11-15T12:00:00.000Z' }
+    }));
+    cloudBudgetVersions.set(key, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Keep local', amount: 42 });
+    await saveDB();
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  const result = await page.evaluate(() => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[activeYear];
+    return { present: row.budget_data.months[0].fixed.some(item => item.name === 'Keep local'),
+      backup: Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')) };
+  });
+  expect(result).toEqual({ present: true, backup: true });
+});
