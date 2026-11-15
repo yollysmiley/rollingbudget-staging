@@ -1014,7 +1014,7 @@ function renderAccounts() {
     <div class="account-manager-row" data-account-id="${esc(account.id)}">
       <strong>${esc(account.name)}</strong>
       <div class="account-manager-actions">
-        <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Included</label>
+        <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
         <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Rename</button>
         <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
       </div>
@@ -1360,7 +1360,7 @@ function parseDayNum(dueStr) {
 }
 
 function computeRolling(yrKey) {
-  if (accountBudgetModule && budgetAccounts.length) {
+  if (accountBudgetModule) {
     return accountBudgetModule.computeAccountBudget(db[yrKey], budgetAccounts);
   }
   const yearData = db[yrKey];
