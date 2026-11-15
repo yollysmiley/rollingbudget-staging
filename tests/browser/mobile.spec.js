@@ -149,27 +149,23 @@ test('mobile menu navigation enters and exits recurring rules without refreshing
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
 });
 
-test('mobile recurring manager uses its distinct card layout and supports rule creation', async ({ page }) => {
-  await page.setViewportSize({width:390,height:844});
+test('mobile recurring manager has distinct date-based rule creation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
-  await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringMobileView')).toBeVisible();
-  await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('0 potential recurring entries (preview only, not saved)');
-  await expect(page.locator('#mobileApplyRecurringPreview')).toBeDisabled();
   await expect(page.locator('#recurringDesktopView')).toBeHidden();
-  const form=page.locator('[data-recurring-form="mobile"]');
+  const form = page.locator('[data-recurring-form="mobile"]');
   await form.locator('[data-rec-field="name"]').fill('Annual Insurance');
   await form.locator('[data-rec-field="amount"]').fill('1200');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-03-15');
+  await form.locator('[data-rec-field="endDate"]').fill('2027-03-15');
   await form.locator('[data-rec-field="frequency"]').selectOption('annually');
-  await page.getByRole('button',{name:'Add rule'}).last().click();
+  await form.getByRole('button', { name: 'Add rule' }).click();
   await expect(page.locator('#mobileRulesList')).toContainText('Annual Insurance');
-  await expect(page.locator('#mobileRulesList')).toContainText('Annually');
-  const size=await page.evaluate(()=>({width:innerWidth,content:document.documentElement.scrollWidth}));
-  expect(size.content).toBeLessThanOrEqual(size.width+1);
+  await expect(page.locator('#mobileRulesList')).toContainText('2026-03-15');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
-
-
 test('mobile header matches the approved email branding and preserves menu and sign-in controls', async ({ page }) => {
   const brand = page.locator('header .title-group');
   await expect(brand.locator('h1')).toHaveText('Rolling Budget');
@@ -274,108 +270,58 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await expect(page.locator('#mobileAutoRollToggle')).toBeChecked();
 });
 
-test('recurring preview status is shared but displayed in distinct mobile and desktop managers', async ({ page }) => {
+test('recurring date forms are distinct on mobile and desktop without manual preview controls', async ({ page }) => {
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
-  await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('0 potential recurring entries (preview only, not saved)');
+  await expect(page.locator('[data-recurring-form="mobile"] [data-rec-field="startDate"]')).toBeVisible();
+  await expect(page.locator('#mobileApplyRecurringPreview, #mobileRecurringPreviewStatus')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(page.locator('#recurringDesktopView')).toBeVisible();
-  await expect(page.locator('#desktopRecurringPreviewStatus')).toContainText('0 potential recurring entries (preview only, not saved)');
-  await expect(page.locator('#desktopApplyRecurringPreview')).toBeDisabled();
-  await expect(page.locator('#recurringMobileView')).toBeHidden();
+  await expect(page.locator('[data-recurring-form="desktop"] [data-rec-field="startDate"]')).toBeVisible();
+  await expect(page.locator('#desktopApplyRecurringPreview, #desktopRecurringPreviewStatus')).toHaveCount(0);
 });
-
-test('mobile apply action saves verified entries once and desktop sees the same budget', async ({ page }) => {
-  await page.evaluate(() => {
-    const verifiedRule = {
-      id: 'verified-demo', name: 'Verified expense', category: 'fixed', amount: 125,
-      due: '5th', account_id: null, frequency: 'monthly', start_date: '2026-01-01',
-      end_date: null, active: true, source_year: null, versions: [{
-        effectiveFrom: '2026-01-01', name: 'Verified expense', amount: 125,
-        due: '5th', accountId: null, frequency: 'monthly'
-      }]
-    };
-    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([verifiedRule]));
-  });
-  await page.reload();
-  page.once('dialog', dialog => dialog.accept());
+test('mobile automatic recurring backfill persists across desktop layout and reload', async ({ page }) => {
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
-  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
-  await page.locator('#mobileApplyRecurringPreview').click();
-  await expect(page.locator('#mobileApplyRecurringPreview')).toBeDisabled();
-  const snapshot = await page.evaluate(() => ({
-    entries: db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'verified-demo'),
-    year: activeYear
-  }));
-  expect(snapshot.entries).toHaveLength(1);
-  expect(snapshot.entries[0].amount).toBe(125);
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Verified expense');
+  await form.locator('[data-rec-field="amount"]').fill('125');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-05');
+  await form.getByRole('button', { name: 'Add rule' }).click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(page.locator('#desktopApplyRecurringPreview')).toBeDisabled();
   await page.reload();
-  const saved = await page.evaluate(() =>
-    db['2026'].months[0].fixed.filter(entry => entry.recurringRuleId === 'verified-demo'));
-  expect(saved).toHaveLength(1);
-  expect(saved[0].occurrenceId).toBe(JSON.stringify(['verified-demo', '2026-01-01']));
+  expect(await page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
 });
-
-test('recurring application rejects failed cloud commits without changing budget entries', async ({ page }) => {
-  await page.evaluate(() => {
-    sessionStorage.setItem('__mock_budget_cloud_failure', '1');
-    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
-      id: 'local-only', name: 'Local-only expense', category: 'fixed', amount: 20,
-      due: '1', account_id: null, frequency: 'monthly', start_date: '2026-01-01',
-      end_date: null, active: true, source_year: null,
-      versions: [{ effectiveFrom: '2026-01-01', name: 'Local-only expense',
-        amount: 20, due: '1', accountId: null, frequency: 'monthly' }]
-    }]));
-  });
-  await page.reload();
-  const dialogs = [];
-  page.on('dialog', async dialog => {
-    dialogs.push(dialog.message());
-    await dialog.accept();
-  });
+test('mobile recurring cloud failure does not add unsaved occurrences', async ({ page }) => {
+  await page.evaluate(() => sessionStorage.setItem('__mock_budget_cloud_failure', '1'));
   await page.locator('#mobileMenuButton').click();
-  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
-  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
-  await page.locator('#mobileApplyRecurringPreview').click();
-  await expect.poll(() => dialogs.some(message => message.includes('cloud budget may have changed'))).toBeTruthy();
-  const entries = await page.evaluate(() =>
-    db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'local-only'));
-  expect(entries).toHaveLength(0);
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Cloud failure expense');
+  await form.locator('[data-rec-field="amount"]').fill('20');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  page.on('dialog', dialog => dialog.accept());
+  await form.getByRole('button', { name: 'Add rule' }).click();
+  await expect(page.locator('#mobileRulesList')).toContainText('Cloud failure expense');
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Cloud failure expense').length)).toBe(0);
 });
-
-test('mobile duplicate review skips ambiguous historical entries when user declines', async ({ page }) => {
+test('mobile automatic backfill preserves existing manual transactions', async ({ page }) => {
   await page.evaluate(async () => {
-    db[activeYear].months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
-    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
-      id: 'rent-review', name: 'Rent', category: 'fixed', amount: 500,
-      due: '1st', account_id: null, frequency: 'monthly',
-      start_date: '2026-01-01', end_date: null, active: true, source_year: null,
-      versions: [{ effectiveFrom: '2026-01-01', name: 'Rent', amount: 500,
-        due: '1st', accountId: null, frequency: 'monthly' }]
-    }]));
+    db['2026'].months[0].fixed.push({ name: 'Rent', amount: 500, accountId: null });
     await saveDB();
   });
-  await page.reload();
-  const dialogs = [];
-  page.on('dialog', async dialog => {
-    dialogs.push(dialog.message());
-    if (dialog.message().includes('Possible duplicate for')) await dialog.dismiss();
-    else await dialog.accept();
-  });
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
-  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
-  await page.locator('#mobileApplyRecurringPreview').click();
-  await expect.poll(() => dialogs.some(message => message.includes('Possible duplicate for'))).toBeTruthy();
-  await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
-  const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Rent');
+  await form.locator('[data-rec-field="amount"]').fill('500');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await form.getByRole('button', { name: 'Add rule' }).click();
+  await expect(page.locator('#mobileRulesList')).toContainText('Rent');
+  const entries = await page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Rent'));
   expect(entries).toHaveLength(1);
+  expect(entries[0].amount).toBe(500);
 });
-
 test('mobile preserves an unresolved cloud conflict across reload and offers explicit recovery', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const year = activeYear, key = currentUser.id + ':' + year;
