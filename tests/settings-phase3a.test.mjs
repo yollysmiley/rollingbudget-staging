@@ -35,3 +35,13 @@ test('settings stylesheet is published for the authenticated app', () => {
   assert.match(css, /@media\(max-width:768px\)/);
   assert.match(css, /@media\(min-width:769px\)/);
 });
+
+test('desktop automation controls are mounted in the automation screen, never hidden in Budget Years', () => {
+  const years = desktop.split('id="settingsYears"')[1]?.split('id="settingsAutomation"')[0] ?? '';
+  const automation = desktop.split('id="settingsAutomation"')[1]?.split('id="settingsProfile"')[0] ?? '';
+  assert.match(years, /id="activeYearSelect"/);
+  assert.match(years, /onclick="createNewYear\(\)"/);
+  assert.doesNotMatch(years, /id="autoRollToggle"|onclick="openRecurringModal\(\)"/);
+  assert.match(automation, /id="autoRollToggle"/);
+  assert.match(automation, /onclick="openRecurringModal\(\)"/);
+});
