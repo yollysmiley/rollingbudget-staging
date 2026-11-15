@@ -17,7 +17,7 @@ function versionsFor(rule) {
       startDate: version.effectiveFrom, endDate: null,
       category: rule.category
     });
-    return { ...normalized.versions[0], effectiveFrom: version.effectiveFrom };
+    return { ...normalized.versions[0], effectiveFrom: version.effectiveFrom, enabled: version.enabled !== false };
   }).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
   if (sorted[0].effectiveFrom !== rule.startDate) throw new Error('Initial version must match start date');
   for (let i = 1; i < sorted.length; i++) {
@@ -40,6 +40,7 @@ export function scheduledOccurrences(rule, year) {
     const date = monthDate(month);
     const version = versions.filter(v => v.effectiveFrom <= date).at(-1);
     // Frequency remains anchored to the original start month, even when edited.
+    if (!version.enabled) continue;
     const interval = FREQUENCY_MONTHS[version.frequency];
     if ((month - start) % interval !== 0) continue;
     results.push({
