@@ -132,40 +132,28 @@ test('desktop Settings exposes year, automation and recurring controls on separa
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
-test('desktop shared recurring rules require explicit apply and disabling preserves saved entries', async ({ page }) => {
-  await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+test('desktop recurring rule dates are saved and automatically backfilled without duplicates', async ({ page }) => {
   await page.locator('#desktopRecurringButton').click();
   const form = page.locator('[data-recurring-form="desktop"]');
   await form.locator('[data-rec-field="name"]').fill('Quarterly Internet');
   await form.locator('[data-rec-field="amount"]').fill('80');
-  await form.locator('[data-rec-field="due"]').fill('10th');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-10');
+  await form.locator('[data-rec-field="endDate"]').fill('2026-12-31');
   await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
   await page.getByRole('button', { name: 'Add rule' }).first().click();
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
-  await expect(page.locator('#desktopRulesList')).toContainText('Quarterly');
-  const before = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
-  expect(before).toEqual(Array(12).fill(0));
-  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
-  page.once('dialog', dialog => dialog.accept());
-  await page.locator('#desktopApplyRecurringPreview').click();
-  await expect.poll(() => page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length)))
+  await expect(page.locator('#desktopRulesList')).toContainText('2026-01-10');
+  await expect.poll(() => page.evaluate(() => db['2026'].months.map(m =>
+    m.fixed.filter(x => x.name === 'Quarterly Internet').length)))
     .toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  const count = await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Quarterly Internet').length);
+  await page.reload();
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Quarterly Internet').length)).toBe(count);
+  await page.locator('#desktopRecurringButton').click();
   await page.locator('#desktopRulesList button').filter({ hasText: 'Disable' }).click();
   await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  const after = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
-  expect(after).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
-  const edits = ['90', 'monthly'];
-  page.on('dialog', dialog => dialog.accept(edits.shift()));
-  await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
-  await expect.poll(() => page.evaluate(() => {
-    const rules = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
-    return rules[0]?.versions?.at(-1)?.amount;
-  })).toBe(90);
-  const unchanged = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
-  expect(unchanged).toEqual(after);
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Quarterly Internet').length)).toBe(count);
 });
-
 test('legacy rule definitions are retired while existing budget entries remain intact', async ({ page }) => {
   await page.evaluate(async () => {
     db[activeYear].recurringRules = [{ id: 123, cat: 'fixed', name: 'Legacy Rent', amount: 900, due: '1st', start: 0, end: 11 }];
@@ -367,35 +355,14 @@ test('new users see no default accounts on desktop and mobile', async ({ page })
   await expect(page.locator('#mobileSettingsAccounts [data-account-id]')).toHaveCount(0);
 });
 
-test('desktop duplicate review skips ambiguous historical entries when user declines', async ({ page }) => {
-  await page.evaluate(async () => {
-    db[activeYear].months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
-    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
-      id: 'rent-review', name: 'Rent', category: 'fixed', amount: 500,
-      due: '1st', account_id: null, frequency: 'monthly',
-      start_date: '2026-01-01', end_date: null, active: true, source_year: null,
-      versions: [{ effectiveFrom: '2026-01-01', name: 'Rent', amount: 500,
-        due: '1st', accountId: null, frequency: 'monthly' }]
-    }]));
-    await saveDB();
-  });
-  await page.reload();
-  const dialogs = [];
-  page.on('dialog', async dialog => {
-    dialogs.push(dialog.message());
-    if (dialog.message().includes('Possible duplicate for')) await dialog.dismiss();
-    else await dialog.accept();
-  });
-  await page.locator('#desktopSettingsButton').click();
+test('desktop recurring manager does not expose removed preview actions or due-day fields', async ({ page }) => {
   await page.locator('#desktopRecurringButton').click();
-  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
-  await page.locator('#desktopApplyRecurringPreview').click();
-  await expect.poll(() => dialogs.some(message => message.includes('Possible duplicate for'))).toBeTruthy();
-  await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
-  const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
-  expect(entries).toHaveLength(1);
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await expect(form.locator('[data-rec-field="startDate"]')).toBeVisible();
+  await expect(form.locator('[data-rec-field="endDate"]')).toBeVisible();
+  await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
+  await expect(page.locator('#desktopApplyRecurringPreview, #desktopRecurringPreviewStatus')).toHaveCount(0);
 });
-
 test('stale ordinary budget save cannot overwrite a newer cloud revision', async ({ page }) => {
   const outcome = await page.evaluate(async () => {
     const year = activeYear;
@@ -497,4 +464,224 @@ test('recurring manager heading is global and contains no budget year', async ({
   await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('.recurring-eyebrow')).toHaveText('RECURRING RULES');
   await expect(page.locator('#recurringYearLabel')).toHaveCount(0);
+});
+
+test('automatic recurring backfill saves only the selected budget year, not unused templates', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Selected year only');
+  await form.locator('[data-rec-field="amount"]').fill('50');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Selected year only').length)).toBe(1);
+  const years = await page.evaluate(() =>
+    Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')).sort());
+  expect(years).toEqual(['2026']);
+});
+
+test('recurring cloud synchronization cannot replace unsaved local desktop changes', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Protected rent');
+  await form.locator('[data-rec-field="amount"]').fill('100');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Protected rent').length)).toBe(1);
+  const original = await page.evaluate(() => {
+    const cloud = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'];
+    db['2026'].months[2].fixed.push({ name: 'Locally edited only', amount: 44 });
+    return { revision: cloud.updated_at, budget: cloud.budget_data };
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-01'));
+  const after = await page.evaluate(() => ({
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'],
+    conflict: localStorage.getItem(conflictStorageKey('2026')),
+    local: db['2026'].months[2].fixed.some(entry => entry.name === 'Locally edited only')
+  }));
+  expect(after.cloud.updated_at).toBe(original.revision);
+  expect(after.cloud.budget_data).toEqual(original.budget);
+  expect(after.local).toBe(true);
+  expect(after.conflict).toBe('1');
+});
+
+test('cloud fixture discovers only explicitly saved years for the authenticated owner', async ({ page }) => {
+  const initial = await page.evaluate(async () =>
+    supabaseClient.from('budget_ui_years').select('year,updated_at').eq('user_id', currentUser.id));
+  expect(initial.data).toEqual([]);
+  expect(await page.evaluate(() => saveDB())).toBe('cloud-saved');
+  const rows = await page.evaluate(async () => {
+    const own = await supabaseClient.from('budget_ui_years').select('year,updated_at').eq('user_id', currentUser.id);
+    const other = await supabaseClient.from('budget_ui_years').select('year,updated_at').eq('user_id', 'other-owner');
+    return { own: own.data.map(row => row.year), other: other.data };
+  });
+  expect(rows).toEqual({ own: [2026], other: [] });
+});
+
+test('desktop edit only fills missing future entries and preserves existing amounts', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-15T12:00:00Z') });
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Future price edit');
+  await form.locator('[data-rec-field="amount"]').fill('100');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    entry => entry.name === 'Future price edit').length)).toBe(1);
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows['2026'].budget_data.months[11].fixed =
+      rows['2026'].budget_data.months[11].fixed.filter(x => x.name !== 'Future price edit');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    db['2026'] = structuredClone(rows['2026'].budget_data);
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: db['2026'], updatedAt: rows['2026'].updated_at
+    }));
+  });
+  const answers = ['150', 'monthly'];
+  page.on('dialog', dialog => dialog.accept(answers.shift() ?? ''));
+  await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    entry => entry.name === 'Future price edit').map(entry => entry.amount))).toEqual([150]);
+  const state = await page.evaluate(() => ({
+    january: db['2026'].months[0].fixed.filter(x => x.name === 'Future price edit').map(x => x.amount),
+    november: db['2026'].months[10].fixed.filter(x => x.name === 'Future price edit').map(x => x.amount),
+    december: db['2026'].months[11].fixed.filter(x => x.name === 'Future price edit').map(x => x.amount),
+    version: JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules'))[0].versions.at(-1)
+  }));
+  expect(state.january).toEqual([100]);
+  expect(state.november).toEqual([100]);
+  expect(state.december).toEqual([150]);
+  expect(state.version.effectiveFrom).toBe('2026-12-01');
+  expect(state.version.amount).toBe(150);
+  await expect(page.locator('#desktopRulesList')).toContainText('Scheduled from 2026-12-01');
+  await page.reload();
+  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
+    x => x.name === 'Future price edit').map(x => x.amount))).toEqual([150]);
+});
+
+test('creating a budget year safely applies global recurring rules without saving other templates', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Future year payment');
+  await form.locator('[data-rec-field="amount"]').fill('45');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Future year payment').length)).toBe(1);
+  await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="years"]').click();
+  page.once('dialog', dialog => dialog.accept('2028'));
+  await page.locator('button[onclick="createNewYear()"]').first().click();
+  await expect.poll(() => page.evaluate(() => db['2028']?.months?.[0].fixed.filter(
+    entry => entry.name === 'Future year payment').length)).toBe(1);
+  const state = await page.evaluate(() => ({
+    savedYears: Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))).sort(),
+    count: db['2028'].months.flatMap(month => month.fixed).filter(x => x.name === 'Future year payment').length,
+    active: activeYear
+  }));
+  expect(state).toEqual({ savedYears: ['2026', '2028'], count: 12, active: '2028' });
+});
+
+test('desktop recurring sync reports added entries and skips existing entries without offering retry', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Sync result expense');
+  await form.locator('[data-rec-field="amount"]').fill('19');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-05');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('Recurring synchronization complete: 12 entries added');
+  await expect(page.locator('#desktopRecurringSyncDetails')).toContainText('2026: 12 added');
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeHidden();
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-05'));
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('0 entries added');
+  await expect(page.locator('#desktopRecurringSyncDetails')).toContainText('12 already present');
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed)
+    .filter(x => x.name === 'Sync result expense').length)).toBe(12);
+});
+
+test('desktop recurring retry recovers from a transient cloud error without replaying entries', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Retry protected entry');
+  await form.locator('[data-rec-field="amount"]').fill('81');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed
+    .some(x => x.name === 'Retry protected entry'))).toBe(true);
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows['2026'].budget_data.months[11].fixed =
+      rows['2026'].budget_data.months[11].fixed.filter(x => x.name !== 'Retry protected entry');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    db['2026'] = structuredClone(rows['2026'].budget_data);
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: db['2026'], updatedAt: rows['2026'].updated_at
+    }));
+    sessionStorage.setItem('__mock_budget_cloud_failure', '1');
+  });
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-15'));
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('synchronization incomplete');
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeVisible();
+  expect(await page.evaluate(() => db['2026'].months[11].fixed
+    .filter(x => x.name === 'Retry protected entry').length)).toBe(0);
+  await page.reload();
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeVisible();
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
+  await page.locator('#desktopRetryRecurringSync').click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed
+    .filter(x => x.name === 'Retry protected entry').length)).toBe(1);
+  await expect(page.locator('#desktopRetryRecurringSync')).toBeHidden();
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('Recurring synchronization complete');
+  expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed)
+    .filter(x => x.name === 'Retry protected entry').length)).toBe(12);
+});
+
+test('desktop recurring backfill accepts PostgreSQL-style jsonb ordering and timestamp formatting', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Jsonb-safe recurring');
+  await form.locator('[data-rec-field="amount"]').fill('74');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    item => item.name === 'Jsonb-safe recurring').length)).toBe(1);
+  const formatting = await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    const cloud = rows['2026'];
+    const originalRevision = cloud.updated_at;
+    const document = structuredClone(cloud.budget_data);
+    document.months[11].fixed = document.months[11].fixed.filter(item =>
+      item.name !== 'Jsonb-safe recurring');
+    db['2026'] = document;
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: document, updatedAt: originalRevision
+    }));
+    const jsonb = value => Array.isArray(value)
+      ? value.map(jsonb)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).sort().map(key => [key, jsonb(value[key])]))
+        : value;
+    cloud.budget_data = jsonb(document);
+    cloud.updated_at = originalRevision.replace(/Z$/, '+00:00');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    return {
+      local: JSON.stringify(document),
+      remote: JSON.stringify(cloud.budget_data),
+      beforeRevision: originalRevision,
+      remoteRevision: cloud.updated_at
+    };
+  });
+  expect(formatting.local).not.toBe(formatting.remote);
+  expect(formatting.beforeRevision).not.toBe(formatting.remoteRevision);
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-15'));
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    item => item.name === 'Jsonb-safe recurring').length)).toBe(1);
+  expect(await page.evaluate(() => db['2026'].months.flatMap(month => month.fixed).filter(
+    item => item.name === 'Jsonb-safe recurring').length)).toBe(12);
+  expect(await page.evaluate(() => localStorage.getItem(conflictStorageKey('2026')))).toBe(null);
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('1 entries added');
 });

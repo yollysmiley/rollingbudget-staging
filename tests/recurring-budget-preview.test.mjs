@@ -149,3 +149,27 @@ test('different amounts with exact or distinctive leading names still require re
   assert.equal(result.ambiguous.length, 1);
   assert.equal(result.added, 11);
 });
+
+test('date-driven backfill respects start/end dates and never rewrites previously edited occurrences', () => {
+  const source = budget();
+  const dated = {
+    ...rule(), startDate: '2027-02-15', endDate: '2027-04-20',
+    versions: [{ effectiveFrom: '2027-02-01', name: 'Rent', amount: 500,
+      due: '15', accountId: null, frequency: 'monthly' }]
+  };
+  source.months[1].fixed.push({
+    name: 'Manually adjusted rent', amount: 425, recurringRuleId: 'rent',
+    occurrenceId: JSON.stringify(['rent', '2027-02-15'])
+  });
+  const before = structuredClone(source);
+  const result = previewRecurringYear(source, 2027, [dated]);
+  assert.equal(result.added, 2);
+  assert.deepEqual(result.document.months[1].fixed, before.months[1].fixed);
+  assert.deepEqual(result.document.months[2].fixed.map(x => x.occurrenceId),
+    [JSON.stringify(['rent', '2027-03-15'])]);
+  assert.deepEqual(result.document.months[3].fixed.map(x => x.occurrenceId),
+    [JSON.stringify(['rent', '2027-04-15'])]);
+  assert.equal(result.document.months[4].fixed.length, 0);
+  assert.equal(previewRecurringYear(result.document, 2027, [dated]).added, 0);
+  assert.deepEqual(source, before);
+});

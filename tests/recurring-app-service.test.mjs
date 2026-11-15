@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear } from '../scripts/recurring-app-service.mjs';
+import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear, backfillRecurringYear, selectRecurringCloudYears, requireRecurringCloudSnapshot } from '../scripts/recurring-app-service.mjs';
 
 const rule = { id: 'rent', name: 'Rent', category: 'fixed', amount: '500', due: '1st',
   account_id: null, frequency: 'monthly', start_date: '2026-12-01',
@@ -172,4 +172,298 @@ test('concurrent edit prevents stale owner-scoped recurring deletion', async () 
   assert.equal(filters.user_id, 'owner-a');
   assert.equal(filters.id, 'rent');
   assert.equal(filters.versions, JSON.stringify(initial.versions));
+});
+
+test('automatic backfill uses owner-scoped rules and cloud CAS; preserves existing transactions', async () => {
+  const source = budget();
+  source.months[0].fixed.push({ name: 'Rent', amount: 777, recurringRuleId: 'rent' });
+  const before = structuredClone(source);
+  let stored = source;
+  let version = '2026-11-15T00:00:00.000Z';
+  let writes = 0;
+  const client = { from(table) {
+    if (table === 'budget_recurring_rules') return { select() {
+      return { eq(field, owner) {
+        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+        return Promise.resolve({ data: [rule], error: null });
+      } };
+    } };
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq(field, owner) {
+        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+        return { async eq(key, year) {
+          assert.equal(key, 'year'); assert.equal(year, 2027);
+          return { data: [{ year, budget_data: stored, updated_at: version }], error: null };
+        } };
+      } }; },
+      update(changes) {
+        const conditions = {};
+        const query = {
+          eq(key, value) { conditions[key] = value; return query; },
+          async select() {
+            assert.equal(conditions.user_id, 'owner-a');
+            assert.equal(conditions.year, 2027);
+            if (conditions.updated_at !== version) return { data: [], error: null };
+            stored = changes.budget_data;
+            version = changes.updated_at;
+            writes++;
+            return { data: [{ year: 2027 }], error: null };
+          }
+        };
+        return query;
+      }
+    };
+  } };
+  const first = await backfillRecurringYear(client, 'owner-a', 2027);
+  assert.equal(first.added, 11);
+  assert.equal(first.saved, true);
+  assert.deepEqual(stored.months[0].fixed, before.months[0].fixed);
+  assert.deepEqual(source, before);
+  const again = await backfillRecurringYear(client, 'owner-a', 2027);
+  assert.equal(again.added, 0);
+  assert.equal(again.saved, false);
+  assert.equal(writes, 1);
+});
+
+test('automatic backfill does not duplicate ambiguous historical transactions', async () => {
+  const source = budget();
+  source.months[0].fixed.push({ name: 'Rent', amount: 600 });
+  const client = {
+    from(table) {
+      if (table === 'budget_recurring_rules') {
+        return {
+          select() {
+            return {
+              async eq(field, owner) {
+                assert.equal(field, 'user_id');
+                assert.equal(owner, 'owner-a');
+                return { data: [rule], error: null };
+              }
+            };
+          }
+        };
+      }
+      assert.equal(table, 'budget_ui_years');
+      return {
+        select() {
+          const query = {
+            eq(field, value) {
+              assert.ok((field === 'user_id' && value === 'owner-a') ||
+                (field === 'year' && value === 2027));
+              return query;
+            },
+            then(resolve, reject) {
+              return Promise.resolve({
+                data: [{ year: 2027, budget_data: source,
+                  updated_at: '2026-11-15T00:00:00.000Z' }], error: null
+              }).then(resolve, reject);
+            }
+          };
+          return query;
+        },
+        update(changes) {
+          assert.equal(changes.budget_data.months[0].fixed.length, 1);
+          const query = {
+            eq() { return query; },
+            async select() { return { data: [{ year: 2027 }], error: null }; }
+          };
+          return query;
+        }
+      };
+    }
+  };
+  const result = await backfillRecurringYear(client, 'owner-a', 2027);
+  assert.equal(result.added, 11);
+  assert.equal(result.ambiguous.length, 1);
+  assert.equal(result.document.months[0].fixed.length, 1);
+  assert.deepEqual(source.months[0].fixed, [{ name: 'Rent', amount: 600 }]);
+});
+
+test('cloud backfill only considers persisted years inside the rule date range', () => {
+  assert.deepEqual(selectRecurringCloudYears([
+    { year: 2029 }, { year: 2027 }, { year: 2027 }, { year: 2026 },
+    { year: '2030' }, { year: 2201 }
+  ], '2027-06-15', '2028-12-31'), ['2027']);
+  assert.deepEqual(selectRecurringCloudYears([], '2026-01-01'), []);
+  assert.throws(() => selectRecurringCloudYears([], '2026-12-01', '2026-01-01'), /dates/);
+});
+
+test('cloud snapshot guard refuses stale, unsynced, and foreign-owner budgets', () => {
+  const cloud = { updated_at: 'revision-one', budget_data: budget() };
+  const safe = () => ({
+    owner: 'owner-a', activeOwner: 'owner-a', cloudRow: cloud,
+    knownRevision: cloud.updated_at, inMemoryBudget: structuredClone(cloud.budget_data),
+    cachedBudget: structuredClone(cloud.budget_data), hasLocalCache: true
+  });
+  assert.equal(requireRecurringCloudSnapshot(safe()), true);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), activeOwner: 'owner-b' }), /owner changed/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), knownRevision: 'revision-old' }), /stale/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), conflicted: true }), /reconciliation/);
+  const dirty = structuredClone(cloud.budget_data);
+  dirty.months[0].fixed.push({ name: 'Local unsaved rent', amount: 5 });
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), inMemoryBudget: dirty }), /Local budget differs/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), cachedBudget: dirty }), /Local budget differs/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), cachedBudget: null }), /Local budget differs/);
+});
+
+test('recurring sync rejects a cloud revision changed after preflight without writing', async () => {
+  const source = budget();
+  let writes = 0;
+  const client = { from(table) {
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq() { return { async eq() {
+        return { data: [{ year: 2027, budget_data: source, updated_at: 'newer-revision' }], error: null };
+      } }; } }; },
+      update() { writes++; throw new Error('Update must not be attempted'); }
+    };
+  } };
+  const build = doc => {
+    const updated = structuredClone(doc);
+    updated.months[0].fixed.push({ name: 'Rent', amount: 500 });
+    return { document: updated, added: 1 };
+  };
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, build,
+    { expectedUpdatedAt: 'older-revision' }), /changed since recurring synchronization/);
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, build,
+    { expectedUpdatedAt: 'newer-revision', canCommit: () => false }), /cancelled/);
+  assert.equal(writes, 0);
+});
+
+test('legacy globally inactive rule resumes only from its future enabled version', async () => {
+  let stored = { ...structuredClone(rule), active: false,
+    start_date: '2026-11-15', versions: [{
+      effectiveFrom: '2026-11-01', name: 'Rent', amount: 500,
+      due: '15', accountId: null, frequency: 'monthly'
+    }] };
+  const query = () => ({ select() { return { eq(field, owner) {
+    assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+    return { async eq(key, value) {
+      assert.equal(key, 'id'); assert.equal(value, 'rent');
+      return { data: [stored], error: null };
+    } };
+  } }; }, update(change) { const filters = {};
+    const updating = { eq(key, value) { filters[key] = value; return updating; },
+      async select() {
+        assert.equal(filters.user_id, 'owner-a');
+        assert.equal(filters.id, 'rent');
+        assert.equal(filters.active, false);
+        assert.equal(filters.versions, JSON.stringify(stored.versions));
+        stored = { ...stored, ...change };
+        return { data: [{ id: stored.id }], error: null };
+      }
+    };
+    return updating;
+  } });
+  const client = { from(table) { assert.equal(table, 'budget_recurring_rules'); return query(); } };
+  await setRecurringRuleActive(client, 'owner-a', 'rent', true, '2026-12-01');
+  assert.equal(stored.active, true);
+  assert.deepEqual(stored.versions.map(v => [v.effectiveFrom, v.enabled]), [
+    ['2026-11-01', false], ['2026-12-01', true]
+  ]);
+});
+
+test('edits to future-starting rules may update their initial month without invalid date rejection', async () => {
+  const future = { ...structuredClone(rule), start_date: '2028-01-15', versions: [{
+    effectiveFrom: '2028-01-01', name: 'Rent', amount: 500,
+    due: '15', accountId: null, frequency: 'monthly'
+  }] };
+  let changed;
+  const client = { from() { return {
+    select() { return { eq() { return { async eq() { return { data: [future], error: null }; } }; } }; },
+    update(next) { const q = { eq() { return q; }, async select() {
+      changed = next;
+      return { data: [{ id: 'rent' }], error: null };
+    } }; return q; }
+  }; } };
+  await editRecurringRule(client, 'owner-a', 'rent', { amount: 625 }, '2028-01-01');
+  assert.equal(changed.versions.length, 1);
+  assert.equal(changed.versions[0].amount, 625);
+});
+
+test('loaded rules expose next-month scheduling independently of current status', async () => {
+  const today = new Date();
+  const thisMonth = today.toISOString().slice(0, 7) + '-01';
+  const nextMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+    .toISOString().slice(0, 10);
+  const latest = { ...rule, start_date: thisMonth, versions: [
+    { effectiveFrom: thisMonth, name: 'Rent', amount: 500, frequency: 'monthly' },
+    { effectiveFrom: nextMonth, name: 'Rent', amount: 650, frequency: 'monthly', enabled: false }
+  ] };
+  const client = { from() { return { select() { return { async eq() {
+    return { data: [latest], error: null };
+  } }; } }; } };
+  const loaded = await loadRecurringPreviewRules(client, 'owner-a');
+  assert.equal(loaded.rules[0].displayActive, true);
+  assert.equal(loaded.rules[0].upcomingActive, false);
+  assert.equal(loaded.rules[0].upcomingAmount, 650);
+  assert.equal(loaded.rules[0].upcomingEffectiveFrom, nextMonth);
+});
+
+test('cloud snapshot accepts semantically equal PostgreSQL jsonb and timestamptz values', () => {
+  const localBudget = {
+    months: [{ recordedLeftover: 0, income: [], fixed: [{ name: 'Rent', amount: 120 }] }],
+    autoCascade: true, recurringRules: []
+  };
+  const reorderedCloudBudget = {
+    recurringRules: [], autoCascade: true,
+    months: [{ fixed: [{ amount: 120, name: 'Rent' }], income: [], recordedLeftover: 0 }]
+  };
+  const args = {
+    owner: 'owner-a', activeOwner: 'owner-a',
+    knownRevision: '2026-11-15T12:00:00.123Z',
+    cloudRow: { updated_at: '2026-11-15T07:00:00.123000-05:00', budget_data: reorderedCloudBudget },
+    inMemoryBudget: localBudget, cachedBudget: structuredClone(localBudget), hasLocalCache: true
+  };
+  assert.equal(requireRecurringCloudSnapshot(args), true);
+  assert.throws(() => requireRecurringCloudSnapshot({
+    ...args, cloudRow: { ...args.cloudRow, updated_at: '2026-11-15T12:00:00.123001+00:00' }
+  }), /revision is unverified or stale/);
+  const changed = structuredClone(localBudget);
+  changed.months[0].fixed[0].amount = 121;
+  assert.throws(() => requireRecurringCloudSnapshot({ ...args, cachedBudget: changed }),
+    /Local budget differs/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...args, inMemoryBudget: changed }),
+    /Local budget differs/);
+});
+
+test('cloud backfill CAS uses authoritative revision after equivalent timestamp formatting', async () => {
+  const cloud = budget();
+  const cloudUpdatedAt = '2026-11-15T12:00:00.123456+00:00';
+  const expectedUpdatedAt = '2026-11-15T07:00:00.123456-05:00';
+  let written = false;
+  const client = { from(table) {
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq() { return { async eq() {
+        return { data: [{ year: 2027, budget_data: cloud, updated_at: cloudUpdatedAt }], error: null };
+      } }; } }; },
+      update(change) {
+        const filters = {}, q = {
+          eq(field, value) { filters[field] = value; return q; },
+          async select() {
+            assert.equal(filters.user_id, 'owner-a');
+            assert.equal(filters.year, 2027);
+            assert.equal(filters.updated_at, cloudUpdatedAt);
+            assert.equal(change.budget_data.months[0].fixed.length, 1);
+            written = true;
+            return { data: [{ year: 2027 }], error: null };
+          }
+        };
+        return q;
+      }
+    };
+  } };
+  const builder = document => {
+    const copy = structuredClone(document);
+    copy.months[0].fixed.push({ name: 'Scheduled', amount: 60 });
+    return { document: copy, added: 1, skipped: [], ambiguous: [] };
+  };
+  const result = await commitRecurringYear(client, 'owner-a', 2027, builder,
+    { expectedUpdatedAt, canCommit: () => true });
+  assert.equal(result.saved, true);
+  assert.equal(written, true);
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, builder,
+    { expectedUpdatedAt: '2026-11-15T12:00:00.123455Z' }), /changed since recurring/);
 });

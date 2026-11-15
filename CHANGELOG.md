@@ -1,5 +1,13 @@
 ## Unreleased
 
+- PR #42 Phase 5 staging: harden recurring-cloud snapshot comparison for PostgreSQL jsonb key reordering and equivalent timestamptz representations, preserving nanosecond-precise revision checks and conditional updates. Add unit, desktop, and mobile regression coverage and document remaining pre-merge live-staging verification.
+
+- PR #42 Phase 4 staging: show owner-scoped recurring sync results (added, already present, possible duplicates and deferred years) separately on desktop/mobile, persist incomplete date ranges within the session and provide safe retry that re-reads authoritative cloud data and preserves existing conflict checks. No manual preview or apply controls restored.
+
+- PR #42 Phase 3 staging: connect future-effective recurring edits and reactivation to automatic missing-entry synchronization; disabling preserves existing entries. Display upcoming changes in distinct desktop/mobile views, synchronize global rules on new budget-year creation, and prevent accidentally replacing an existing year. Add service and browser regression tests.
+
+- PR #42 staging: restrict automatic recurring backfill to owner-saved cloud years, explicitly save only the selected eligible year on rule creation, pin cloud revisions during synchronization, and preserve unsynced local changes with conflict recovery. Added service and desktop/mobile regression coverage. Existing saved entries are never rewritten; no production changes.
+
 - Temporarily permitted protected manual live integration on PR #33 for pre-merge verification; restored the workflow's main-only execution gate before merging.
 
 - Adopt the committed npm v3 lockfile in all staging CI workflows with `npm ci` and lockfile-keyed npm download caching; retain `--ignore-scripts` for secret-free and credentialed live validation. No change to required check names or deployment gates.

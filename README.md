@@ -37,3 +37,14 @@ Keep the required `build` and `validate` status checks stable when changing CI. 
 ## Staging redesign — Phase 1
 
 The shared brand stylesheet is `styles/brand.css`; the staging build publishes it under both public and authenticated routes. Desktop and mobile navigation remain separate while using the same budget state. See [brand standards](docs/BRAND_GUIDELINES.md) and [staging configuration](STAGING.md).
+
+## Recurring rules (staging)
+
+The authenticated **Recurring Rules Manager** is available from the main desktop navigation or the mobile sidebar. Rules are shared across budget years. Each rule has a required Start date, an optional End date, and a frequency. Missing occurrences are added automatically to saved, eligible cloud budget years. New budget years receive applicable rules after their first successful cloud save.
+
+Editing amounts or frequency, disabling, and re-enabling rules take effect from the next eligible calendar month. Saved transactions, including previously generated future entries and manual adjustments, are never overwritten or deleted. Consequently, previously generated entries retain their earlier amount even when a rule changes.
+
+Each desktop/mobile manager displays synchronization results and warns about possible duplicate transactions that were skipped. **Retry synchronization** appears when cloud synchronization is incomplete. It re-reads the owner-scoped cloud budget and preserves optimistic revision and local-conflict checks; it does not automatically resolve conflicts or approve possible duplicates. Pending retry ranges are kept within the browser tab session. Resolve a flagged cloud conflict with the existing budget reconciliation controls before retrying.
+
+The PR build uses isolated Playwright Supabase mocks; the credentialed live staging workflow is restricted to staging `main`, so live authenticated recurring-rule persistence must be independently verified before approving a release.
+
