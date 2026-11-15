@@ -1327,21 +1327,26 @@ async function applyRecurringPreview() {
     if (!accepted || currentUser?.id !== owner || activeYear !== year) return;
     // Recalculate immediately before applying to avoid duplication from
     // user edits while the confirmation dialogue was open.
-    const current = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
-    if (!current.added) return;
+    const current = await recurringAppService.commitRecurringYear(
+      supabaseClient, owner, year,
+      cloudDocument => recurringAppService.previewLoadedRecurringYear(cloudDocument, year, loaded)
+    );
+    if (!current.saved) return;
+    if (currentUser?.id !== owner || activeYear !== year) return;
     db[year] = current.document;
-    const saveResult = await saveDB();
+    try {
+      localStorage.setItem(storageKey(year), JSON.stringify({
+        data: current.document, updatedAt: current.updatedAt
+      }));
+    } catch (storageError) {
+      console.warn('Cloud recurring changes saved, but local cache update failed:', storageError);
+    }
     loadedRecurringPreview = loaded;
     render();
-    if (saveResult !== 'cloud-saved') {
-      alert(saveResult === 'local-saved'
-        ? 'Scheduled entries were saved on this device only. Cloud sync failed; other devices may not have these changes.'
-        : 'Scheduled entries could not be saved. Review the budget and retry after resolving storage errors.');
-    }
     if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
   } catch (error) {
     console.error('Recurring entries were not applied:', error);
-    alert('Recurring entries could not be applied. Your existing budget was left unchanged.');
+    alert('Recurring entries were not applied. The cloud budget may have changed or the save failed. Reload and retry.');
   } finally {
     recurringApplyBusy = false;
     if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
