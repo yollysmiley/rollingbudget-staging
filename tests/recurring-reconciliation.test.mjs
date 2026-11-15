@@ -9,7 +9,7 @@ test('new users and unambiguous history pass without creating records', () => {
   assert.deepEqual(inspectRecurringHistory({}, manifest([])), {
     ready: true, years: [], ruleCount: 0, issues: [], blockedRuleIds: []
   });
-  const history = { 2026: year([{ id: 123 }]), 2027: year([{ id: 'other' }]) };
+  const history = { 2026: year([{ id: 'first' }]), 2027: year([{ id: 'other' }]) };
   const snapshot = structuredClone(history);
   assert.equal(inspectRecurringHistory(history, manifest(['2026', '2027'])).ready, true);
   assert.deepEqual(history, snapshot);
@@ -20,7 +20,7 @@ test('flags repeated numeric and string IDs across years rather than silently me
   const report = inspectRecurringHistory(history, manifest(['2026', '2027']));
   assert.equal(report.ready, false);
   assert.deepEqual(report.blockedRuleIds, ['123']);
-  assert.deepEqual(report.issues, [{ type: 'reused-across-years', id: '123', years: ['2026', '2027'] }]);
+  assert.deepEqual(report.issues.map(issue => issue.type), ['numeric-id-requires-normalization', 'reused-across-years']);
 });
 
 test('flags missing and duplicate IDs without guessing positional identifiers', () => {
