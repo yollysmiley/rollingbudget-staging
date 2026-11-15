@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear } from '../scripts/recurring-app-service.mjs';
+import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear } from '../scripts/recurring-app-service.mjs';
 
 const rule = { id: 'rent', name: 'Rent', category: 'fixed', amount: '500', due: '1st',
   account_id: null, frequency: 'monthly', start_date: '2026-12-01',
@@ -64,10 +64,10 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
           }], error: null };
         } };
       } }; },
-      update(changes) { return { eq(field, owner) {
-        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
-        return { async eq(key, id) { calls.push(['update', changes, key, id]); return { error: null }; } };
-      } }; },
+      update(changes) { const filters = {}; const query = {
+        eq(field, value) { filters[field] = value; return query; },
+        async select() { calls.push(['update', changes, filters]); return { data: [{ id: filters.id }], error: null }; }
+      }; return query; },
       delete() { return { eq(field, owner) {
         assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
         return { async eq(key, id) { calls.push(['delete', key, id]); return { error: null }; } };
@@ -89,6 +89,9 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
   assert.equal(calls[1][0], 'update');
   assert.equal(calls[1][1].versions[1].effectiveFrom, '2027-03-01');
   assert.equal(calls[1][1].versions[1].enabled, false);
+  assert.equal(calls[1][2].user_id, 'owner-a');
+  assert.equal(calls[1][2].id, 'new-rent');
+  assert.equal(typeof calls[1][2].versions, 'string');
   assert.deepEqual(calls[2], ['delete', 'id', 'new-rent']);
   assert.deepEqual(historical, snapshot);
 });
@@ -123,4 +126,24 @@ test('recurring cloud commit rejects stale revisions without modifying source bu
   assert.equal(saved.saved, true);
   assert.equal(saved.document.months[0].fixed.length, 1);
   assert.equal(source.months[0].fixed.length, 0);
+});
+
+test('concurrent rule version update is rejected without changing the source', async () => {
+  const source = structuredClone(rule);
+  const client = { from() { return {
+    select() { return { eq() { return { async eq() { return { data: [source], error: null }; } }; } }; },
+    update() { const filters = {}; const chain = {
+      eq(field, value) { filters[field] = value; return chain; },
+      async select() {
+        assert.equal(filters.user_id, 'owner-a');
+        assert.equal(filters.id, 'rent');
+        assert.equal(filters.versions, JSON.stringify(source.versions));
+        return { data: [], error: null };
+      }
+    }; return chain; }
+  }; } };
+  await assert.rejects(() => editRecurringRule(client, 'owner-a', 'rent',
+    { amount: 600 }, '2027-01-01'), /changed on another device/);
+  assert.equal(source.versions.length, 1);
+  assert.equal(source.versions[0].amount, 500);
 });
