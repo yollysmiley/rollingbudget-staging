@@ -21,7 +21,9 @@ replaceOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-ali
 
 assert.ok(html.includes('function storageKey(year)'), 'Account-scoped storage is missing');
 assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'), 'Cloud data loading is missing');
-assert.ok(html.includes('from("budget_ui_years").upsert('), 'Cloud data saving is missing');
+assert.ok(html.includes('from("budget_ui_years").insert('), 'New cloud year insert is missing');
+assert.ok(html.includes('from("budget_ui_years")') && html.includes('.eq("updated_at", version).select("year")'),
+  'Conditional cloud revision saving is missing');
 assert.ok(!html.includes('YOUR_SUPABASE_'), 'Unconfigured Supabase placeholder remains');
 assert.ok(!html.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Unconfigured storage placeholder remains');
 assert.ok(!html.includes('awalptqpsjflrahkrjzk'), 'Production project reference remains');
