@@ -10,6 +10,7 @@ assert(start >= 0 && end > start, 'Cloud save implementation must be present');
 
 function harness() {
   const writes = [];
+  const backfills = [];
   const store = new Map();
   const status = { textContent: '', hidden: true, setAttribute() {}, style: {}, replaceChildren(node) { this.textContent = node.textContent; }, append() {} };
   const document = {
@@ -37,16 +38,17 @@ function harness() {
         return query;
       }
     }) },
+    backfillSavedRecurringYears: async (owner, from, through) => { backfills.push({ owner, from, through }); },
     alert: () => { throw new Error('unexpected local storage failure'); }
   };
   vm.createContext(context);
   vm.runInContext(html.slice(start, end), context);
-  return { context, writes, store, status };
+  return { context, writes, backfills, store, status };
 }
 async function flush() { await new Promise(resolve => setImmediate(resolve)); }
 
 test('consecutive edits save immutable snapshots in order', async () => {
-  const { context, writes } = harness();
+  const { context, writes, backfills } = harness();
   const first = vm.runInContext('saveDB()', context);
   context.db['2026'].months[0].income[0].cpm = 4321.25;
   const second = vm.runInContext('saveDB()', context);
@@ -60,6 +62,7 @@ test('consecutive edits save immutable snapshots in order', async () => {
   assert.equal(writes[1].filters.updated_at, writes[0].row.updated_at);
   writes[1].resolve({ data: [{ year: 2026 }], error: null });
   await Promise.all([first, second]);
+  assert.deepEqual(backfills, [{ owner: 'owner', from: '2026-01-01', through: '2026-12-31' }]);
 });
 test('failed cloud save retains local snapshot and shows warning', async () => {
   const { context, writes, store, status } = harness();
