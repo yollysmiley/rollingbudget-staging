@@ -229,16 +229,50 @@ test('automatic backfill uses owner-scoped rules and cloud CAS; preserves existi
 test('automatic backfill does not duplicate ambiguous historical transactions', async () => {
   const source = budget();
   source.months[0].fixed.push({ name: 'Rent', amount: 600 });
-  const client = { from(table) {
-    if (table === 'budget_recurring_rules') return { select() { return { eq: async () => ({
-      data: [rule], error: null
-    }) }; } }; };
-    return { select() { return { eq() { return { async eq() { return {
-      data: [{ year: 2027, budget_data: source, updated_at: '2026-11-15T00:00:00.000Z' }], error: null
-    }; } }; } }; }, update() { return { eq() { return { eq() { return { eq() {
-      return { async select() { return { data: [{ year: 2027 }], error: null }; } };
-    } }; } }; } }; } };
-  } };
+  const client = {
+    from(table) {
+      if (table === 'budget_recurring_rules') {
+        return {
+          select() {
+            return {
+              async eq(field, owner) {
+                assert.equal(field, 'user_id');
+                assert.equal(owner, 'owner-a');
+                return { data: [rule], error: null };
+              }
+            };
+          }
+        };
+      }
+      assert.equal(table, 'budget_ui_years');
+      return {
+        select() {
+          const query = {
+            eq(field, value) {
+              assert.ok((field === 'user_id' && value === 'owner-a') ||
+                (field === 'year' && value === 2027));
+              return query;
+            },
+            then(resolve, reject) {
+              return Promise.resolve({
+                data: [{ year: 2027, budget_data: source,
+                  updated_at: '2026-11-15T00:00:00.000Z' }], error: null
+              }).then(resolve, reject);
+            }
+          };
+          return query;
+        },
+        update(changes) {
+          assert.equal(changes.budget_data.months[0].fixed.length, 1);
+          const query = {
+            eq() { return query; },
+            async select() { return { data: [{ year: 2027 }], error: null }; }
+          };
+          return query;
+        }
+      };
+    }
+  };
   const result = await backfillRecurringYear(client, 'owner-a', 2027);
   assert.equal(result.added, 11);
   assert.equal(result.ambiguous.length, 1);
