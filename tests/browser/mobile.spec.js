@@ -555,3 +555,39 @@ test('mobile recurring retry is scoped to the signed-in account and stays blocke
   expect(await page.evaluate(() => db['2026'].months[1].fixed
     .some(x => x.name === 'Local-only'))).toBe(true);
 });
+
+test('mobile recurring status remains successful after a jsonb-reordered cloud response', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-action="recurring"]').click();
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Jsonb-safe mobile');
+  await form.locator('[data-rec-field="amount"]').fill('36');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    item => item.name === 'Jsonb-safe mobile').length)).toBe(1);
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    const cloud = rows['2026'];
+    const local = structuredClone(cloud.budget_data);
+    local.months[5].fixed = local.months[5].fixed.filter(item => item.name !== 'Jsonb-safe mobile');
+    db['2026'] = local;
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: local, updatedAt: cloud.updated_at
+    }));
+    const jsonb = value => Array.isArray(value)
+      ? value.map(jsonb)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).sort().map(key => [key, jsonb(value[key])]))
+        : value;
+    cloud.budget_data = jsonb(local);
+    cloud.updated_at = cloud.updated_at.replace(/Z$/, '+00:00');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+  });
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-15'));
+  await expect.poll(() => page.evaluate(() => db['2026'].months[5].fixed.filter(
+    item => item.name === 'Jsonb-safe mobile').length)).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem(conflictStorageKey('2026')))).toBe(null);
+  await expect(page.locator('#mobileRetryRecurringSync')).toBeHidden();
+  await expect(page.locator('#mobileRecurringSyncStatus')).toContainText('1 entries added');
+});

@@ -639,3 +639,49 @@ test('desktop recurring retry recovers from a transient cloud error without repl
   expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed)
     .filter(x => x.name === 'Retry protected entry').length)).toBe(12);
 });
+
+test('desktop recurring backfill accepts PostgreSQL-style jsonb ordering and timestamp formatting', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Jsonb-safe recurring');
+  await form.locator('[data-rec-field="amount"]').fill('74');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    item => item.name === 'Jsonb-safe recurring').length)).toBe(1);
+  const formatting = await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    const cloud = rows['2026'];
+    const originalRevision = cloud.updated_at;
+    const document = structuredClone(cloud.budget_data);
+    document.months[11].fixed = document.months[11].fixed.filter(item =>
+      item.name !== 'Jsonb-safe recurring');
+    db['2026'] = document;
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: document, updatedAt: originalRevision
+    }));
+    const jsonb = value => Array.isArray(value)
+      ? value.map(jsonb)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).sort().map(key => [key, jsonb(value[key])]))
+        : value;
+    cloud.budget_data = jsonb(document);
+    cloud.updated_at = originalRevision.replace(/Z$/, '+00:00');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    return {
+      local: JSON.stringify(document),
+      remote: JSON.stringify(cloud.budget_data),
+      beforeRevision: originalRevision,
+      remoteRevision: cloud.updated_at
+    };
+  });
+  expect(formatting.local).not.toBe(formatting.remote);
+  expect(formatting.beforeRevision).not.toBe(formatting.remoteRevision);
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-15'));
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    item => item.name === 'Jsonb-safe recurring').length)).toBe(1);
+  expect(await page.evaluate(() => db['2026'].months.flatMap(month => month.fixed).filter(
+    item => item.name === 'Jsonb-safe recurring').length)).toBe(12);
+  expect(await page.evaluate(() => localStorage.getItem(conflictStorageKey('2026')))).toBe(null);
+  await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('1 entries added');
+});
