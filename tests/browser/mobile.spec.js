@@ -412,3 +412,12 @@ test('browser cloud fixture rejects another owner\'s conditional budget update',
   });
   expect(outcome).toEqual({ written: 0, after: '2026-11-15T00:00:00.000Z' });
 });
+
+
+test('mobile automation settings omit duplicate recurring action while sidebar keeps access', async ({ page }) => {
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
+  await expect(page.locator('[data-mobile-settings-section="automation"] button[onclick="openRecurringModal()"]')).toHaveCount(0);
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]')).toBeVisible();
+});
