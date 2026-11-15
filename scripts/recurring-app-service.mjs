@@ -108,7 +108,35 @@ export async function removeRecurringRule(client, userId, id) {
   }
 }
 
-export async function commitRecurringYear(client, userId, year, buildPreview) {
+
+export function selectRecurringCloudYears(rows, startDate, endDate = null) {
+  if (!Array.isArray(rows) || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+      (endDate !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate))) {
+    throw new Error('Valid recurring dates and cloud budget years required');
+  }
+  const startYear = Number(startDate.slice(0, 4));
+  const endYear = endDate ? Number(endDate.slice(0, 4)) : 2200;
+  return [...new Set(rows.filter(row => Number.isInteger(row?.year) &&
+    row.year >= 1900 && row.year <= 2200 && row.year >= startYear && row.year <= endYear)
+    .map(row => String(row.year)))].sort();
+}
+
+export function requireRecurringCloudSnapshot({ owner, activeOwner, cloudRow, knownRevision,
+  inMemoryBudget, cachedBudget, hasLocalCache = false, conflicted = false }) {
+  if (!owner || activeOwner !== owner) throw new Error('Recurring sync owner changed');
+  if (conflicted) throw new Error('Unsynced local changes require reconciliation');
+  if (!cloudRow || !knownRevision || knownRevision !== cloudRow.updated_at || !cloudRow.budget_data) {
+    throw new Error('Cloud budget revision is unverified or stale');
+  }
+  const expected = JSON.stringify(cloudRow.budget_data);
+  if (!inMemoryBudget || JSON.stringify(inMemoryBudget) !== expected ||
+      (hasLocalCache && (!cachedBudget || JSON.stringify(cachedBudget) !== expected))) {
+    throw new Error('Local budget differs from cloud; reconcile before recurring sync');
+  }
+  return true;
+}
+
+export async function commitRecurringYear(client, userId, year, buildPreview, options = {}) {
   if (!client || !userId || !Number.isInteger(Number(year)) || typeof buildPreview !== 'function') {
     throw new Error('Authenticated recurring commit requires a year and preview builder');
   }
@@ -121,9 +149,15 @@ export async function commitRecurringYear(client, userId, year, buildPreview) {
     throw new Error('Budget year must be cloud-saved before applying recurring entries');
   }
   const source = rows[0];
+  if (options.expectedUpdatedAt && source.updated_at !== options.expectedUpdatedAt) {
+    throw new Error('Cloud budget changed since recurring synchronization was checked');
+  }
   const preview = buildPreview(source.budget_data);
   if (!preview?.document || !Number.isInteger(preview.added)) throw new Error('Invalid recurring preview');
   if (!preview.added) return { ...preview, saved: false };
+  if (options.canCommit && options.canCommit() !== true) {
+    throw new Error('Recurring synchronization was cancelled because local state changed');
+  }
   const updatedAt = new Date(Math.max(Date.now(), Date.parse(source.updated_at) + 1)).toISOString();
   const { data: written, error: writeError } = await client.from('budget_ui_years')
     .update({ budget_data: preview.document, updated_at: updatedAt })
@@ -140,12 +174,12 @@ export async function commitRecurringYear(client, userId, year, buildPreview) {
 // Automatically backfill owner-scoped recurring occurrences from authoritative cloud data.
 // Ambiguous historical matches are skipped, never silently duplicated or overwritten.
 // The conditional cloud commit preserves concurrent budget edits.
-export async function backfillRecurringYear(client, userId, year) {
+export async function backfillRecurringYear(client, userId, year, options = {}) {
   if (!client || !userId || !Number.isInteger(Number(year))) {
     throw new Error('Authenticated recurring backfill requires a year');
   }
   const loaded = await loadRecurringPreviewRules(client, userId);
   if (!loaded.rules.length) return { added: 0, saved: false, ambiguous: [], held: loaded.held };
   return commitRecurringYear(client, userId, year,
-    document => previewLoadedRecurringYear(document, year, loaded));
+    document => previewLoadedRecurringYear(document, year, loaded), options);
 }

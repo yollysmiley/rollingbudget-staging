@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear, backfillRecurringYear } from '../scripts/recurring-app-service.mjs';
+import { loadRecurringPreviewRules, previewLoadedRecurringYear, createRecurringRule, editRecurringRule, setRecurringRuleActive, removeRecurringRule, commitRecurringYear, backfillRecurringYear, selectRecurringCloudYears, requireRecurringCloudSnapshot } from '../scripts/recurring-app-service.mjs';
 
 const rule = { id: 'rent', name: 'Rent', category: 'fixed', amount: '500', due: '1st',
   account_id: null, frequency: 'monthly', start_date: '2026-12-01',
@@ -278,4 +278,55 @@ test('automatic backfill does not duplicate ambiguous historical transactions', 
   assert.equal(result.ambiguous.length, 1);
   assert.equal(result.document.months[0].fixed.length, 1);
   assert.deepEqual(source.months[0].fixed, [{ name: 'Rent', amount: 600 }]);
+});
+
+test('cloud backfill only considers persisted years inside the rule date range', () => {
+  assert.deepEqual(selectRecurringCloudYears([
+    { year: 2029 }, { year: 2027 }, { year: 2027 }, { year: 2026 },
+    { year: '2030' }, { year: 2201 }
+  ], '2027-06-15', '2028-12-31'), ['2027']);
+  assert.deepEqual(selectRecurringCloudYears([], '2026-01-01'), []);
+  assert.throws(() => selectRecurringCloudYears([], '2026-12-01', '2026-01-01'), /dates/);
+});
+
+test('cloud snapshot guard refuses stale, unsynced, and foreign-owner budgets', () => {
+  const cloud = { updated_at: 'revision-one', budget_data: budget() };
+  const safe = () => ({
+    owner: 'owner-a', activeOwner: 'owner-a', cloudRow: cloud,
+    knownRevision: cloud.updated_at, inMemoryBudget: structuredClone(cloud.budget_data),
+    cachedBudget: structuredClone(cloud.budget_data), hasLocalCache: true
+  });
+  assert.equal(requireRecurringCloudSnapshot(safe()), true);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), activeOwner: 'owner-b' }), /owner changed/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), knownRevision: 'revision-old' }), /stale/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), conflicted: true }), /reconciliation/);
+  const dirty = structuredClone(cloud.budget_data);
+  dirty.months[0].fixed.push({ name: 'Local unsaved rent', amount: 5 });
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), inMemoryBudget: dirty }), /Local budget differs/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), cachedBudget: dirty }), /Local budget differs/);
+  assert.throws(() => requireRecurringCloudSnapshot({ ...safe(), cachedBudget: null }), /Local budget differs/);
+});
+
+test('recurring sync rejects a cloud revision changed after preflight without writing', async () => {
+  const source = budget();
+  let writes = 0;
+  const client = { from(table) {
+    assert.equal(table, 'budget_ui_years');
+    return {
+      select() { return { eq() { return { async eq() {
+        return { data: [{ year: 2027, budget_data: source, updated_at: 'newer-revision' }], error: null };
+      } }; } }; },
+      update() { writes++; throw new Error('Update must not be attempted'); }
+    };
+  } };
+  const build = doc => {
+    const updated = structuredClone(doc);
+    updated.months[0].fixed.push({ name: 'Rent', amount: 500 });
+    return { document: updated, added: 1 };
+  };
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, build,
+    { expectedUpdatedAt: 'older-revision' }), /changed since recurring synchronization/);
+  await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, build,
+    { expectedUpdatedAt: 'newer-revision', canCommit: () => false }), /cancelled/);
+  assert.equal(writes, 0);
 });
