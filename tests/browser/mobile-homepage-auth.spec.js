@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('mobile public auth dialogs retain logo, navigation and fit viewport', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'Create Account', exact: true }).click();
+  await page.getByRole('link', { name: 'Sign Up', exact: true }).click();
   const dialog = page.locator('#accountDialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.account-brand')).toContainText('Rolling Budget');
@@ -23,7 +23,7 @@ test('mobile public auth dialogs retain logo, navigation and fit viewport', asyn
 
 test('mobile forgot password displays email-only branded dialog', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'Sign In', exact: true }).click();
+  await page.getByRole('link', { name: 'Login', exact: true }).click();
   const dialog = page.locator('#accountDialog');
   await dialog.locator('#accountForgot').click();
   await expect(dialog.locator('#accountTitle')).toHaveText('Reset your password');
