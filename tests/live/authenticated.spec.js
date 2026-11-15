@@ -102,6 +102,7 @@ async function switchTo(page, account, label) {
   await expect.poll(() => page.evaluate(id => currentUser?.id === id, account.user.id)).toBe(true);
   if (label) {
     await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe(label);
+    await page.evaluate(() => selectMonth(0));
     await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue(label);
   }
 }
@@ -265,6 +266,7 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   // Authenticate as the other account in the same browser without carrying A's budget.
   await establishSession(page, b);
   await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe('LOGOUT-B');
+  await page.evaluate(() => selectMonth(0));
   await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('LOGOUT-B');
   await expect(page.locator('#incomeBody')).not.toContainText('LOGOUT-A');
 });
