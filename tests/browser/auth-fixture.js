@@ -39,7 +39,12 @@ export async function mockSignedInBudget(page) {
                   ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [];
                 const recurringRows = table === 'budget_recurring_rules'
                   ? JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]') : [];
-                return Promise.resolve({ data: table === 'budget_recurring_rules' ? recurringRows : accountRows, error: null });
+                if (table === 'budget_recurring_rules') {
+                  const result = Promise.resolve({ data: recurringRows, error: null });
+                  result.eq = (_field, id) => Promise.resolve({ data: recurringRows.filter(row => row.id === id), error: null });
+                  return result;
+                }
+                return Promise.resolve({ data: accountRows, error: null });
               },
               insert(row) {
                 if (table === 'budget_recurring_rules') {
