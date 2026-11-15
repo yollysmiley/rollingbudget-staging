@@ -21,9 +21,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
+          cache: npm
       - name: Install runner without lifecycle scripts and install Chromium
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Build the current staging application
         run: node scripts/build-staging.mjs
