@@ -341,3 +341,32 @@ test('recurring application rejects failed cloud commits without changing budget
     db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'local-only'));
   expect(entries).toHaveLength(0);
 });
+
+test('mobile duplicate review skips ambiguous historical entries when user declines', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      id: 'rent-review', name: 'Rent', category: 'fixed', amount: 500,
+      due: '1st', account_id: null, frequency: 'monthly',
+      start_date: '2026-01-01', end_date: null, active: true, source_year: null,
+      versions: [{ effectiveFrom: '2026-01-01', name: 'Rent', amount: 500,
+        due: '1st', accountId: null, frequency: 'monthly' }]
+    }]));
+    await saveDB();
+  });
+  await page.reload();
+  const dialogs = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.message());
+    if (dialog.message().includes('possible duplicate recurring entries')) await dialog.dismiss();
+    else await dialog.accept();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#mobileApplyRecurringPreview').click();
+  await expect.poll(() => dialogs.some(message => message.includes('possible duplicate recurring entries'))).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
+  const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
+  expect(entries).toHaveLength(1);
+});
