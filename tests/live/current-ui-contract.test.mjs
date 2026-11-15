@@ -9,7 +9,9 @@ const workflow = readFileSync(new URL('../../.github/workflows/live-staging-test
 
 test('authenticated tests target the active staging table and dashboard contract', () => {
   assert.match(app, /from\("budget_ui_years"\)\.select\("year,budget_data,updated_at"\)/);
-  assert.match(app, /from\("budget_ui_years"\)\.upsert\(/);
+  assert.match(app, /from\("budget_ui_years"\)\.insert\(/);
+  assert.match(app, /\.eq\("updated_at", version\)\.select\("year"\)/);
+  assert.doesNotMatch(app, /from\("budget_ui_years"\)\.upsert\(/);
   assert.match(authenticated, /#incomeBody/);
   assert.match(authenticated, /currentUser\?\.id/);
   assert.match(authenticated, /budget_ui_years/);

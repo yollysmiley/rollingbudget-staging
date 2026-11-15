@@ -130,38 +130,51 @@ test('desktop Settings exposes year, automation and recurring controls on separa
   await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
 });
 
-test('recurring manager applies quarterly rules and disabling removes generated items', async ({ page }) => {
+test('desktop shared recurring rules require explicit apply and disabling preserves saved entries', async ({ page }) => {
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
   await page.locator('#desktopRecurringButton').click();
-  await expect(page.locator('#recurringManagerPage')).toBeVisible();
-  await expect(page.locator('#recurringDesktopView')).toBeVisible();
-  const form=page.locator('[data-recurring-form="desktop"]');
+  const form = page.locator('[data-recurring-form="desktop"]');
   await form.locator('[data-rec-field="name"]').fill('Quarterly Internet');
   await form.locator('[data-rec-field="amount"]').fill('80');
   await form.locator('[data-rec-field="due"]').fill('10th');
   await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
-  await page.getByRole('button',{name:'Add rule'}).first().click();
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly');
-  const occurrences=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
-  expect(occurrences).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
-  await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
+  const before = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
+  expect(before).toEqual(Array(12).fill(0));
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#desktopApplyRecurringPreview').click();
+  await expect.poll(() => page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length)))
+    .toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  await page.locator('#desktopRulesList button').filter({ hasText: 'Disable' }).click();
   await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  const disabled=await page.evaluate(()=>db[activeYear].months.map(m=>m.fixed.filter(x=>x.name==='Quarterly Internet').length));
-  expect(disabled).toEqual(Array(12).fill(0));
+  const after = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
+  expect(after).toEqual([1,0,0,1,0,0,1,0,0,1,0,0]);
+  const edits = ['90', 'monthly'];
+  page.on('dialog', dialog => dialog.accept(edits.shift()));
+  await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const rules = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+    return rules[0]?.versions?.at(-1)?.amount;
+  })).toBe(90);
+  const unchanged = await page.evaluate(() => db[activeYear].months.map(m => m.fixed.filter(x => x.name === 'Quarterly Internet').length));
+  expect(unchanged).toEqual(after);
 });
 
-test('legacy recurring rules remain visible and disabling preserves existing budget entries', async ({ page }) => {
-  await page.evaluate(async()=>{db[activeYear].recurringRules=[{id:123,cat:'fixed',name:'Legacy Rent',amount:900,due:'1st',start:0,end:11}];db[activeYear].months[0].fixed.push({name:'Legacy Rent',due:'1st',amount:900});await saveDB();});
+test('legacy rule definitions are retired while existing budget entries remain intact', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].recurringRules = [{ id: 123, cat: 'fixed', name: 'Legacy Rent', amount: 900, due: '1st', start: 0, end: 11 }];
+    db[activeYear].months[0].fixed.push({ name: 'Legacy Rent', due: '1st', amount: 900 });
+    await saveDB();
+  });
   await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
   await page.locator('#desktopRecurringButton').click();
-  await expect(page.locator('#desktopRulesList')).toContainText('Legacy Rent');
-  await expect(page.locator('#desktopRulesList')).toContainText('Monthly (legacy)');
-  await page.locator('#desktopRulesList button').filter({hasText:'Disable'}).click();
-  await expect(page.locator('#desktopRulesList')).toContainText('Disabled');
-  await expect(page.locator('#fixedBody input:not([type])').first()).toHaveValue('Legacy Rent');
+  await expect(page.locator('#desktopRulesList')).not.toContainText('Legacy Rent');
+  const entries = await page.evaluate(() => db[activeYear].months[0].fixed.filter(x => x.name === 'Legacy Rent'));
+  expect(entries).toHaveLength(1);
 });
 
 test('year switching in mobile Settings and narrow viewport remain usable', async ({ page }) => {
@@ -347,4 +360,116 @@ test('new users see no default accounts on desktop and mobile', async ({ page })
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
   await expect(page.locator('#mobileSettingsAccounts')).toContainText('No accounts yet.');
   await expect(page.locator('#mobileSettingsAccounts [data-account-id]')).toHaveCount(0);
+});
+
+test('desktop duplicate review skips ambiguous historical entries when user declines', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      id: 'rent-review', name: 'Rent', category: 'fixed', amount: 500,
+      due: '1st', account_id: null, frequency: 'monthly',
+      start_date: '2026-01-01', end_date: null, active: true, source_year: null,
+      versions: [{ effectiveFrom: '2026-01-01', name: 'Rent', amount: 500,
+        due: '1st', accountId: null, frequency: 'monthly' }]
+    }]));
+    await saveDB();
+  });
+  await page.reload();
+  const dialogs = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.message());
+    if (dialog.message().includes('Possible duplicate for')) await dialog.dismiss();
+    else await dialog.accept();
+  });
+  await page.locator('#desktopSettingsButton').click();
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#desktopApplyRecurringPreview').click();
+  await expect.poll(() => dialogs.some(message => message.includes('Possible duplicate for'))).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
+  const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
+  expect(entries).toHaveLength(1);
+});
+
+test('stale ordinary budget save cannot overwrite a newer cloud revision', async ({ page }) => {
+  const outcome = await page.evaluate(async () => {
+    const year = activeYear;
+    const cloud = { year: Number(year), budget_data: structuredClone(db[year]),
+      updated_at: '2026-11-15T12:00:00.000Z' };
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({ [year]: cloud }));
+    cloudBudgetVersions.set(currentUser.id + ':' + year, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Unsynced local edit', amount: 19 });
+    const status = await saveDB();
+    const after = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[year];
+    return { status, cloud: after.budget_data.months[0].fixed, revision: after.updated_at,
+      local: db[year].months[0].fixed };
+  });
+  expect(outcome.status).toBe('local-saved');
+  expect(outcome.cloud).toEqual([]);
+  expect(outcome.revision).toBe('2026-11-15T12:00:00.000Z');
+  expect(outcome.local).toContainEqual({ name: 'Unsynced local edit', amount: 19 });
+});
+
+test('desktop preserves an unresolved cloud conflict across reload and offers explicit recovery', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const year = activeYear, key = currentUser.id + ':' + year;
+    const cloud = structuredClone(db[year]);
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year: Number(year), budget_data: cloud, updated_at: '2026-11-15T12:00:00.000Z' }
+    }));
+    cloudBudgetVersions.set(key, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Local unsynced entry', amount: 35 });
+    const status = await saveDB();
+    return { status, marker: localStorage.getItem(conflictStorageKey(year)) };
+  });
+  expect(result).toEqual({ status: 'local-saved', marker: '1' });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
+  await expect(page.locator('#cloudSaveStatus button')).toHaveCount(2);
+  expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
+    entry => entry.name === 'Local unsynced entry'))).toBe(true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
+    entry => entry.name === 'Local unsynced entry'))).toBe(false);
+  expect(await page.evaluate(() => Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')))).toBe(true);
+});
+
+test('browser cloud fixture rejects another owner\'s conditional budget update', async ({ page }) => {
+  const outcome = await page.evaluate(async () => {
+    const year = Number(activeYear);
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year, budget_data: structuredClone(db[activeYear]), updated_at: '2026-11-15T00:00:00.000Z' }
+    }));
+    const { data } = await supabaseClient.from('budget_ui_years')
+      .update({ updated_at: '2026-11-15T01:00:00.000Z' })
+      .eq('user_id', 'another-owner').eq('year', year)
+      .eq('updated_at', '2026-11-15T00:00:00.000Z').select('year');
+    return { written: data.length, after: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[year].updated_at };
+  });
+  expect(outcome).toEqual({ written: 0, after: '2026-11-15T00:00:00.000Z' });
+});
+
+test('desktop explicitly keeping local changes resolves a conflict with conditional cloud update', async ({ page }) => {
+  await page.evaluate(async () => {
+    const year = activeYear, key = currentUser.id + ':' + year;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year: Number(year), budget_data: structuredClone(db[year]),
+        updated_at: '2026-11-15T12:00:00.000Z' }
+    }));
+    cloudBudgetVersions.set(key, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Keep local', amount: 42 });
+    await saveDB();
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  const result = await page.evaluate(() => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[activeYear];
+    return { present: row.budget_data.months[0].fixed.some(item => item.name === 'Keep local'),
+      backup: Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')) };
+  });
+  expect(result).toEqual({ present: true, backup: true });
 });

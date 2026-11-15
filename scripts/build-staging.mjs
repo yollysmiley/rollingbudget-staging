@@ -21,12 +21,15 @@ replaceOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-ali
 
 assert.ok(html.includes('function storageKey(year)'), 'Account-scoped storage is missing');
 assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'), 'Cloud data loading is missing');
-assert.ok(html.includes('from("budget_ui_years").upsert('), 'Cloud data saving is missing');
+assert.ok(html.includes('from("budget_ui_years").insert('), 'New cloud year insert is missing');
+assert.ok(html.includes('from("budget_ui_years")') && html.includes('.eq("updated_at", version).select("year")'),
+  'Conditional cloud revision saving is missing');
 assert.ok(!html.includes('YOUR_SUPABASE_'), 'Unconfigured Supabase placeholder remains');
 assert.ok(!html.includes('YOUR_STAGING_STORAGE_PREFIX'), 'Unconfigured storage placeholder remains');
 assert.ok(!html.includes('awalptqpsjflrahkrjzk'), 'Production project reference remains');
 assert.ok(!html.includes('sb_secret_'), 'Secret key marker found');
-assert.ok(!html.includes('localStorage.removeItem('), 'Build must not delete browser data');
+assert.ok(!html.includes('localStorage.removeItem(storageKey('), 'Build must not delete budget records');
+assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year))"), 'Conflict marker cleanup must remain scoped');
 assert.ok(html.includes('function esc(str)') && html.includes('&lt;'), 'HTML text escaping is missing');
 
 let confirmationHtml = readFileSync(new URL('../auth-confirmation.html', import.meta.url), 'utf8');
@@ -75,7 +78,11 @@ writeFileSync('dist/styles/settings.css', readFileSync(new URL('../styles/settin
 writeFileSync('dist/app/styles/settings.css', readFileSync(new URL('../styles/settings.css', import.meta.url), 'utf8'));
 writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
-for (const path of ['account-model.mjs', 'account-storage.mjs', 'account-budget.mjs']) {
+for (const path of [
+  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs',
+  'recurring-foundation.mjs', 'recurring-scheduler.mjs',
+  'recurring-budget-preview.mjs', 'recurring-app-service.mjs'
+]) {
   const source = readFileSync(new URL('./' + path, import.meta.url));
   mkdirSync('dist/scripts', { recursive: true });
   mkdirSync('dist/app/scripts', { recursive: true });

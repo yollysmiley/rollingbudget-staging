@@ -75,10 +75,16 @@ The public homepage header labels are **Login** and **Sign Up** and remain group
 
 New-user browser fixtures begin with no accounts, and the desktop/mobile Accounts Manager must show the empty state. Historical CPM/USAA account fixtures are enabled only in explicitly marked legacy migration tests; no named account is created for a new user by default.
 
-## Phase 4A — Recurring rule foundation (staging only)
+## Shared recurring rules (PR #39)
 
-The additive `budget_recurring_rules` migration defines owner-scoped, RLS-protected recurring rule storage. The table migration was applied and owner-scoped RLS verified in the isolated staging Supabase project. Existing `budget_ui_years` documents and generated budget entries are not modified.
+The staging `budget_recurring_rules` table stores owner-scoped, RLS-protected recurring definitions. Both desktop and mobile managers use the same authenticated service. The legacy year-scoped rule definitions are not imported; existing historical budget transactions are retained. Obsolete migration helpers have been retired.
 
-`scripts/recurring-foundation.mjs` converts year-scoped legacy rules into dated definitions with deterministic migration identifiers and initial effective-dated versions. `scripts/recurring-storage.mjs` exposes an **explicit** idempotent import routine; it is deliberately not invoked by the app until the Phase 4B scheduling and historical-deduplication strategy is implemented. The import requires a verified complete year manifest. Rules without stable IDs or with repeated IDs across historical years are deliberately blocked pending explicit reconciliation; this prevents silent duplication, and the migration must not be enabled until those cases are resolved. Year-scoped rules remain the live source of truth in Phase 4A. No automatic cross-year generation, rule editing, or UI behavior changes are part of this phase.
+The scheduler uses stable occurrence IDs, original-month frequency anchoring and effective-dated rule changes. Cloud writes use conditional revisions for recurring rules, recurring application and ordinary budget saves; conflicting changes are rejected instead of overwriting newer cloud records. Local changes remain available for reconciliation after a rejected cloud save.
 
-Regression coverage: `tests/recurring-foundation.test.mjs`, plus the existing desktop/mobile recurring-rule and account tests. Staging schema and simulated authenticated cross-user RLS checks passed. Historical migration is not activated. Existing desktop/mobile behavior is unchanged.
+Potential duplicates across all categories are classified by normalized transaction names, including cases with changed amounts or accounts. Existing occurrence IDs are never recreated. Untagged possible duplicates are skipped by default, with a separate explicit review prompt for every ambiguous occurrence before the final Apply confirmation. No existing budget transaction is deleted or overwritten. Heuristic matching cannot guarantee detection of unrelated renamed transactions.
+
+Regression coverage includes recurring service and scheduler unit tests, preview classification and individual approval tests, cloud conflict tests, desktop/mobile browser acceptance, and clean-account fixtures. Required staging CI must pass before merge. Production is unchanged.
+
+## Final review hardening
+
+Recurring-rule deletion is guarded by an owner-scoped versions compare-and-swap, matching effective-dated edits. Duplicate review uses exact normalized names, distinctive leading names, or substantive shared terms with matching amount and account, avoiding prompts from generic shared words alone. Desktop and mobile browser regression tests cover unresolved cloud conflicts, reload persistence, and explicit cloud recovery. Unit tests cover repeated stale saves and concurrent rule edit/delete rejection. Browser doubles enforce owner identity; live Supabase/RLS integration validation remains necessary before production promotion.

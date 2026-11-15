@@ -16,7 +16,8 @@ test('staging build uses the redesigned UI and isolated staging project', () => 
 test('new UI preserves browser data and uses account-scoped local storage', () => {
   assert.ok(html.includes('function storageKey(year)'));
   assert.ok(html.includes('currentUser?.id || "guest"'));
-  assert.ok(!html.includes('localStorage.removeItem('));
+  assert.ok(!html.includes('localStorage.removeItem(storageKey('));
+  assert.ok(html.includes('localStorage.removeItem(conflictStorageKey(year))'));
   assert.ok(html.includes('localStorage.getItem(storageKey(yr))'));
   assert.ok(html.includes('localStorage.setItem(storageKey(year)'));
   assert.ok(html.includes('const year = activeYear;'));
@@ -25,15 +26,17 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
 
 test('new UI loads and saves its own cloud records without touching Release 2 data', () => {
   assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'));
-  assert.ok(html.includes('from("budget_ui_years").upsert('));
+  assert.ok(html.includes('from("budget_ui_years").insert('));
+  assert.ok(html.includes('.eq("updated_at", version).select("year")'));
+  assert.ok(!html.includes('from("budget_ui_years").upsert('));
   assert.ok(!html.includes('from("budget_data")'));
 });
 
 test('user-entered strings are HTML-escaped before entering markup', () => {
   assert.ok(html.includes('function esc(str)'));
   assert.ok(html.includes('.replace(/</g, "&lt;")'));
-  assert.ok(html.includes('esc(r.name)'));
-  assert.ok(html.includes('esc(r.due'));
+  assert.ok(html.includes('esc(rule.name)'));
+  assert.ok(html.includes('esc(rule.due'));
 });
 
 test('staging migration creates a separate RLS-protected table for the new UI', () => {

@@ -152,6 +152,8 @@ test('mobile recurring manager uses its distinct card layout and supports rule c
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
   await expect(page.locator('#recurringManagerPage')).toBeVisible();
   await expect(page.locator('#recurringMobileView')).toBeVisible();
+  await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('0 potential recurring entries (preview only, not saved)');
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeDisabled();
   await expect(page.locator('#recurringDesktopView')).toBeHidden();
   const form=page.locator('[data-recurring-form="mobile"]');
   await form.locator('[data-rec-field="name"]').fill('Annual Insurance');
@@ -245,6 +247,12 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await expect(page.locator('#autoRollToggle')).not.toBeChecked();
   await page.reload();
   await page.locator('#mobileMenuButton').click();
+  // The sidebar animates in from off-screen; a visible element may still be outside the viewport.
+  await expect(page.locator('#mobileSidebar')).toHaveAttribute('aria-hidden', 'false');
+  await expect.poll(async () => {
+    const box = await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').boundingBox();
+    return Boolean(box && box.x >= 0 && box.x + box.width <= page.viewportSize().width);
+  }).toBe(true);
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
@@ -259,4 +267,148 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await expect(page.locator('#autoRollToggle')).toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#mobileAutoRollToggle')).toBeChecked();
+});
+
+test('recurring preview status is shared but displayed in distinct mobile and desktop managers', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileRecurringPreviewStatus')).toContainText('0 potential recurring entries (preview only, not saved)');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('#recurringDesktopView')).toBeVisible();
+  await expect(page.locator('#desktopRecurringPreviewStatus')).toContainText('0 potential recurring entries (preview only, not saved)');
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeDisabled();
+  await expect(page.locator('#recurringMobileView')).toBeHidden();
+});
+
+test('mobile apply action saves verified entries once and desktop sees the same budget', async ({ page }) => {
+  await page.evaluate(() => {
+    const verifiedRule = {
+      id: 'verified-demo', name: 'Verified expense', category: 'fixed', amount: 125,
+      due: '5th', account_id: null, frequency: 'monthly', start_date: '2026-01-01',
+      end_date: null, active: true, source_year: null, versions: [{
+        effectiveFrom: '2026-01-01', name: 'Verified expense', amount: 125,
+        due: '5th', accountId: null, frequency: 'monthly'
+      }]
+    };
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([verifiedRule]));
+  });
+  await page.reload();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#mobileApplyRecurringPreview').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeDisabled();
+  const snapshot = await page.evaluate(() => ({
+    entries: db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'verified-demo'),
+    year: activeYear
+  }));
+  expect(snapshot.entries).toHaveLength(1);
+  expect(snapshot.entries[0].amount).toBe(125);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('#desktopApplyRecurringPreview')).toBeDisabled();
+  await page.reload();
+  const saved = await page.evaluate(() =>
+    db['2026'].months[0].fixed.filter(entry => entry.recurringRuleId === 'verified-demo'));
+  expect(saved).toHaveLength(1);
+  expect(saved[0].occurrenceId).toBe(JSON.stringify(['verified-demo', '2026-01-01']));
+});
+
+test('recurring application rejects failed cloud commits without changing budget entries', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_budget_cloud_failure', '1');
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      id: 'local-only', name: 'Local-only expense', category: 'fixed', amount: 20,
+      due: '1', account_id: null, frequency: 'monthly', start_date: '2026-01-01',
+      end_date: null, active: true, source_year: null,
+      versions: [{ effectiveFrom: '2026-01-01', name: 'Local-only expense',
+        amount: 20, due: '1', accountId: null, frequency: 'monthly' }]
+    }]));
+  });
+  await page.reload();
+  const dialogs = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#mobileApplyRecurringPreview').click();
+  await expect.poll(() => dialogs.some(message => message.includes('cloud budget may have changed'))).toBeTruthy();
+  const entries = await page.evaluate(() =>
+    db[activeYear].months[0].fixed.filter(entry => entry.recurringRuleId === 'local-only'));
+  expect(entries).toHaveLength(0);
+});
+
+test('mobile duplicate review skips ambiguous historical entries when user declines', async ({ page }) => {
+  await page.evaluate(async () => {
+    db[activeYear].months[0].variable.push({ name: 'Rent payment', amount: 500, accountId: null });
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      id: 'rent-review', name: 'Rent', category: 'fixed', amount: 500,
+      due: '1st', account_id: null, frequency: 'monthly',
+      start_date: '2026-01-01', end_date: null, active: true, source_year: null,
+      versions: [{ effectiveFrom: '2026-01-01', name: 'Rent', amount: 500,
+        due: '1st', accountId: null, frequency: 'monthly' }]
+    }]));
+    await saveDB();
+  });
+  await page.reload();
+  const dialogs = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.message());
+    if (dialog.message().includes('Possible duplicate for')) await dialog.dismiss();
+    else await dialog.accept();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
+  await page.locator('#mobileApplyRecurringPreview').click();
+  await expect.poll(() => dialogs.some(message => message.includes('Possible duplicate for'))).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => db[activeYear].months[0].fixed.some(x => x.name === 'Rent'))).toBeFalsy();
+  const entries = await page.evaluate(() => db[activeYear].months[0].variable.filter(x => x.name === 'Rent payment'));
+  expect(entries).toHaveLength(1);
+});
+
+test('mobile preserves an unresolved cloud conflict across reload and offers explicit recovery', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const year = activeYear, key = currentUser.id + ':' + year;
+    const cloud = structuredClone(db[year]);
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year: Number(year), budget_data: cloud, updated_at: '2026-11-15T12:00:00.000Z' }
+    }));
+    cloudBudgetVersions.set(key, '2026-11-15T11:00:00.000Z');
+    db[year].months[0].fixed.push({ name: 'Local unsynced entry', amount: 35 });
+    const status = await saveDB();
+    return { status, marker: localStorage.getItem(conflictStorageKey(year)) };
+  });
+  expect(result).toEqual({ status: 'local-saved', marker: '1' });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
+  await expect(page.locator('#cloudSaveStatus button')).toHaveCount(2);
+  expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
+    entry => entry.name === 'Local unsynced entry'))).toBe(true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
+    entry => entry.name === 'Local unsynced entry'))).toBe(false);
+  expect(await page.evaluate(() => Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')))).toBe(true);
+});
+
+test('browser cloud fixture rejects another owner\'s conditional budget update', async ({ page }) => {
+  const outcome = await page.evaluate(async () => {
+    const year = Number(activeYear);
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify({
+      [year]: { year, budget_data: structuredClone(db[activeYear]), updated_at: '2026-11-15T00:00:00.000Z' }
+    }));
+    const { data } = await supabaseClient.from('budget_ui_years')
+      .update({ updated_at: '2026-11-15T01:00:00.000Z' })
+      .eq('user_id', 'another-owner').eq('year', year)
+      .eq('updated_at', '2026-11-15T00:00:00.000Z').select('year');
+    return { written: data.length, after: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[year].updated_at };
+  });
+  expect(outcome).toEqual({ written: 0, after: '2026-11-15T00:00:00.000Z' });
 });

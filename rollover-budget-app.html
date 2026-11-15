@@ -941,7 +941,7 @@
 <div class="recurring-manager-shell">
 <div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" class="recurring-back-button" onclick="closeRecurringModal()">← Back to Overview</button></div>
 <div id="recurringDesktopView" class="recurring-desktop-view">
-<section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
+<section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span><span id="desktopRecurringPreviewStatus" role="status"></span><button type="button" id="desktopApplyRecurringPreview" onclick="applyRecurringPreview()" disabled>Apply scheduled entries</button></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
@@ -951,7 +951,7 @@
 <label>Start month<select data-rec-field="startMonth"></select></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><div class="recurring-form-actions"><button class="primary" type="button" onclick="addRecurringRule('desktop')">Add rule</button></div></section>
 </div>
-<div id="recurringMobileView" class="recurring-mobile-view"><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
+<div id="recurringMobileView" class="recurring-mobile-view"><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p><p id="mobileRecurringPreviewStatus" role="status"></p><button type="button" id="mobileApplyRecurringPreview" onclick="applyRecurringPreview()" disabled>Apply scheduled entries</button></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
 <label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -1000,6 +1000,10 @@ let db = {};
 let budgetAccounts = [];
 let accountService = null;
 let accountBudgetModule = null;
+let recurringAppService = null;
+let loadedRecurringPreview = { rules: [], held: 0 };
+let recurringPreviewError = '';
+let recurringApplyBusy = false;
 let accountsBusy = false;
 let accountsMessage = '';
 function accountStatus(message) {
@@ -1208,6 +1212,8 @@ function chooseNewestBudget(localRecord, cloudRecord) {
   return (localRecord.updatedAt ?? 0) > (cloudRecord.updatedAt ?? 0) ? localRecord : cloudRecord;
 }
 async function loadAllYears() {
+  cloudBudgetVersions.clear();
+  cloudBudgetConflicts.clear();
   const all = {};
   const localRecords = {};
   for (const yr of ["2026", "2027"]) {
@@ -1227,6 +1233,7 @@ async function loadAllYears() {
       for (const row of data || []) {
         const year = String(row.year);
         if (!validYearData(row.budget_data)) continue;
+        cloudBudgetVersions.set(currentUser.id + ':' + year, row.updated_at);
         const cloudTime = row.updated_at ? Date.parse(row.updated_at) : NaN;
         const cloudRecord = { data: row.budget_data, updatedAt: Number.isFinite(cloudTime) ? cloudTime : null, legacy: false };
         const localRecord = localRecords[year];
@@ -1239,7 +1246,13 @@ async function loadAllYears() {
             }
           } catch (backupError) { console.warn("Could not create legacy local budget backup; cloud data remains unchanged.", backupError); }
         }
-        const newest = chooseNewestBudget(localRecord, cloudRecord);
+        const conflictKey = storageKey(year) + '_cloud_conflict';
+        const pendingConflict = localStorage.getItem(conflictKey) === '1';
+        const newest = pendingConflict && localRecord ? localRecord : chooseNewestBudget(localRecord, cloudRecord);
+        if (pendingConflict) {
+          cloudBudgetConflicts.add(currentUser.id + ':' + year);
+          showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
+        }
         all[year] = newest.data;
         // Normalize the chosen copy to the timestamped envelope so future loads compare versions.
         if (newest === cloudRecord) {
@@ -1250,8 +1263,99 @@ async function loadAllYears() {
     } catch (error) { console.error("Cloud load error; local data was retained:", error); }
   }
   db = all;
+  if (currentUser && localStorage.getItem(conflictStorageKey(activeYear)) === '1') {
+    cloudBudgetConflicts.add(currentUser.id + ':' + activeYear);
+    showCloudSaveStatus('Unsynced local changes require reconciliation before cloud saving.');
+  }
+  await refreshRecurringPreview();
+}
+async function refreshRecurringPreview() {
+  loadedRecurringPreview = { rules: [], held: 0 };
+  recurringPreviewError = '';
+  if (!currentUser || !supabaseClient) return;
+  try {
+    recurringAppService = await import('./scripts/recurring-app-service.mjs');
+    loadedRecurringPreview = await recurringAppService.loadRecurringPreviewRules(supabaseClient, currentUser.id);
+  } catch (error) {
+    recurringPreviewError = 'Recurring preview unavailable';
+    console.warn('Recurring preview was not loaded; budgets remain unchanged:', error);
+  }
+}
+function recurringPreviewResult(year) {
+  if (recurringPreviewError || !recurringAppService || !db[year]) return null;
+  return recurringAppService.previewLoadedRecurringYear(db[year], year, loadedRecurringPreview);
+}
+function recurringPreviewStatus(year) {
+  if (recurringPreviewError) return recurringPreviewError;
+  if (!recurringAppService || !db[year]) return 'Recurring preview unavailable';
+  try {
+    const result = recurringPreviewResult(year);
+    return result.added + ' potential recurring entries (preview only, not saved)' +
+      (result.ambiguous?.length ? '; ' + result.ambiguous.length + ' possible duplicate(s) require review' : '') +
+      (result.held ? '; ' + result.held + ' historical rules excluded' : '');
+  } catch (error) {
+    console.warn('Recurring preview validation failed:', error);
+    return 'Recurring preview unavailable';
+  }
 }
 const cloudSaveQueues = new Map();
+const cloudBudgetVersions = new Map();
+const cloudBudgetConflicts = new Set();
+function conflictStorageKey(year) { return storageKey(year) + '_cloud_conflict'; }
+function markCloudConflict(key, year) {
+  cloudBudgetConflicts.add(key);
+  localStorage.setItem(conflictStorageKey(year), '1');
+}
+function clearCloudConflict(key, year) {
+  cloudBudgetConflicts.delete(key);
+  localStorage.removeItem(conflictStorageKey(year));
+}
+async function reconcileCloudBudget(useLocal) {
+  const year = activeYear, owner = currentUser?.id;
+  if (!owner || !supabaseClient || localStorage.getItem(conflictStorageKey(year)) !== '1') return;
+  const key = owner + ':' + year;
+  if (!confirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
+  try {
+    await queueCloudSave(key, async () => {
+      const { data, error } = await supabaseClient.from('budget_ui_years')
+        .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
+      if (error) throw error;
+      if (!Array.isArray(data) || data.length > 1) throw new Error('Cloud budget unavailable');
+      const cloud = data[0] || null;
+      const local = JSON.parse(localStorage.getItem(storageKey(year)) || 'null');
+      if (local?.data) localStorage.setItem(storageKey(year) + '_conflict_backup', JSON.stringify(local));
+      if (useLocal) {
+        if (!local?.data) throw new Error('Local budget unavailable');
+        const nextTimestamp = new Date(Math.max(Date.now(), cloud ? Date.parse(cloud.updated_at) + 1 : 0)).toISOString();
+        if (cloud) {
+          const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
+            .update({ budget_data: local.data, updated_at: nextTimestamp })
+            .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
+          if (writeError) throw writeError;
+          if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
+        } else {
+          const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
+            user_id: owner, year: Number(year), budget_data: local.data, updated_at: nextTimestamp
+          });
+          if (insertError) throw insertError;
+        }
+        cloudBudgetVersions.set(key, nextTimestamp);
+        db[year] = local.data;
+      } else {
+        if (!cloud) throw new Error('No cloud copy exists; keep local changes instead');
+        db[year] = cloud.budget_data;
+        cloudBudgetVersions.set(key, cloud.updated_at);
+        localStorage.setItem(storageKey(year), JSON.stringify({ data: cloud.budget_data, updatedAt: cloud.updated_at }));
+      }
+      clearCloudConflict(key, year);
+    });
+    showCloudSaveStatus('');
+    render();
+  } catch (error) {
+    console.error('Cloud reconciliation failed:', error);
+    showCloudSaveStatus('Reconciliation failed; local changes are preserved. Retry when connected.');
+  }
+}
 function showCloudSaveStatus(message) {
   let status = document.getElementById("cloudSaveStatus");
   if (!status) {
@@ -1262,8 +1366,18 @@ function showCloudSaveStatus(message) {
     status.style.cssText = "padding:10px 20px;background:var(--amber-bg);color:#78440a;font-weight:600;text-align:center";
     document.querySelector("header").insertAdjacentElement("afterend", status);
   }
-  status.textContent = message;
+  status.replaceChildren(document.createTextNode(message));
   status.hidden = !message;
+  const pending = currentUser && localStorage.getItem(conflictStorageKey(activeYear)) === '1';
+  if (pending) {
+    const localButton = document.createElement('button');
+    localButton.textContent = 'Keep local changes';
+    localButton.onclick = () => reconcileCloudBudget(true);
+    const cloudButton = document.createElement('button');
+    cloudButton.textContent = 'Use cloud version';
+    cloudButton.onclick = () => reconcileCloudBudget(false);
+    status.append(localButton, cloudButton);
+  }
 }
 function queueCloudSave(key, operation) {
   const previous = cloudSaveQueues.get(key) || Promise.resolve();
@@ -1273,6 +1387,73 @@ function queueCloudSave(key, operation) {
     if (cloudSaveQueues.get(key) === pending) cloudSaveQueues.delete(key);
   }).catch(() => {});
   return pending;
+}
+async function applyRecurringPreview() {
+  if (recurringApplyBusy || !currentUser || !supabaseClient || recurringPreviewError) return;
+  const owner = currentUser.id;
+  const year = activeYear;
+  recurringApplyBusy = true;
+  try {
+    // Refresh owner-scoped definitions at commit time; never rely only on
+    // a preview cached during sign-in.
+    const loaded = await recurringAppService.loadRecurringPreviewRules(supabaseClient, owner);
+    if (currentUser?.id !== owner || activeYear !== year) return;
+    const initial = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
+    const approvedOccurrenceIds = [];
+    for (const item of initial.ambiguous) {
+      if (currentUser?.id !== owner || activeYear !== year) return;
+      const matches = item.matches.map(match =>
+        match.category + ': ' + match.name + ' (' + match.amount +
+        ', account: ' + (match.accountId || 'none') + ')').join('\n');
+      if (confirm('Possible duplicate for ' + item.month + ': ' + item.name +
+        ' (' + item.amount + ', account: ' + (item.accountId || 'none') +
+        ').\nExisting entries:\n' + matches +
+        '\n\nOK: include this scheduled entry. Cancel: skip this entry.')) {
+        approvedOccurrenceIds.push(item.occurrenceId);
+      }
+    }
+    const options = { approvedOccurrenceIds };
+    const result = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded, options);
+    if (!result.added) {
+      loadedRecurringPreview = loaded;
+      return;
+    }
+    const accepted = confirm('Add ' + result.added + ' scheduled entries to ' + year +
+      '? Existing entries will not be changed. ' + initial.ambiguous.length +
+      ' potential duplicate(s) were reviewed; ' + approvedOccurrenceIds.length + ' approved for addition.');
+    if (!accepted || currentUser?.id !== owner || activeYear !== year) return;
+    // Recalculate immediately before applying to avoid duplication from
+    // user edits while the confirmation dialogue was open.
+    const current = await recurringAppService.commitRecurringYear(
+      supabaseClient, owner, year,
+      cloudDocument => {
+        if (JSON.stringify(cloudDocument) !== JSON.stringify(db[year])) {
+          throw new Error('Local budget differs from the cloud version; sync or reload before applying');
+        }
+        return recurringAppService.previewLoadedRecurringYear(cloudDocument, year, loaded, options);
+      }
+    );
+    if (!current.saved) return;
+    if (currentUser?.id !== owner || activeYear !== year) return;
+    db[year] = current.document;
+    cloudBudgetVersions.set(owner + ':' + year, current.updatedAt);
+    try {
+      localStorage.setItem(storageKey(year), JSON.stringify({
+        data: current.document, updatedAt: current.updatedAt
+      }));
+    } catch (storageError) {
+      console.warn('Cloud recurring changes saved, but local cache update failed:', storageError);
+    }
+    loadedRecurringPreview = loaded;
+    render();
+    if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
+  } catch (error) {
+    console.error('Recurring entries were not applied:', error);
+    alert('Recurring entries were not applied. The cloud budget may have changed or the save failed. Reload and retry.');
+  } finally {
+    recurringApplyBusy = false;
+    if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
+  }
 }
 async function saveDB() {
   const year = activeYear;
@@ -1284,25 +1465,43 @@ async function saveDB() {
   } catch (error) {
     console.error("Local save error:", error);
     alert("Could not save this budget in browser storage. Your changes may not persist.");
-    return;
+    return 'not-saved';
   }
-  if (!supabaseClient || !userId) return;
+  if (!supabaseClient || !userId) return 'local-saved';
   const client = supabaseClient;
   const key = userId + ":" + year;
   try {
     await queueCloudSave(key, async () => {
-      const { error } = await client.from("budget_ui_years").upsert({
-        user_id: userId,
-        year: Number(year),
-        budget_data: snapshot,
-        updated_at: updatedAt
-      }, { onConflict: "user_id,year" });
-      if (error) throw error;
+      if (cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year)) === '1') {
+        throw new Error('Budget has unsynced changes; reconcile before saving');
+      }
+      const version = cloudBudgetVersions.get(key);
+      const nextTimestamp = new Date(Math.max(Date.parse(updatedAt), version ? Date.parse(version) + 1 : 0)).toISOString();
+      if (version) {
+        const { data, error } = await client.from("budget_ui_years")
+          .update({ budget_data: snapshot, updated_at: nextTimestamp })
+          .eq("user_id", userId).eq("year", Number(year))
+          .eq("updated_at", version).select("year");
+        if (error) throw error;
+        if (!Array.isArray(data) || data.length !== 1) {
+          throw new Error("Budget changed on another device; reload before saving");
+        }
+      } else {
+        // Unique (user_id, year) prevents a concurrent first save from replacing a row.
+        const { error } = await client.from("budget_ui_years").insert({
+          user_id: userId, year: Number(year), budget_data: snapshot, updated_at: nextTimestamp
+        });
+        if (error) throw error;
+      }
+      cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) showCloudSaveStatus("");
+    return 'cloud-saved';
   } catch (error) {
     console.error("Cloud sync error; local copy was retained:", error);
-    if (currentUser?.id === userId) showCloudSaveStatus("Cloud sync failed. Changes are saved on this device only. Please check your connection.");
+    try { markCloudConflict(key, year); } catch (storageError) { console.error("Could not persist cloud conflict marker:", storageError); }
+    if (currentUser?.id === userId) showCloudSaveStatus("Cloud save rejected or unavailable. Local changes were preserved; choose a reconciliation option.");
+    return 'local-saved';
   }
 }
 function switchYear(yr) {
@@ -1797,14 +1996,37 @@ function openRecurringModal(){
 }
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
 function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
-function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.frequency]?.label||"Monthly (legacy)";}
+function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.displayFrequency || rule.frequency]?.label||"Monthly (legacy)";}
 function renderRulesList(){
-  const rules=db[activeYear].recurringRules||[],count=`${rules.length} rule${rules.length===1?"":"s"}`;
-  document.getElementById("desktopRuleCount").textContent=count;document.getElementById("mobileRuleCount").textContent=count;
-  if(!rules.length){document.getElementById("desktopRulesList").innerHTML='<tr><td colspan="7">No recurring rules yet. Add your first rule below.</td></tr>';document.getElementById("mobileRulesList").innerHTML='<p>No recurring rules yet. Add your first rule below.</p>';return;}
-  const startOf=rule=>Number.isInteger(rule.startMonth)?rule.startMonth:(Number.isInteger(rule.start)?rule.start:0);
-  document.getElementById("desktopRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<tr><td><strong>${esc(r.name)}</strong><div>${esc(r.due||"Due day not set")}</div></td><td>${esc(String(r.cat||"").toUpperCase())}</td><td>${fmt(r.amount)}</td><td>${esc(recurringRuleFrequency(r))}</td><td>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</td><td><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable":"Enable"}</button></td></tr>`;}).join("");
-  document.getElementById("mobileRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(r.name)}</h4><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(String(r.cat||"").toUpperCase())}</strong></div><div>Amount<strong>${fmt(r.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(r))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable rule":"Enable rule"}</button></article>`;}).join("");
+  const rules = loadedRecurringPreview.rules || [];
+  const count = rules.length + ' rule' + (rules.length === 1 ? '' : 's');
+  document.getElementById('desktopRuleCount').textContent = count;
+  document.getElementById('mobileRuleCount').textContent = count;
+  const status = recurringPreviewStatus(activeYear);
+  let canApply = false;
+  try { canApply = !recurringApplyBusy && !recurringPreviewError && (recurringPreviewResult(activeYear)?.added ?? 0) > 0; }
+  catch (error) { console.warn('Recurring preview validation failed:', error); }
+  for (const [statusId, buttonId] of [
+    ['desktopRecurringPreviewStatus', 'desktopApplyRecurringPreview'],
+    ['mobileRecurringPreviewStatus', 'mobileApplyRecurringPreview']
+  ]) {
+    document.getElementById(statusId).textContent = status;
+    document.getElementById(buttonId).disabled = !canApply;
+  }
+  if (!rules.length) {
+    document.getElementById('desktopRulesList').innerHTML = '<tr><td colspan="7">No recurring rules yet. Add your first rule below.</td></tr>';
+    document.getElementById('mobileRulesList').innerHTML = '<p>No recurring rules yet. Add your first rule below.</p>';
+    return;
+  }
+  const startOf = rule => Number(rule.startDate.slice(5,7)) - 1;
+  document.getElementById('desktopRulesList').innerHTML = rules.map((rule, i) => {
+    const on = rule.displayActive !== false;
+    return `<tr><td><strong>${esc(rule.name)}</strong><div>${esc(rule.due || 'Due day not set')}</div></td><td>${esc(rule.category.toUpperCase())}</td><td>${fmt(rule.displayAmount ?? rule.amount)}</td><td>${esc(recurringRuleFrequency(rule))}</td><td>${esc(db[activeYear].months[startOf(rule)]?.name || '—')}</td><td><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable' : 'Enable'}</button><button type="button" onclick="editRecurringRule(${i})">Edit</button><button type="button" onclick="deleteRecurringRule(${i})">Delete</button></td></tr>`;
+  }).join('');
+  document.getElementById('mobileRulesList').innerHTML = rules.map((rule, i) => {
+    const on = rule.displayActive !== false;
+    return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(rule.name)}</h4><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(rule.category.toUpperCase())}</strong></div><div>Amount<strong>${fmt(rule.displayAmount ?? rule.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(rule))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(rule)]?.name || '—')}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable rule' : 'Enable rule'}</button><button type="button" onclick="editRecurringRule(${i})">Edit</button><button type="button" onclick="deleteRecurringRule(${i})">Delete rule</button></article>`;
+  }).join('');
 }
 function recurringRuleItem(r){
   const accountId = r.accountId || r.acct || null;
@@ -1815,23 +2037,75 @@ function recurringRuleItem(r){
   return null;
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
-async function addRecurringRule(view){
-  const form=document.querySelector(`[data-recurring-form="${view}"]`);if(!form)return;const get=f=>form.querySelector(`[data-rec-field="${f}"]`).value;
-  const cat=get("category"),name=get("name").trim(),amount=Number.parseFloat(get("amount")),due=get("due").trim(),acct=get("account"),startMonth=Number.parseInt(get("startMonth"),10),frequency=get("frequency");
-  if(!name||!Number.isFinite(amount)||amount<0||!Number.isInteger(startMonth)||!RECURRING_FREQUENCIES[frequency])return;
-  if(!db[activeYear].recurringRules)db[activeYear].recurringRules=[];
-  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,accountId:acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
-  const item=recurringRuleItem(rule);for(const i of recurringRuleTargetMonths(rule)){const m=db[activeYear].months[i],list=cat==="income"?m.income:cat==="fixed"||cat==="variable"?m[cat]:cat==="loan"?m.loans:m.creditCards;if(item&&list)list.push({...item});}
-  form.querySelectorAll("input").forEach(input=>input.value="");form.querySelector("[data-rec-field='startMonth']").value="0";form.querySelector("[data-rec-field='frequency']").value="monthly";
-  await saveDB();render();renderRulesList();
+async function addRecurringRule(view) {
+  const form = document.querySelector(`[data-recurring-form="${view}"]`);
+  if (!form || !currentUser || !supabaseClient || !recurringAppService) return;
+  const get = name => form.querySelector(`[data-rec-field="${name}"]`).value;
+  const name = get('name').trim(), amount = Number(get('amount'));
+  const startMonth = Number(get('startMonth')), frequency = get('frequency');
+  if (!name || !Number.isFinite(amount) || amount < 0 || !Number.isInteger(startMonth) ||
+      startMonth < 0 || startMonth > 11 || !RECURRING_FREQUENCIES[frequency]) return;
+  try {
+    await recurringAppService.createRecurringRule(supabaseClient, currentUser.id, {
+      id: crypto.randomUUID(), name, amount, category: get('category'), due: get('due').trim(),
+      accountId: get('account') || null, frequency, active: true,
+      startDate: activeYear + '-' + String(startMonth + 1).padStart(2, '0') + '-01'
+    });
+    await refreshRecurringPreview();
+    form.querySelectorAll('input').forEach(input => input.value = '');
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not create recurring rule:', error);
+    alert('Recurring rule could not be saved. Please retry.');
+  }
 }
-async function toggleRecurringRule(index){
-  const r=db[activeYear].recurringRules?.[index];if(!r)return;r.active=r.active===false;
-  if(!r.active&&r.id){for(const m of db[activeYear].months){for(const list of [m.income,m.fixed,m.variable,m.loans,m.creditCards])for(let i=list.length-1;i>=0;i--)if(list[i].recurringRuleId===r.id)list.splice(i,1);}}
-  else if(r.active&&r.frequency){const item=recurringRuleItem(r);for(const i of recurringRuleTargetMonths(r)){const m=db[activeYear].months[i],list=r.cat==="income"?m.income:r.cat==="fixed"||r.cat==="variable"?m[r.cat]:r.cat==="loan"?m.loans:m.creditCards;if(item&&list&&!list.some(x=>x.recurringRuleId===r.id))list.push({...item});}}
-  await saveDB();render();renderRulesList();
+async function editRecurringRule(index) {
+  const rule = loadedRecurringPreview.rules[index];
+  if (!rule || !currentUser || !recurringAppService) return;
+  const amountInput = prompt('New recurring amount (future months only):', String(rule.displayAmount ?? rule.amount));
+  if (amountInput === null) return;
+  const amount = Number(amountInput);
+  if (!Number.isFinite(amount) || amount < 0) { alert('Enter a valid non-negative amount.'); return; }
+  const frequency = prompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually', rule.displayFrequency || rule.frequency);
+  if (frequency === null) return;
+  if (!RECURRING_FREQUENCIES[frequency]) { alert('Select a supported frequency.'); return; }
+  const effectiveFrom = [new Date().toISOString().slice(0, 7) + '-01', rule.startDate].sort().at(-1);
+  try {
+    await recurringAppService.editRecurringRule(supabaseClient, currentUser.id, rule.id,
+      { amount, frequency }, effectiveFrom);
+    await refreshRecurringPreview();
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not edit recurring rule:', error);
+    alert('Recurring rule could not be edited.');
+  }
 }
-async function deleteRecurringRule(index){const rules=db[activeYear].recurringRules||[];if(!rules[index])return;rules.splice(index,1);await saveDB();render();renderRulesList();}
+async function toggleRecurringRule(index) {
+  const rule = loadedRecurringPreview.rules[index];
+  if (!rule || !currentUser || !recurringAppService) return;
+  try {
+    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.displayActive,
+      [new Date().toISOString().slice(0, 7) + '-01', rule.startDate].sort().at(-1));
+    await refreshRecurringPreview();
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not update recurring rule:', error);
+    alert('Recurring rule could not be updated.');
+  }
+}
+async function deleteRecurringRule(index) {
+  const rule = loadedRecurringPreview.rules[index];
+  if (!rule || !currentUser || !recurringAppService) return;
+  if (!confirm('Delete this recurring rule? Existing budget transactions will remain unchanged.')) return;
+  try {
+    await recurringAppService.removeRecurringRule(supabaseClient, currentUser.id, rule.id);
+    await refreshRecurringPreview();
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not delete recurring rule:', error);
+    alert('Recurring rule could not be deleted.');
+  }
+}
 
 function toggleMobileSidebar(open) {
   const sidebar = document.getElementById("mobileSidebar");

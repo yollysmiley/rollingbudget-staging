@@ -18,8 +18,106 @@ export async function mockSignedInBudget(page) {
           from(table) {
             const chain = {
               select() { return chain; },
-              eq() { return Promise.resolve({ data: table === 'budget_accounts' && sessionStorage.getItem('__mock_legacy_accounts') === '1' ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [], error: null }); },
-              upsert() { return Promise.resolve({ data: [], error: null }); }
+              eq(field, value) {
+                if (table === 'budget_ui_years') {
+                  // Seed only from the current isolated test account's in-memory budget.
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
+                  if (field === 'user_id') return {
+                    eq(yearField, year) {
+                      const key = String(year);
+                      if (!rows[key] && typeof db !== 'undefined' && db[key]) {
+                        rows[key] = { year: Number(year), budget_data: structuredClone(db[key]), updated_at: '2026-01-01T00:00:00.000Z' };
+                        sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+                      }
+                      return Promise.resolve({ data: rows[key] ? [rows[key]] : [], error: null });
+                    }
+                  };
+                  return Promise.resolve({ data: Object.values(rows), error: null });
+                }
+
+                const accountRows = table === 'budget_accounts' && sessionStorage.getItem('__mock_legacy_accounts') === '1'
+                  ? [{ id: 'cpm', name: 'CPM Federal', included: true }, { id: 'usaa', name: 'USAA', included: true }] : [];
+                const recurringRows = table === 'budget_recurring_rules'
+                  ? JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]') : [];
+                if (table === 'budget_recurring_rules') {
+                  const result = Promise.resolve({ data: recurringRows, error: null });
+                  result.eq = (_field, id) => Promise.resolve({ data: recurringRows.filter(row => row.id === id), error: null });
+                  return result;
+                }
+                return Promise.resolve({ data: accountRows, error: null });
+              },
+              insert(row) {
+                if (table === 'budget_ui_years') {
+                  if (row.user_id !== user.id) return Promise.resolve({ error: { message: 'forbidden' } });
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
+                  if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ error: { message: 'offline' } });
+                  if (rows[String(row.year)]) return Promise.resolve({ error: { message: 'duplicate key' } });
+                  rows[String(row.year)] = { year: row.year, budget_data: structuredClone(row.budget_data), updated_at: row.updated_at };
+                  sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+                }
+                if (table === 'budget_recurring_rules') {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                  rows.push(row);
+                  sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows));
+                }
+                return Promise.resolve({ data: [row], error: null });
+              },
+              update(changes) {
+                if (table === 'budget_ui_years') {
+                  const filters = {};
+                  const query = {
+                    eq(field, value) { filters[field] = value; return query; },
+                    select() {
+                      if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ data: null, error: { message: 'offline' } });
+                      const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
+                      const key = String(filters.year), row = rows[key];
+                      if (filters.user_id !== user.id || !row || row.updated_at !== filters.updated_at) return Promise.resolve({ data: [], error: null });
+                      rows[key] = { ...row, ...changes };
+                      sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+                      return Promise.resolve({ data: [{ year: Number(key) }], error: null });
+                    }
+                  };
+                  return query;
+                }
+                const filters = {};
+                const query = {
+                  eq(field, value) { filters[field] = value; return query; },
+                  select() {
+                    const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                    const matching = rows.filter(row => row.user_id === filters.user_id &&
+                      row.user_id === user.id && row.id === filters.id &&
+                      JSON.stringify(row.versions) === filters.versions);
+                    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(rows.map(row =>
+                      matching.includes(row) ? { ...row, ...changes } : row)));
+                    return Promise.resolve({ data: matching.map(row => ({ id: row.id })), error: null });
+                  }
+                };
+                return query;
+              },
+              delete() {
+                const filters = {};
+                const chain = {
+                  eq(field, value) { filters[field] = value; return chain; },
+                  select() {
+                    const rows = JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]');
+                    const matched = rows.filter(row => row.user_id === user.id &&
+                      row.user_id === filters.user_id && row.id === filters.id &&
+                      JSON.stringify(row.versions) === filters.versions);
+                    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify(
+                      rows.filter(row => !matched.includes(row))));
+                    return Promise.resolve({ data: matched.map(row => ({ id: row.id })), error: null });
+                  }
+                };
+                return chain;
+              },
+              upsert(row) {
+                if (table === 'budget_ui_years' && sessionStorage.getItem('__mock_budget_cloud_failure') !== '1') {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
+                  rows[String(row.year)] = { year: row.year, budget_data: structuredClone(row.budget_data), updated_at: row.updated_at };
+                  sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+                }
+                return Promise.resolve({ data: [], error: table === 'budget_ui_years' && sessionStorage.getItem('__mock_budget_cloud_failure') === '1' ? { message: 'offline' } : null });
+              }
             };
             return chain;
           }
