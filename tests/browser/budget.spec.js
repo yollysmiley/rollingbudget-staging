@@ -140,7 +140,7 @@ test('desktop recurring rule dates are saved and automatically backfilled withou
   await form.locator('[data-rec-field="startDate"]').fill('2026-01-10');
   await form.locator('[data-rec-field="endDate"]').fill('2026-12-31');
   await form.locator('[data-rec-field="frequency"]').selectOption('quarterly');
-  await form.getByRole('button', { name: 'Add rule' }).click();
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
   await expect(page.locator('#desktopRulesList')).toContainText('Quarterly Internet');
   await expect(page.locator('#desktopRulesList')).toContainText('2026-01-10');
   await expect.poll(() => page.evaluate(() => db['2026'].months.map(m =>
