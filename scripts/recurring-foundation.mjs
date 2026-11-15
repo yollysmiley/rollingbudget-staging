@@ -5,7 +5,7 @@ export const FREQUENCY_MONTHS = Object.freeze({
   'every-6-months': 6, annually: 12
 });
 const CATEGORIES = new Set(['income', 'fixed', 'variable', 'loan', 'cc']);
-const DATE_PATTERN = /^\\d{4}-(0[1-9]|1[0-2])-01$/;
+const DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-01$/;
 
 function validMonthDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
@@ -42,7 +42,7 @@ export function collectLegacyRecurringRules(years) {
   const rules = [];
   const idsByYear = new Set();
   for (const [year, document] of Object.entries(years ?? {}).sort(([a], [b]) => Number(a) - Number(b))) {
-    if (!/^\\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) throw new Error('Invalid budget year');
+    if (!/^\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) throw new Error('Invalid budget year');
     if (!Array.isArray(document?.recurringRules)) throw new Error('Missing recurring rules for year ' + year);
     for (const legacy of document.recurringRules) {
       const sourceId = typeof legacy?.id === 'string' ? legacy.id.trim() : '';
