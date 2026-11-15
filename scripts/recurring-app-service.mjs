@@ -29,7 +29,9 @@ export async function loadRecurringPreviewRules(client, userId) {
     const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
     const currentVersion = rule.versions.filter(version => version.effectiveFrom <= currentMonth)
       .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
-    rule.displayActive = row.active !== false && (currentVersion?.enabled !== false);
+    const displayVersion = currentVersion || rule.versions
+      .slice().sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))[0];
+    rule.displayActive = row.active !== false && (displayVersion?.enabled !== false);
     rules.push(rule);
   }
   return { rules, held };
