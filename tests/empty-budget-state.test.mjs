@@ -16,7 +16,8 @@ test('staging build uses the redesigned UI and isolated staging project', () => 
 test('new UI preserves browser data and uses account-scoped local storage', () => {
   assert.ok(html.includes('function storageKey(year)'));
   assert.ok(html.includes('currentUser?.id || "guest"'));
-  assert.ok(!html.includes('localStorage.removeItem('));
+  assert.ok(!/localStorage\\.removeItem\\(storageKey\\(/.test(html));
+  assert.ok(html.includes('localStorage.removeItem(conflictStorageKey(year))'));
   assert.ok(html.includes('localStorage.getItem(storageKey(yr))'));
   assert.ok(html.includes('localStorage.setItem(storageKey(year)'));
   assert.ok(html.includes('const year = activeYear;'));
