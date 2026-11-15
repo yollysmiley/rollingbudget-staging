@@ -67,3 +67,14 @@ test('rejects invalid version timelines and dates', () => {
   assert.throws(() => scheduledOccurrences(rule({ startDate: '2026-02-30' }), 2027), /start date/);
   assert.throws(() => scheduledOccurrences(rule(), 0), /year/);
 });
+
+test('effective-dated disable and frequency changes affect only later occurrences', () => {
+  const input = rule({ versions: [
+    { effectiveFrom: '2026-11-01', name: 'Rent', amount: 900, due: '1', accountId: 'a', frequency: 'monthly' },
+    { effectiveFrom: '2027-03-01', name: 'Rent', amount: 950, due: '1', accountId: 'a', frequency: 'quarterly' },
+    { effectiveFrom: '2027-07-01', name: 'Rent', amount: 950, due: '1', accountId: 'a', frequency: 'quarterly', enabled: false }
+  ] });
+  assert.deepEqual(scheduledOccurrences(input, 2027).map(x => x.scheduledMonth),
+    ['2027-01-01', '2027-02-01', '2027-05-01']);
+  assert.equal(scheduledOccurrences(input, 2026).length, 2);
+});
