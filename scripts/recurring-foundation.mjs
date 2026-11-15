@@ -1,5 +1,4 @@
-// Phase 4A: validate historical definitions without changing year documents.
-// Reconciliation is explicit: never guess that two year-scoped rules are the same.
+// Validate owner-scoped recurring definitions without altering budget transactions.
 export const FREQUENCY_MONTHS = Object.freeze({
   monthly: 1, 'every-2-months': 2, quarterly: 3,
   'every-6-months': 6, annually: 12
@@ -38,42 +37,3 @@ export function normalizeRecurringRule(rule) {
   };
 }
 
-export function collectLegacyRecurringRules(years) {
-  const rules = [];
-  const idsByYear = new Set();
-  for (const [year, document] of Object.entries(years ?? {}).sort(([a], [b]) => Number(a) - Number(b))) {
-    if (!/^\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) throw new Error('Invalid budget year');
-    if (!Array.isArray(document?.recurringRules)) throw new Error('Missing recurring rules for year ' + year);
-    for (const legacy of document.recurringRules) {
-      const sourceId = typeof legacy?.id === 'string' ? legacy.id.trim() : '';
-      if (!sourceId) throw new Error('Stable legacy rule ID required for year ' + year + '; resolve ID before migration');
-      const sourceKey = year + ':' + sourceId;
-      if (idsByYear.has(sourceKey)) throw new Error('Duplicate legacy rule ID in year ' + year);
-      idsByYear.add(sourceKey);
-      const month = legacy.startMonth ?? legacy.start ?? 0;
-      if (!Number.isInteger(month) || month < 0 || month > 11) throw new Error('Invalid historical rule start month');
-      rules.push({
-        ...normalizeRecurringRule({
-          id: 'legacy-' + year + '-' + encodeURIComponent(sourceId),
-          name: legacy.name, category: legacy.cat, amount: legacy.amount,
-          due: legacy.due, accountId: legacy.accountId || legacy.acct,
-          frequency: legacy.frequency || 'monthly',
-          startDate: year + '-' + String(month + 1).padStart(2, '0') + '-01',
-          active: legacy.active
-        }),
-        sourceYear: Number(year), sourceRuleId: sourceId
-      });
-    }
-  }
-  // Reused source IDs across years are ambiguous. They must be reconciled
-  // before scheduling is enabled, rather than silently importing both.
-  const byId = new Map();
-  for (const rule of rules) {
-    const existing = byId.get(rule.sourceRuleId);
-    if (existing) {
-      throw new Error('Recurring rule ID appears in multiple years: ' + rule.sourceRuleId + '; explicit reconciliation required');
-    }
-    byId.set(rule.sourceRuleId, rule);
-  }
-  return rules;
-}
