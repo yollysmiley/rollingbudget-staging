@@ -1,0 +1,30 @@
+/* Phase 1: shared visual foundation; business logic remains in the existing app. */
+:root {
+  --rb-header: #17152B;
+  --rb-header-border: #302D4B;
+  --rb-logo: #8B7CFF;
+  --rb-logo-highlight: #B1A6FF;
+  --rb-accent: #7C3AED;
+  --rb-surface: #FFFFFF;
+  --rb-canvas: #F8F7FC;
+  --rb-border: #E5E1F2;
+  --rb-focus: #B1A6FF;
+  --rb-radius: 14px;
+}
+.desktop-primary-nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.desktop-primary-nav button { color:#fff; background:transparent; border:1px solid #494465; box-shadow:none; min-height:44px; }
+.desktop-primary-nav button:hover,.desktop-primary-nav button:focus-visible { background:#302C50; color:#fff; border-color:var(--rb-logo); }
+.desktop-primary-nav button[aria-current="page"] { background:#494465; color:#fff; border-color:var(--rb-logo); }
+.settings-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:20px; align-items:start; }
+.settings-section-nav { position:sticky; top:100px; display:grid; gap:8px; background:#fff; padding:16px; border:1px solid var(--rb-border); border-radius:var(--rb-radius); }
+.settings-section-nav a { color:#42375d; text-decoration:none; padding:12px; border-radius:10px; font-weight:650; }
+.settings-section-nav a:hover,.settings-section-nav a:focus-visible { background:#ede9fe; color:#5b21b6; }
+.settings-sections { min-width:0; }
+.settings-sections .desktop-settings-card { scroll-margin-top:110px; }
+:where(button,a,input,select):focus-visible { outline:3px solid var(--rb-focus); outline-offset:2px; }
+@media(max-width:768px) {
+  .desktop-primary-nav,.settings-layout { display:none !important; }
+  .mobile-settings-section { margin-bottom:12px; }
+  #mobileSettingsControls { display:grid; gap:10px; }
+  #mobileSettingsControls button,#mobileSettingsControls select { min-height:44px; }
+}

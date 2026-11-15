@@ -625,6 +625,7 @@
   body.desktop-settings-open > .container { display:none; }
   @media (max-width:768px) { .desktop-settings-panel { display:none !important; } }
 </style>
+  <link rel="stylesheet" href="styles/brand.css">
 </head>
 <body>
 <style id="authGateStyle">html:not(.budget-authenticated) body > :not(#authGateScreen):not(script){visibility:hidden!important}#authGateScreen{position:fixed;inset:0;z-index:99999;background:#f8f7fc;color:#17152b;display:grid;place-items:center;font-family:Inter,system-ui,sans-serif;padding:24px}html.budget-authenticated #authGateScreen{display:none}#authGateScreen section{max-width:440px;text-align:center}#authGateScreen a{color:#7c3aed;font-weight:700}</style>
@@ -646,8 +647,12 @@
     </div>
     <button id="mobileAuthBtn" class="mobile-auth-button" onclick="handleAuthClick()">Sign In</button>
     <div class="controls desktop-header-actions">
-      <button type="button" id="desktopBudgetButton" onclick="setDesktopSettings(false)" hidden>Budget Overview</button>
-      <button type="button" id="desktopSettingsButton" onclick="setDesktopSettings(true)" aria-expanded="false" aria-controls="desktopSettingsPanel">Settings</button>
+      <nav class="desktop-primary-nav" aria-label="Primary navigation">
+        <button type="button" id="desktopBudgetButton" onclick="showDesktopPage('overview')" aria-current="page">Overview</button>
+        <button type="button" id="desktopPlanButton" onclick="showDesktopPage('plan')">Plan</button>
+        <button type="button" id="desktopRecurringButton" onclick="showDesktopPage('recurring')">Recurring Rules</button>
+        <button type="button" id="desktopSettingsButton" onclick="showDesktopPage('settings')" aria-expanded="false" aria-controls="desktopSettingsPanel">Settings</button>
+      </nav>
       <button id="authBtn" onclick="handleAuthClick()">Sign In</button>
     </div>
 
@@ -666,21 +671,25 @@
     <button type="button" data-mobile-action="recurring" onclick="toggleMobileSidebar(false);openRecurringModal()">Recurring Rules</button>
     <button type="button" data-mobile-tab="settings" onclick="setMobileTab('settings')">Settings</button>
   </nav>
-  <section class="mobile-sidebar-tools" aria-label="Year management">
-    <h3>Year Management</h3>
-    <div id="mobileSettingsControls"></div>
-  </section>
 </aside>
 
 <section id="desktopSettingsPanel" class="desktop-settings-panel" aria-label="Desktop settings" hidden>
   <h2>Settings</h2>
-  <div class="desktop-settings-card">
-    <h3>Accounts</h3>
+  <div class="settings-layout">
+    <nav class="settings-section-nav" aria-label="Settings sections">
+      <a href="#settingsAccounts">Budget Accounts</a>
+      <a href="#settingsYears">Budget Years</a>
+      <a href="#settingsAutomation">Rollover &amp; Automation</a>
+      <a href="#settingsProfile">Profile &amp; Security</a>
+    </nav>
+    <div class="settings-sections">
+  <div class="desktop-settings-card" id="settingsAccounts">
+    <h3>Budget Accounts</h3>
     <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
     <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
   </div>
-  <div class="desktop-settings-card">
-    <h3>Year Management, Auto-Cascade &amp; Recurring Rules</h3>
+  <div class="desktop-settings-card" id="settingsYears">
+    <h3>Budget Years &amp; Rollover Automation</h3>
     <div class="controls" id="budgetSettingsControls">
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:0.78rem;font-weight:700;color:var(--muted)">YEAR:</span>
@@ -695,6 +704,16 @@
         <span>Auto-Cascade</span>
       </label>
       <button class="primary" data-setting="recurring" onclick="openRecurringModal()">⚙️ Recurring Rules</button>
+    </div>
+  </div>
+  <div class="desktop-settings-card" id="settingsAutomation">
+    <h3>Rollover &amp; Automation</h3>
+    <p>Manage your auto-cascade setting above. Recurring rules are available from the primary navigation.</p>
+  </div>
+  <div class="desktop-settings-card" id="settingsProfile">
+    <h3>Profile &amp; Security</h3>
+    <p>Your account session and recovery options are managed through Rolling Budget authentication.</p>
+  </div>
     </div>
   </div>
 </section>
@@ -715,12 +734,16 @@
   <section id="mobileSettingsPanel" class="mobile-settings-panel" aria-label="Settings">
     <h2>Settings</h2>
     <p style="color:var(--muted);font-size:.86rem;margin:8px 0 16px">Manage your Rolling Budget account and application preferences.</p>
-    <div class="card" style="padding:16px;box-shadow:none;margin-bottom:12px">
-      <h3 style="font-size:.95rem;margin-bottom:8px">Accounts Manager</h3>
+    <div class="card mobile-settings-section" style="padding:16px;box-shadow:none;margin-bottom:12px">
+      <h3 style="font-size:.95rem;margin-bottom:8px">Budget Accounts</h3>
       <div id="mobileSettingsAccounts" class="account-manager"></div>
     </div>
-    <div class="card" style="padding:16px;box-shadow:none">
-      <h3 style="font-size:.95rem;margin-bottom:5px">Account & cloud sync</h3>
+    <div class="card mobile-settings-section" style="padding:16px;box-shadow:none">
+      <h3 style="font-size:.95rem;margin-bottom:5px">Budget Years &amp; Rollover</h3>
+      <div id="mobileSettingsControls"></div>
+    </div>
+    <div class="card mobile-settings-section" style="padding:16px;box-shadow:none">
+      <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
       <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Sign in to access your cloud-synced budgets across devices, or sign out of your account.</p>
       <button type="button" class="primary" onclick="handleAuthClick()">Manage Account</button>
     </div>
@@ -1812,6 +1835,26 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
+function showDesktopPage(page) {
+  if (window.matchMedia("(max-width: 768px)").matches) return;
+  if (page === "recurring") {
+    setDesktopSettings(false);
+    openRecurringModal();
+  } else {
+    closeRecurringModal();
+    setDesktopSettings(page === "settings");
+    if (page === "plan") document.querySelector(".main-grid")?.scrollIntoView({ block: "start" });
+    else window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  document.querySelectorAll(".desktop-primary-nav button").forEach(button => {
+    const current = button.id === ({
+      overview: "desktopBudgetButton", plan: "desktopPlanButton",
+      recurring: "desktopRecurringButton", settings: "desktopSettingsButton"
+    })[page];
+    if (current) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+}
 function setDesktopSettings(open) {
   const enabled = Boolean(open) && !window.matchMedia("(max-width: 768px)").matches;
   document.body.classList.toggle("desktop-settings-open", enabled);
@@ -1820,7 +1863,7 @@ function setDesktopSettings(open) {
   const budget = document.getElementById("desktopBudgetButton");
   if (panel) panel.hidden = !enabled;
   if (settings) settings.setAttribute("aria-expanded", String(enabled));
-  if (budget) budget.hidden = !enabled;
+  if (budget) budget.hidden = false;
 }
 function syncMobileSettingsControls() {
   const controls = document.getElementById("budgetSettingsControls");

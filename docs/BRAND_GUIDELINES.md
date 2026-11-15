@@ -109,3 +109,9 @@ Before introducing a new logo, color, font, or brand phrase:
 2. Reuse existing brand assets and tokens where possible.
 3. Update this document when the approved standard changes.
 4. Add or update regression tests for brand-critical UI, including desktop and mobile.
+
+## Phase 1 shared design foundation
+
+The shared staging stylesheet is `styles/brand.css`, deployed at both `/styles/brand.css` and `/app/styles/brand.css`. Keep the approved deep-plum `#17152B` header and original three-bar mark geometry. Use the existing application status colors without repurposing them.
+
+Desktop primary navigation is Overview, Plan, Recurring Rules, Settings; desktop Settings includes anchored sections for Budget Accounts, Budget Years, Rollover & Automation, and Profile & Security. Mobile retains a distinct hamburger menu and displays year and rollover controls within the Settings page, not in the sidebar. Both views share budget state. Phase 1 introduces the navigation shell only; full Settings and Recurring Rule editor functionality is scheduled for later phases.

@@ -101,18 +101,19 @@ test('mobile sidebar exposes core pages and year management without burying recu
   await expect(page.locator('#mobileSidebar')).toBeVisible();
   await expect(page.locator('.mobile-sidebar-nav button')).toHaveText(['Overview', 'Plan', 'Recurring Rules', 'Settings']);
   await expect(page.locator('.mobile-sidebar-nav')).not.toContainText('Activity');
-  await expect(page.locator('#mobileSettingsControls')).toBeVisible();
-  await expect(page.locator('#activeYearSelect')).toBeVisible();
-  await expect(page.getByRole('button', { name: '+ New Year' })).toBeVisible();
-  await expect(page.locator('#autoRollToggle')).toBeVisible();
-  await expect(page.locator('#mobileSettingsControls .toggle-pill')).toHaveCSS('color', 'rgb(24, 19, 38)');
-  await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#mobileSettingsControls')).toBeHidden();
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
+  await expect(page.getByRole('button', { name: '+ New Year' })).toBeHidden();
+  await expect(page.locator('#autoRollToggle')).toBeHidden();
+  
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
   await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
-  await expect(page.locator('#mobileSettingsPanel #activeYearSelect')).toHaveCount(0);
-  await expect(page.locator('#mobileSidebar #activeYearSelect')).toHaveCount(1);
+  await expect(page.locator('#mobileSettingsPanel #activeYearSelect')).toHaveCount(1);
+  await expect(page.locator('#mobileSidebar #activeYearSelect')).toHaveCount(0);
+  await page.locator('#activeYearSelect').selectOption('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#autoRollToggle')).toBeVisible();
   await expect(page.locator('#authBtn')).toBeHidden();
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
 });

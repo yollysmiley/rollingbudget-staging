@@ -67,6 +67,11 @@ assert.ok(!homeHtml.includes('YOUR_SUPABASE_') && !homeHtml.includes('YOUR_STAGI
 writeFileSync('dist/index.html', homeHtml);
 mkdirSync('dist/app', { recursive: true });
 writeFileSync('dist/app/index.html', html);
+const brandCss = readFileSync(new URL('../styles/brand.css', import.meta.url), 'utf8');
+mkdirSync('dist/styles', { recursive: true });
+mkdirSync('dist/app/styles', { recursive: true });
+writeFileSync('dist/styles/brand.css', brandCss);
+writeFileSync('dist/app/styles/brand.css', brandCss);
 for (const path of ['account-model.mjs', 'account-storage.mjs', 'account-budget.mjs']) {
   const source = readFileSync(new URL('./' + path, import.meta.url));
   mkdirSync('dist/scripts', { recursive: true });

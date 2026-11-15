@@ -273,3 +273,21 @@ test('account-based income amount can be edited and persists after reload', asyn
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
+
+test('desktop primary navigation follows the reference hierarchy without losing budget state', async ({ page }) => {
+  const nav = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(nav.locator('button')).toHaveText(['Overview', 'Plan', 'Recurring Rules', 'Settings']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#settingsAccounts')).toBeVisible();
+  await expect(page.locator('#settingsYears')).toBeVisible();
+  await expect(page.locator('#settingsAutomation')).toBeVisible();
+  await expect(page.locator('#settingsProfile')).toBeVisible();
+  await page.locator('#activeYearSelect').selectOption('2027');
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('#recurringManagerPage')).toBeVisible();
+  await page.locator('#desktopBudgetButton').click();
+  await expect(page.locator('#recurringManagerPage')).toBeHidden();
+  await expect(page.locator('#rollingStrip')).toBeVisible();
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+});
