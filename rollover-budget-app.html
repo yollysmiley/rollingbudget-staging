@@ -1013,6 +1013,34 @@ let activeYear = "2026";
 function defaultMonthIndex(year, now = new Date()) {
   return String(year) === String(now.getFullYear()) ? now.getMonth() : 0;
 }
+// Month selection is a per-account, per-year tab-session preference, not budget data.
+function monthSessionKey(year, user = currentUser) {
+  return user?.id ? "rollingbudget_selected_month:" + encodeURIComponent(user.id) + ":" + String(year) : null;
+}
+function restoreSelectedMonth(year) {
+  const key = monthSessionKey(year);
+  if (!key) return defaultMonthIndex(year);
+  try {
+    const stored = sessionStorage.getItem(key);
+    if (stored !== null && /^(?:[0-9]|1[01])$/.test(stored)) return Number(stored);
+  } catch (error) { console.warn("Month session preference unavailable", error); }
+  return defaultMonthIndex(year);
+}
+function rememberSelectedMonth(year, index) {
+  const key = monthSessionKey(year);
+  if (!key) return;
+  try { sessionStorage.setItem(key, String(index)); }
+  catch (error) { console.warn("Month session preference unavailable", error); }
+}
+function clearMonthPreferences(user) {
+  if (!user?.id) return;
+  const prefix = "rollingbudget_selected_month:" + encodeURIComponent(user.id) + ":";
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith(prefix)) sessionStorage.removeItem(key);
+    }
+  } catch (error) { console.warn("Could not clear month preferences", error); }
+}
 let selectedIdx = defaultMonthIndex(activeYear);
 let db = {};
 let budgetAccounts = [];
@@ -1174,9 +1202,11 @@ async function initApp() {
     return;
   }
   currentUser = user;
+  selectedIdx = restoreSelectedMonth(activeYear);
   document.documentElement.classList.add("budget-authenticated");
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT" || !session?.user) {
+      clearMonthPreferences(currentUser);
       currentUser = null;
       db = {};
       document.documentElement.classList.remove("budget-authenticated");
@@ -1184,7 +1214,9 @@ async function initApp() {
       return;
     }
     if (session.user.id !== currentUser?.id) {
+      clearMonthPreferences(currentUser);
       currentUser = session.user;
+      selectedIdx = restoreSelectedMonth(activeYear);
       setTimeout(async () => {
         const verified = await supabaseClient.auth.getUser();
         if (verified.error || verified.data.user?.id !== session.user.id) {
@@ -1526,7 +1558,7 @@ async function saveDB() {
 }
 function switchYear(yr) {
   activeYear = yr;
-  selectedIdx = defaultMonthIndex(activeYear);
+  selectedIdx = restoreSelectedMonth(activeYear);
   if (!db[activeYear]) {
     db[activeYear] = JSON.parse(JSON.stringify(BASELINE_2026));
     db[activeYear].recurringRules = [];
@@ -1563,7 +1595,7 @@ async function createNewYear() {
   }
   sel.value = newYr;
   activeYear = newYr;
-  selectedIdx = defaultMonthIndex(activeYear);
+  selectedIdx = restoreSelectedMonth(activeYear);
   await saveDB();
   render();
 }
@@ -1844,7 +1876,12 @@ function render() {
 }
 
 function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
-function selectMonth(idx) { selectedIdx = idx; render(); }
+function selectMonth(idx) {
+  if (!Number.isInteger(idx) || idx < 0 || idx > 11) return;
+  selectedIdx = idx;
+  rememberSelectedMonth(activeYear, idx);
+  render();
+}
 
 document.getElementById("autoRollToggle").addEventListener("change", (e) => {
   void setAutoCascade(e.target.checked);
