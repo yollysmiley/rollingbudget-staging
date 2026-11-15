@@ -19,7 +19,7 @@ function versionsFor(rule) {
     });
     return { ...normalized.versions[0], effectiveFrom: version.effectiveFrom, enabled: version.enabled !== false };
   }).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-  if (sorted[0].effectiveFrom !== rule.startDate) throw new Error('Initial version must match start date');
+  if (sorted[0].effectiveFrom !== rule.startDate.slice(0, 7) + '-01') throw new Error('Initial version must match start date');
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i].effectiveFrom === sorted[i - 1].effectiveFrom) throw new Error('Duplicate effective date');
   }
@@ -37,8 +37,11 @@ export function scheduledOccurrences(rule, year) {
   const last = Math.min(end, year * 12 + 11);
   const results = [];
   for (let month = first; month <= last; month++) {
-    const date = monthDate(month);
-    const version = versions.filter(v => v.effectiveFrom <= date).at(-1);
+    const monthStart = monthDate(month);
+    const day = Math.min(Number(normalized.startDate.slice(8, 10)), new Date(Date.UTC(Math.floor(month / 12), month % 12 + 1, 0)).getUTCDate());
+    const date = monthStart.slice(0, 8) + String(day).padStart(2, '0');
+    if (date < normalized.startDate || (normalized.endDate && date > normalized.endDate)) continue;
+    const version = versions.filter(v => v.effectiveFrom <= monthStart).at(-1);
     // Frequency remains anchored to the original start month, even when edited.
     if (!version.enabled) continue;
     const interval = FREQUENCY_MONTHS[version.frequency];
@@ -50,7 +53,7 @@ export function scheduledOccurrences(rule, year) {
       category: normalized.category,
       name: version.name,
       amount: version.amount,
-      due: version.due,
+      due: String(day),
       accountId: version.accountId,
     });
   }
