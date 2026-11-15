@@ -37,27 +37,27 @@ test('desktop SPA navigation preserves routes, highlights, and history', async (
 
 test('planning month persists per year across routes and refresh', async ({ page }) => {
   await page.evaluate(() => selectMonth(4));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('May');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/may/i);
   await page.locator('#desktopOverviewButton').click();
-  await expect(page.locator('#mobileOverview')).toContainText('May');
+  await expect(page.locator('#mobileOverview')).toContainText(/may/i);
   await page.reload();
   await expectAuthenticatedBudget(page);
-  await expect(page.locator('#mobileOverview')).toContainText('May');
+  await expect(page.locator('#mobileOverview')).toContainText(/may/i);
   await page.locator('#desktopBudgetButton').click();
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('May');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/may/i);
 
   await page.evaluate(() => switchYear('2027'));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Jan');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/jan/i);
   await page.evaluate(() => selectMonth(8));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Sep');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/sep/i);
   await page.evaluate(() => switchYear('2026'));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('May');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/may/i);
   await page.evaluate(() => switchYear('2027'));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Sep');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/sep/i);
   await page.reload();
   await expectAuthenticatedBudget(page);
   await page.evaluate(() => switchYear('2027'));
-  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Sep');
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText(/sep/i);
 });
 
 test('invalid saved month defaults to calendar month and another account cannot reuse it', async ({ page }) => {
