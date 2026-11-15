@@ -434,3 +434,31 @@ test('mobile planning month persists during session and is independent by year',
   await page.evaluate(() => switchYear('2027'));
   await expect(page.locator('#mobileOverview')).toContainText('Mar');
 });
+
+test('mobile recurring synchronization blocks an unsaved local cache instead of overwriting it', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Protected mobile rule');
+  await form.locator('[data-rec-field="amount"]').fill('80');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Protected mobile rule').length)).toBe(1);
+  const initial = await page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem(storageKey('2026')));
+    stored.data.months[2].fixed.push({ name: 'Unsaved cached transaction', amount: 55 });
+    localStorage.setItem(storageKey('2026'), JSON.stringify(stored));
+    return JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'];
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-01'));
+  const after = await page.evaluate(() => ({
+    row: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'],
+    conflict: localStorage.getItem(conflictStorageKey('2026')),
+    cached: JSON.parse(localStorage.getItem(storageKey('2026'))).data.months[2].fixed
+  }));
+  expect(after.row).toEqual(initial);
+  expect(after.conflict).toBe('1');
+  expect(after.cached).toContainEqual({ name: 'Unsaved cached transaction', amount: 55 });
+});

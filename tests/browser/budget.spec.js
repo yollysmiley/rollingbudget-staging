@@ -465,3 +465,44 @@ test('recurring manager heading is global and contains no budget year', async ({
   await expect(page.locator('.recurring-eyebrow')).toHaveText('RECURRING RULES');
   await expect(page.locator('#recurringYearLabel')).toHaveCount(0);
 });
+
+test('automatic recurring backfill saves only the selected budget year, not unused templates', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Selected year only');
+  await form.locator('[data-rec-field="amount"]').fill('50');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Selected year only').length)).toBe(1);
+  const years = await page.evaluate(() =>
+    Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')).sort());
+  expect(years).toEqual(['2026']);
+});
+
+test('recurring cloud synchronization cannot replace unsaved local desktop changes', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Protected rent');
+  await form.locator('[data-rec-field="amount"]').fill('100');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Protected rent').length)).toBe(1);
+  const original = await page.evaluate(() => {
+    const cloud = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'];
+    db['2026'].months[2].fixed.push({ name: 'Locally edited only', amount: 44 });
+    return { revision: cloud.updated_at, budget: cloud.budget_data };
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-01'));
+  const after = await page.evaluate(() => ({
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'],
+    conflict: localStorage.getItem(conflictStorageKey('2026')),
+    local: db['2026'].months[2].fixed.some(entry => entry.name === 'Locally edited only')
+  }));
+  expect(after.cloud.updated_at).toBe(original.revision);
+  expect(after.cloud.budget_data).toEqual(original.budget);
+  expect(after.local).toBe(true);
+  expect(after.conflict).toBe('1');
+});
