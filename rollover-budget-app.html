@@ -1547,8 +1547,8 @@ function showCloudSaveStatus(message) {
     document.querySelector("header").insertAdjacentElement("afterend", status);
   }
   status.replaceChildren(document.createTextNode(message));
-  status.hidden = !message;
   const pending = currentUser && localStorage.getItem(conflictStorageKey(activeYear)) === '1';
+  status.hidden = !message && !pending;
   if (pending) {
     const localButton = document.createElement('button');
     localButton.textContent = 'Keep local changes';
@@ -1616,7 +1616,8 @@ async function saveDB() {
         // after the year's first confirmed cloud save.
         await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
       }
-      showCloudSaveStatus("");
+      const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
+      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' : '');
     }
     return 'cloud-saved';
   } catch (error) {
