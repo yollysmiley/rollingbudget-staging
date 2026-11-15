@@ -1874,29 +1874,35 @@ function closeRecurringModal(){document.body.classList.remove("recurring-manager
 function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
 function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.frequency]?.label||"Monthly (legacy)";}
 function renderRulesList(){
-  const rules=db[activeYear].recurringRules||[],count=`${rules.length} rule${rules.length===1?"":"s"}`;
-  document.getElementById("desktopRuleCount").textContent=count;document.getElementById("mobileRuleCount").textContent=count;
+  const rules = loadedRecurringPreview.rules || [];
+  const count = rules.length + ' rule' + (rules.length === 1 ? '' : 's');
+  document.getElementById('desktopRuleCount').textContent = count;
+  document.getElementById('mobileRuleCount').textContent = count;
   const status = recurringPreviewStatus(activeYear);
   let canApply = false;
-  try {
-    canApply = !recurringApplyBusy && !recurringPreviewError &&
-      (recurringPreviewResult(activeYear)?.added ?? 0) > 0;
-  } catch (error) {
-    console.warn('Recurring preview is not valid:', error);
-  }
+  try { canApply = !recurringApplyBusy && !recurringPreviewError && (recurringPreviewResult(activeYear)?.added ?? 0) > 0; }
+  catch (error) { console.warn('Recurring preview validation failed:', error); }
   for (const [statusId, buttonId] of [
     ['desktopRecurringPreviewStatus', 'desktopApplyRecurringPreview'],
     ['mobileRecurringPreviewStatus', 'mobileApplyRecurringPreview']
   ]) {
-    const node = document.getElementById(statusId);
-    if (node) node.textContent = status;
-    const button = document.getElementById(buttonId);
-    if (button) button.disabled = !canApply;
+    document.getElementById(statusId).textContent = status;
+    document.getElementById(buttonId).disabled = !canApply;
   }
-  if(!rules.length){document.getElementById("desktopRulesList").innerHTML='<tr><td colspan="7">No recurring rules yet. Add your first rule below.</td></tr>';document.getElementById("mobileRulesList").innerHTML='<p>No recurring rules yet. Add your first rule below.</p>';return;}
-  const startOf=rule=>Number.isInteger(rule.startMonth)?rule.startMonth:(Number.isInteger(rule.start)?rule.start:0);
-  document.getElementById("desktopRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<tr><td><strong>${esc(r.name)}</strong><div>${esc(r.due||"Due day not set")}</div></td><td>${esc(String(r.cat||"").toUpperCase())}</td><td>${fmt(r.amount)}</td><td>${esc(recurringRuleFrequency(r))}</td><td>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</td><td><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable":"Enable"}</button></td></tr>`;}).join("");
-  document.getElementById("mobileRulesList").innerHTML=rules.map((r,i)=>{const on=r.active!==false;return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(r.name)}</h4><span class="recurring-status ${on?"":"disabled"}">${on?"Enabled":"Disabled"}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(String(r.cat||"").toUpperCase())}</strong></div><div>Amount<strong>${fmt(r.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(r))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(r)]?.name||"—")}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on?"Disable rule":"Enable rule"}</button></article>`;}).join("");
+  if (!rules.length) {
+    document.getElementById('desktopRulesList').innerHTML = '<tr><td colspan="7">No recurring rules yet. Add your first rule below.</td></tr>';
+    document.getElementById('mobileRulesList').innerHTML = '<p>No recurring rules yet. Add your first rule below.</p>';
+    return;
+  }
+  const startOf = rule => Number(rule.startDate.slice(5,7)) - 1;
+  document.getElementById('desktopRulesList').innerHTML = rules.map((rule, i) => {
+    const on = rule.active !== false;
+    return `<tr><td><strong>${esc(rule.name)}</strong><div>${esc(rule.due || 'Due day not set')}</div></td><td>${esc(rule.category.toUpperCase())}</td><td>${fmt(rule.amount)}</td><td>${esc(recurringRuleFrequency(rule))}</td><td>${esc(db[activeYear].months[startOf(rule)]?.name || '—')}</td><td><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable' : 'Enable'}</button><button type="button" onclick="deleteRecurringRule(${i})">Delete</button></td></tr>`;
+  }).join('');
+  document.getElementById('mobileRulesList').innerHTML = rules.map((rule, i) => {
+    const on = rule.active !== false;
+    return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(rule.name)}</h4><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(rule.category.toUpperCase())}</strong></div><div>Amount<strong>${fmt(rule.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(rule))}</strong></div><div>Starts<strong>${esc(db[activeYear].months[startOf(rule)]?.name || '—')}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable rule' : 'Enable rule'}</button><button type="button" onclick="deleteRecurringRule(${i})">Delete rule</button></article>`;
+  }).join('');
 }
 function recurringRuleItem(r){
   const accountId = r.accountId || r.acct || null;
@@ -1907,23 +1913,53 @@ function recurringRuleItem(r){
   return null;
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
-async function addRecurringRule(view){
-  const form=document.querySelector(`[data-recurring-form="${view}"]`);if(!form)return;const get=f=>form.querySelector(`[data-rec-field="${f}"]`).value;
-  const cat=get("category"),name=get("name").trim(),amount=Number.parseFloat(get("amount")),due=get("due").trim(),acct=get("account"),startMonth=Number.parseInt(get("startMonth"),10),frequency=get("frequency");
-  if(!name||!Number.isFinite(amount)||amount<0||!Number.isInteger(startMonth)||!RECURRING_FREQUENCIES[frequency])return;
-  if(!db[activeYear].recurringRules)db[activeYear].recurringRules=[];
-  const rule={id:`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,cat,name,amount,due,acct,accountId:acct,startMonth,frequency,active:true};db[activeYear].recurringRules.push(rule);
-  const item=recurringRuleItem(rule);for(const i of recurringRuleTargetMonths(rule)){const m=db[activeYear].months[i],list=cat==="income"?m.income:cat==="fixed"||cat==="variable"?m[cat]:cat==="loan"?m.loans:m.creditCards;if(item&&list)list.push({...item});}
-  form.querySelectorAll("input").forEach(input=>input.value="");form.querySelector("[data-rec-field='startMonth']").value="0";form.querySelector("[data-rec-field='frequency']").value="monthly";
-  await saveDB();render();renderRulesList();
+async function addRecurringRule(view) {
+  const form = document.querySelector(`[data-recurring-form="${view}"]`);
+  if (!form || !currentUser || !supabaseClient || !recurringAppService) return;
+  const get = name => form.querySelector(`[data-rec-field="${name}"]`).value;
+  const name = get('name').trim(), amount = Number(get('amount'));
+  const startMonth = Number(get('startMonth')), frequency = get('frequency');
+  if (!name || !Number.isFinite(amount) || amount < 0 || !Number.isInteger(startMonth) ||
+      startMonth < 0 || startMonth > 11 || !RECURRING_FREQUENCIES[frequency]) return;
+  try {
+    await recurringAppService.createRecurringRule(supabaseClient, currentUser.id, {
+      id: crypto.randomUUID(), name, amount, category: get('category'), due: get('due').trim(),
+      accountId: get('account') || null, frequency, active: true,
+      startDate: activeYear + '-' + String(startMonth + 1).padStart(2, '0') + '-01'
+    });
+    await refreshRecurringPreview();
+    form.querySelectorAll('input').forEach(input => input.value = '');
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not create recurring rule:', error);
+    alert('Recurring rule could not be saved. Please retry.');
+  }
 }
-async function toggleRecurringRule(index){
-  const r=db[activeYear].recurringRules?.[index];if(!r)return;r.active=r.active===false;
-  if(!r.active&&r.id){for(const m of db[activeYear].months){for(const list of [m.income,m.fixed,m.variable,m.loans,m.creditCards])for(let i=list.length-1;i>=0;i--)if(list[i].recurringRuleId===r.id)list.splice(i,1);}}
-  else if(r.active&&r.frequency){const item=recurringRuleItem(r);for(const i of recurringRuleTargetMonths(r)){const m=db[activeYear].months[i],list=r.cat==="income"?m.income:r.cat==="fixed"||r.cat==="variable"?m[r.cat]:r.cat==="loan"?m.loans:m.creditCards;if(item&&list&&!list.some(x=>x.recurringRuleId===r.id))list.push({...item});}}
-  await saveDB();render();renderRulesList();
+async function toggleRecurringRule(index) {
+  const rule = loadedRecurringPreview.rules[index];
+  if (!rule || !currentUser || !recurringAppService) return;
+  try {
+    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.active);
+    await refreshRecurringPreview();
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not update recurring rule:', error);
+    alert('Recurring rule could not be updated.');
+  }
 }
-async function deleteRecurringRule(index){const rules=db[activeYear].recurringRules||[];if(!rules[index])return;rules.splice(index,1);await saveDB();render();renderRulesList();}
+async function deleteRecurringRule(index) {
+  const rule = loadedRecurringPreview.rules[index];
+  if (!rule || !currentUser || !recurringAppService) return;
+  if (!confirm('Delete this recurring rule? Existing budget transactions will remain unchanged.')) return;
+  try {
+    await recurringAppService.removeRecurringRule(supabaseClient, currentUser.id, rule.id);
+    await refreshRecurringPreview();
+    renderRulesList();
+  } catch (error) {
+    console.error('Could not delete recurring rule:', error);
+    alert('Recurring rule could not be deleted.');
+  }
+}
 
 function toggleMobileSidebar(open) {
   const sidebar = document.getElementById("mobileSidebar");
