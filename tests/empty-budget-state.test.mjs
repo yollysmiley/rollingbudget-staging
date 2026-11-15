@@ -36,7 +36,9 @@ test('user-entered strings are HTML-escaped before entering markup', () => {
   assert.ok(html.includes('function esc(str)'));
   assert.ok(html.includes('.replace(/</g, "&lt;")'));
   assert.ok(html.includes('esc(rule.name)'));
-  assert.ok(html.includes('esc(rule.due'));
+  assert.ok(html.includes("esc(rule.endDate ? 'Ends ' + rule.endDate : 'No end date')"));
+  assert.ok(html.includes('esc(startOf(rule))'));
+  assert.doesNotMatch(html, /data-rec-field="due"|data-rec-field="startMonth"/);
 });
 
 test('staging migration creates a separate RLS-protected table for the new UI', () => {
