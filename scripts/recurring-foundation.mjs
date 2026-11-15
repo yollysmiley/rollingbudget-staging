@@ -38,12 +38,9 @@ export function normalizeRecurringRule(rule) {
   };
 }
 
-export function collectLegacyRecurringRules(years, options = {}) {
+export function collectLegacyRecurringRules(years) {
   const rules = [];
   const idsByYear = new Set();
-  const appearances = new Map();
-  const reconciled = options.reconciliation ?? {};
-  const mapped = new Set();
   for (const [year, document] of Object.entries(years ?? {}).sort(([a], [b]) => Number(a) - Number(b))) {
     if (!/^\\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200) throw new Error('Invalid budget year');
     if (!Array.isArray(document?.recurringRules)) throw new Error('Missing recurring rules for year ' + year);
@@ -55,18 +52,6 @@ export function collectLegacyRecurringRules(years, options = {}) {
       idsByYear.add(sourceKey);
       const month = legacy.startMonth ?? legacy.start ?? 0;
       if (!Number.isInteger(month) || month < 0 || month > 11) throw new Error('Invalid historical rule start month');
-      const target = reconciled[sourceKey];
-      if (target !== undefined) {
-        if (typeof target !== 'string' || !target.trim()) throw new Error('Invalid reconciliation target');
-        mapped.add(sourceKey);
-      }
-      const identity = target || sourceKey;
-      if (appearances.has(identity)) {
-        // A continuing rule needs an explicit version/effective-date merge strategy.
-        // Blocking is safer than importing duplicate or conflicting commitments.
-        throw new Error('Multiple historical rules map to ' + identity + '; reconcile versions before migration');
-      }
-      appearances.set(identity, sourceKey);
       rules.push({
         ...normalizeRecurringRule({
           id: 'legacy-' + year + '-' + encodeURIComponent(sourceId),
@@ -85,7 +70,7 @@ export function collectLegacyRecurringRules(years, options = {}) {
   const byId = new Map();
   for (const rule of rules) {
     const existing = byId.get(rule.sourceRuleId);
-    if (existing && !mapped.has(existing.sourceYear + ':' + existing.sourceRuleId) && !mapped.has(rule.sourceYear + ':' + rule.sourceRuleId)) {
+    if (existing) {
       throw new Error('Recurring rule ID appears in multiple years: ' + rule.sourceRuleId + '; explicit reconciliation required');
     }
     byId.set(rule.sourceRuleId, rule);
