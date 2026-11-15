@@ -1330,9 +1330,14 @@ async function applyRecurringPreview() {
     const current = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
     if (!current.added) return;
     db[year] = current.document;
-    await saveDB();
+    const saveResult = await saveDB();
     loadedRecurringPreview = loaded;
     render();
+    if (saveResult !== 'cloud-saved') {
+      alert(saveResult === 'local-saved'
+        ? 'Scheduled entries were saved on this device only. Cloud sync failed; other devices may not have these changes.'
+        : 'Scheduled entries could not be saved. Review the budget and retry after resolving storage errors.');
+    }
     if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
   } catch (error) {
     console.error('Recurring entries were not applied:', error);
@@ -1352,9 +1357,9 @@ async function saveDB() {
   } catch (error) {
     console.error("Local save error:", error);
     alert("Could not save this budget in browser storage. Your changes may not persist.");
-    return;
+    return 'not-saved';
   }
-  if (!supabaseClient || !userId) return;
+  if (!supabaseClient || !userId) return 'local-saved';
   const client = supabaseClient;
   const key = userId + ":" + year;
   try {
@@ -1368,9 +1373,11 @@ async function saveDB() {
       if (error) throw error;
     });
     if (currentUser?.id === userId) showCloudSaveStatus("");
+    return 'cloud-saved';
   } catch (error) {
     console.error("Cloud sync error; local copy was retained:", error);
     if (currentUser?.id === userId) showCloudSaveStatus("Cloud sync failed. Changes are saved on this device only. Please check your connection.");
+    return 'local-saved';
   }
 }
 function switchYear(yr) {
