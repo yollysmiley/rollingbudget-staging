@@ -332,6 +332,7 @@ test('recurring application warns when cloud persistence fails but retains local
     await dialog.accept();
   });
   await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
   await expect(page.locator('#mobileApplyRecurringPreview')).toBeEnabled();
   await page.locator('#mobileApplyRecurringPreview').click();
