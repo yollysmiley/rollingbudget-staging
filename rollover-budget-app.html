@@ -941,7 +941,7 @@
 <div class="recurring-manager-shell">
 <div class="recurring-manager-heading"><div><p class="recurring-eyebrow">BUDGET SETTINGS · <span id="recurringYearLabel"></span></p><h2>Recurring Rules Manager</h2><p>Manage scheduled income and expenses and choose how often each rule repeats.</p></div><button type="button" class="recurring-back-button" onclick="closeRecurringModal()">← Back to Overview</button></div>
 <div id="recurringDesktopView" class="recurring-desktop-view">
-<section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span><span id="desktopRecurringPreviewStatus" role="status"></span></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
+<section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>All recurring rules</h3><p>Enable or disable rules without deleting their definitions.</p></div><span id="desktopRuleCount" class="badge">0 rules</span><span id="desktopRecurringPreviewStatus" role="status"></span><button type="button" id="desktopApplyRecurringPreview" onclick="applyRecurringPreview()" disabled>Apply scheduled entries</button></div><div class="recurring-table-wrap"><table class="recurring-table"><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Frequency</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody id="desktopRulesList"></tbody></table></div></section>
 <section class="recurring-panel"><div class="recurring-panel-heading"><div><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p></div></div><div class="recurring-form-grid" data-recurring-form="desktop">
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
@@ -951,7 +951,7 @@
 <label>Start month<select data-rec-field="startMonth"></select></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><div class="recurring-form-actions"><button class="primary" type="button" onclick="addRecurringRule('desktop')">Add rule</button></div></section>
 </div>
-<div id="recurringMobileView" class="recurring-mobile-view"><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p><p id="mobileRecurringPreviewStatus" role="status"></p></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
+<div id="recurringMobileView" class="recurring-mobile-view"><section class="recurring-mobile-section"><div class="recurring-mobile-heading"><div><h3>All recurring rules</h3><p id="mobileRuleCount">0 rules</p><p id="mobileRecurringPreviewStatus" role="status"></p><button type="button" id="mobileApplyRecurringPreview" onclick="applyRecurringPreview()" disabled>Apply scheduled entries</button></div></div><div id="mobileRulesList" class="recurring-mobile-rules"></div></section><section class="recurring-mobile-section recurring-mobile-add"><h3>Add a recurring rule</h3><p>New rules are applied to matching months in this budget year.</p><div class="recurring-mobile-form" data-recurring-form="mobile">
 <label>Category<select data-rec-field="category" onchange="toggleRecFields(this)"><option value="fixed">Fixed Expense</option><option value="variable">Variable Expense</option><option value="income">Income</option><option value="loan">Loan Payment</option><option value="cc">Credit Card Payment</option></select></label>
 <label>Name<input data-rec-field="name" type="text" placeholder="e.g. Mortgage or Salary"></label>
 <label>Amount ($)<input data-rec-field="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -1003,6 +1003,7 @@ let accountBudgetModule = null;
 let recurringAppService = null;
 let loadedRecurringPreview = { rules: [], held: 0 };
 let recurringPreviewError = '';
+let recurringApplyBusy = false;
 let accountsBusy = false;
 let accountsMessage = '';
 function accountStatus(message) {
@@ -1267,11 +1268,15 @@ async function refreshRecurringPreview() {
     console.warn('Recurring preview was not loaded; budgets remain unchanged:', error);
   }
 }
+function recurringPreviewResult(year) {
+  if (recurringPreviewError || !recurringAppService || !db[year]) return null;
+  return recurringAppService.previewLoadedRecurringYear(db[year], year, loadedRecurringPreview);
+}
 function recurringPreviewStatus(year) {
   if (recurringPreviewError) return recurringPreviewError;
   if (!recurringAppService || !db[year]) return 'Recurring preview unavailable';
   try {
-    const result = recurringAppService.previewLoadedRecurringYear(db[year], year, loadedRecurringPreview);
+    const result = recurringPreviewResult(year);
     return result.added + ' potential recurring entries (preview only, not saved)' +
       (result.held ? '; ' + result.held + ' historical rules awaiting review' : '');
   } catch (error) {
@@ -1301,6 +1306,41 @@ function queueCloudSave(key, operation) {
     if (cloudSaveQueues.get(key) === pending) cloudSaveQueues.delete(key);
   }).catch(() => {});
   return pending;
+}
+async function applyRecurringPreview() {
+  if (recurringApplyBusy || !currentUser || !supabaseClient || recurringPreviewError) return;
+  const owner = currentUser.id;
+  const year = activeYear;
+  recurringApplyBusy = true;
+  try {
+    // Refresh owner-scoped definitions at commit time; never rely only on
+    // a preview cached during sign-in.
+    const loaded = await recurringAppService.loadRecurringPreviewRules(supabaseClient, owner);
+    if (currentUser?.id !== owner || activeYear !== year) return;
+    const result = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
+    if (!result.added) {
+      loadedRecurringPreview = loaded;
+      return;
+    }
+    const accepted = confirm('Add ' + result.added + ' scheduled entries to ' + year +
+      '? Existing entries will not be changed. Historical imported rules remain excluded.');
+    if (!accepted || currentUser?.id !== owner || activeYear !== year) return;
+    // Recalculate immediately before applying to avoid duplication from
+    // user edits while the confirmation dialogue was open.
+    const current = recurringAppService.previewLoadedRecurringYear(db[year], year, loaded);
+    if (!current.added) return;
+    db[year] = current.document;
+    await saveDB();
+    loadedRecurringPreview = loaded;
+    render();
+    if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
+  } catch (error) {
+    console.error('Recurring entries were not applied:', error);
+    alert('Recurring entries could not be applied. Your existing budget was left unchanged.');
+  } finally {
+    recurringApplyBusy = false;
+    if (document.body.classList.contains('recurring-manager-open')) renderRulesList();
+  }
 }
 async function saveDB() {
   const year = activeYear;
@@ -1829,9 +1869,22 @@ function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.frequenc
 function renderRulesList(){
   const rules=db[activeYear].recurringRules||[],count=`${rules.length} rule${rules.length===1?"":"s"}`;
   document.getElementById("desktopRuleCount").textContent=count;document.getElementById("mobileRuleCount").textContent=count;
-  for (const id of ['desktopRecurringPreviewStatus', 'mobileRecurringPreviewStatus']) {
-    const node = document.getElementById(id);
-    if (node) node.textContent = recurringPreviewStatus(activeYear);
+  const status = recurringPreviewStatus(activeYear);
+  let canApply = false;
+  try {
+    canApply = !recurringApplyBusy && !recurringPreviewError &&
+      (recurringPreviewResult(activeYear)?.added ?? 0) > 0;
+  } catch (error) {
+    console.warn('Recurring preview is not valid:', error);
+  }
+  for (const [statusId, buttonId] of [
+    ['desktopRecurringPreviewStatus', 'desktopApplyRecurringPreview'],
+    ['mobileRecurringPreviewStatus', 'mobileApplyRecurringPreview']
+  ]) {
+    const node = document.getElementById(statusId);
+    if (node) node.textContent = status;
+    const button = document.getElementById(buttonId);
+    if (button) button.disabled = !canApply;
   }
   if(!rules.length){document.getElementById("desktopRulesList").innerHTML='<tr><td colspan="7">No recurring rules yet. Add your first rule below.</td></tr>';document.getElementById("mobileRulesList").innerHTML='<p>No recurring rules yet. Add your first rule below.</p>';return;}
   const startOf=rule=>Number.isInteger(rule.startMonth)?rule.startMonth:(Number.isInteger(rule.start)?rule.start:0);
