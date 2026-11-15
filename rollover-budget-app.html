@@ -1396,9 +1396,10 @@ async function saveDB() {
   try {
     await queueCloudSave(key, async () => {
       const version = cloudBudgetVersions.get(key);
+      const nextTimestamp = new Date(Math.max(Date.parse(updatedAt), version ? Date.parse(version) + 1 : 0)).toISOString();
       if (version) {
         const { data, error } = await client.from("budget_ui_years")
-          .update({ budget_data: snapshot, updated_at: updatedAt })
+          .update({ budget_data: snapshot, updated_at: nextTimestamp })
           .eq("user_id", userId).eq("year", Number(year))
           .eq("updated_at", version).select("year");
         if (error) throw error;
@@ -1408,11 +1409,11 @@ async function saveDB() {
       } else {
         // Unique (user_id, year) prevents a concurrent first save from replacing a row.
         const { error } = await client.from("budget_ui_years").insert({
-          user_id: userId, year: Number(year), budget_data: snapshot, updated_at: updatedAt
+          user_id: userId, year: Number(year), budget_data: snapshot, updated_at: nextTimestamp
         });
         if (error) throw error;
       }
-      cloudBudgetVersions.set(key, updatedAt);
+      cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) showCloudSaveStatus("");
     return 'cloud-saved';
