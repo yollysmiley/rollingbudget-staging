@@ -1,0 +1,21 @@
+/* Phase 2 public marketing homepage: isolated from authenticated app views. */
+body{background:#f6f5fa}
+.public-header{flex-wrap:wrap;background:rgba(255,255,255,.92);border-color:#ede9fe}
+.public-main{max-width:1200px;padding:56px 24px 72px}
+.public-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:clamp(28px,5vw,72px)}
+.public-hero h1{font-family:"Plus Jakarta Sans",Inter,system-ui,sans-serif;font-weight:800;font-size:clamp(2.65rem,4.4vw,3.5rem);max-width:610px}
+.public-hero .lead{max-width:540px}
+.public-art{position:relative;min-height:370px;display:grid;place-items:center;isolation:isolate}
+.public-art:before{content:"";position:absolute;inset:8%;background:radial-gradient(ellipse,#ddd6fe 0%,#f6f5fa 70%);z-index:-1}
+.budget-scene{width:min(100%,520px);height:auto;filter:drop-shadow(0 24px 24px rgba(108,43,217,.12))}
+.public-features{margin-top:72px}
+.public-features .feature{box-shadow:0 12px 32px -6px rgba(108,43,217,.08);border-color:#ede9fe}
+.public-features .feature-icon{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;background:#ede9fe;color:#6c2bd9;font-weight:800;font-size:1.25rem}
+.account-dialog{border-radius:22px}
+.account-form{background:#fff}
+.account-brand{color:#17152b}
+.account-actions .btn{min-height:48px}
+.account-dialog .account-message{min-height:0}
+.public-header .btn,.public-hero .btn{min-height:46px}
+@media(max-width:768px){.public-main{padding:40px 20px 64px}.public-hero{grid-template-columns:1fr}.public-art{min-height:260px}.budget-scene{max-width:420px}.public-features{margin-top:44px}.public-header .brand{font-size:1.02rem}.public-header nav .btn{padding:10px 11px;font-size:.8rem}}
+@media(prefers-reduced-motion:no-preference){.public-art .scene-card{animation:scene-float 5s ease-in-out infinite alternate}@keyframes scene-float{to{transform:translateY(-8px)}}}
