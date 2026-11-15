@@ -415,6 +415,7 @@ test('browser cloud fixture rejects another owner\'s conditional budget update',
 
 
 test('mobile automation settings omit duplicate recurring action while sidebar keeps access', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('[data-mobile-settings-section="automation"] button[onclick="openRecurringModal()"]')).toHaveCount(0);
