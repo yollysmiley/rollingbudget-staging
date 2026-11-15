@@ -1,0 +1,12 @@
+/* Phase 3A: distinct Settings presentations, shared application state. */
+.settings-section-nav a[aria-current="location"]{background:#ede9fe;color:#5b21b6;box-shadow:inset 3px 0 0 var(--rb-accent)}
+.desktop-settings-panel .settings-sections{display:grid;gap:18px}
+.desktop-settings-panel .desktop-settings-card{min-width:0}
+.mobile-settings-controls{display:grid;gap:10px}
+.mobile-settings-controls label,.mobile-settings-toggle{font-weight:700;color:var(--text)}
+.mobile-settings-controls select,.mobile-settings-controls button{width:100%;min-height:44px}
+.mobile-settings-toggle{display:flex;gap:12px;align-items:center;min-height:44px}
+.mobile-settings-toggle input{width:20px;height:20px;accent-color:var(--rb-accent)}
+.settings-help{color:var(--muted);font-size:.85rem;line-height:1.5;margin:5px 0 14px}
+@media(max-width:768px){#mobileSettingsPanel{max-width:100%;overflow-wrap:anywhere}#mobileSettingsPanel .mobile-settings-section{min-width:0}#mobileSettingsPanel button{min-height:44px}}
+@media(min-width:769px){#mobileSettingsPanel{display:none!important}}
