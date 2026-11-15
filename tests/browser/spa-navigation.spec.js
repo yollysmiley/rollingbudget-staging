@@ -35,14 +35,43 @@ test('desktop SPA navigation preserves routes, highlights, and history', async (
   await expect(page.locator('#desktopRecurringButton')).toHaveAttribute('aria-current', 'page');
 });
 
-test('direct desktop routes survive refresh without resetting the selected month', async ({ page }) => {
+test('planning month persists per year across routes and refresh', async ({ page }) => {
   await page.evaluate(() => selectMonth(4));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('May');
   await page.locator('#desktopOverviewButton').click();
-  await expect(page.locator('#mobileOverview')).toBeVisible();
+  await expect(page.locator('#mobileOverview')).toContainText('May');
   await page.reload();
   await expectAuthenticatedBudget(page);
-  await expect(page.locator('#desktopOverviewButton')).toHaveAttribute('aria-current', 'page');
-  await page.goto('/app/?page=budget');
+  await expect(page.locator('#mobileOverview')).toContainText('May');
+  await page.locator('#desktopBudgetButton').click();
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('May');
+
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Jan');
+  await page.evaluate(() => selectMonth(8));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Sep');
+  await page.evaluate(() => switchYear('2026'));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('May');
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Sep');
+  await page.reload();
   await expectAuthenticatedBudget(page);
-  await expect(page.locator('#desktopBudgetButton')).toHaveAttribute('aria-current', 'page');
+  await page.evaluate(() => switchYear('2027'));
+  await expect(page.locator('#rollingStrip .month-pill.active')).toContainText('Sep');
+});
+
+test('invalid saved month defaults to calendar month and another account cannot reuse it', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('rollingbudget_selected_month:browser-test-owner:2026', '99');
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  const expected = await page.evaluate(() => defaultMonthIndex('2026'));
+  expect(await page.evaluate(() => selectedIdx)).toBe(expected);
+  await page.evaluate(() => selectMonth(3));
+  await page.evaluate(() => {
+    currentUser = { id: 'different-test-owner' };
+    selectedIdx = restoreSelectedMonth('2026');
+  });
+  expect(await page.evaluate(() => selectedIdx)).toBe(expected);
 });
