@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Permit explicitly dispatched credentialed live integration on the reviewed PR #33 staging branch, retaining the protected environment and blocking ordinary pull-request secret access.
+
 - Adopt the committed npm v3 lockfile in all staging CI workflows with `npm ci` and lockfile-keyed npm download caching; retain `--ignore-scripts` for secret-free and credentialed live validation. No change to required check names or deployment gates.
 
 - Harden staging live integration account cleanup with run/owner/name verification before deletion, checked DELETE results and post-delete absence; add regression tests for ownership mismatches. Document CI workflow ownership and safe prerequisite for a future lockfile/cache change.
