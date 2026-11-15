@@ -603,3 +603,20 @@ test('mobile recurring form only shows start and optional end dates', async ({ p
   await expect(form.getByLabel(/Due day|Start month/i)).toHaveCount(0);
   await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
 });
+
+test('mobile copy action confirms and shares saved plan across viewport changes', async ({ page }) => {
+  const year=String(new Date().getFullYear()),next=String(Number(year)+1);
+  await page.evaluate(y => db[y].months[0].variable.push({name:'Groceries plan',amount:250,due:'5th'}),year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#mobileCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].variable[0]?.name,next)).toBe('Groceries plan');
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeHidden();
+  await page.setViewportSize({width:1280,height:900});
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].variable[0].amount,next)).toBe(250);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth+1)).toBe(true);
+});
