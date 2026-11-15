@@ -86,3 +86,7 @@ Regression coverage: `tests/recurring-foundation.test.mjs`, plus the existing de
 ### Phase 4B historical reconciliation (draft PR #39)
 
 The read-only `inspectRecurringHistory(years, manifest)` preflight requires a verified complete year listing. It reports missing, duplicate, cross-year reused, and numeric legacy IDs without changing budgets or writing to Supabase. Numeric IDs are blocked until explicit normalization is implemented; reused IDs require explicit reconciliation. The scheduler is not connected to budget loading or migration yet. Do not enable automatic migration or merge PR #39 until the remaining integration work and regression checks pass.
+
+### Phase 4B.3 reconciled storage bridge
+
+`migrateReconciledRecurringRules(client, userId, years, manifest, decisions)` is an opt-in API, not invoked by the app. The caller must provide the authenticated user, a verified complete year history, and explicit per-year source-ID mappings using JSON-encoded `[year,sourceId]` keys. Cross-year merged identities, missing IDs, duplicate IDs, incomplete history, and invalid rule definitions block all writes. The bridge preserves original year documents and historical transactions, and upserts only new user-owned recurring definitions with `ignoreDuplicates`. Its `attempted` count is not an inserted-row count. Existing source-identity uniqueness constraints may reject conflicting mappings, which must be resolved rather than bypassed. Do not enable automatic migration until end-to-end verification is complete.
