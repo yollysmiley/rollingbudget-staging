@@ -39,9 +39,9 @@ export async function loadRecurringPreviewRules(client, userId) {
   return { rules, held };
 }
 
-export function previewLoadedRecurringYear(yearDocument, year, loaded) {
+export function previewLoadedRecurringYear(yearDocument, year, loaded, options = {}) {
   if (!loaded || !Array.isArray(loaded.rules)) throw new Error('Loaded rules required');
-  return { ...previewRecurringYear(yearDocument, Number(year), loaded.rules), held: loaded.held };
+  return { ...previewRecurringYear(yearDocument, Number(year), loaded.rules, options), held: loaded.held };
 }
 
 export async function createRecurringRule(client, userId, input) {
