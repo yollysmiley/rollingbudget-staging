@@ -71,6 +71,7 @@ const brandCss = readFileSync(new URL('../styles/brand.css', import.meta.url), '
 mkdirSync('dist/styles', { recursive: true });
 mkdirSync('dist/app/styles', { recursive: true });
 writeFileSync('dist/styles/brand.css', brandCss);
+writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
 for (const path of ['account-model.mjs', 'account-storage.mjs', 'account-budget.mjs']) {
   const source = readFileSync(new URL('./' + path, import.meta.url));
