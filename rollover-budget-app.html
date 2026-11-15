@@ -2014,6 +2014,30 @@ async function addRecurringRule(view) {
       startDate, endDate
     });
     await refreshRecurringPreview();
+    // Backfill from authoritative cloud data, never from a potentially stale local copy.
+    // A cloud conflict or unsaved year must be resolved before adding occurrences.
+    const owner = currentUser.id;
+    const year = activeYear;
+    const key = owner + ':' + year;
+    if (!cloudBudgetConflicts.has(key) && !cloudSaveQueues.has(key) &&
+        !cloudSaveQueues.has(year) && cloudBudgetVersions.has(key)) {
+      try {
+        const result = await recurringAppService.backfillRecurringYear(supabaseClient, owner, year);
+        if (currentUser?.id === owner && activeYear === year && result.saved) {
+          db[year] = result.document;
+          cloudBudgetVersions.set(key, result.updatedAt);
+          localStorage.setItem(storageKey(year), JSON.stringify({
+            data: result.document, updatedAt: result.updatedAt
+          }));
+          render();
+        }
+      } catch (backfillError) {
+        console.warn('Recurring rule saved; automatic backfill deferred:', backfillError);
+        alert('Rule saved, but scheduled entries could not be added. Reload after resolving cloud sync.');
+      }
+    } else {
+      console.warn('Recurring rule saved; automatic backfill deferred until cloud budget is synchronized.');
+    }
     form.querySelectorAll('input').forEach(input => input.value = '');
     renderRulesList();
   } catch (error) {
