@@ -7,8 +7,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: staging-pages-${{ github.ref }}
-  cancel-in-progress: false
+  group: staging-pages-${{ github.event.pull_request.number || github.ref }}
+  # Cancel superseded PR builds, but never interrupt a main deployment.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -20,8 +21,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
+          cache: npm
       - name: Install pinned test runner
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Build redesigned UI with staging-only configuration
@@ -31,7 +33,7 @@ jobs:
       - name: Run desktop and mobile acceptance tests
         run: npm run test:e2e
       - name: Retain browser reports and failure evidence
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: browser-test-results-${{ github.run_id }}-${{ github.run_attempt }}

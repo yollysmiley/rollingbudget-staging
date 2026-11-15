@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { requiredSettings, logoutAccepted, verifiedCleanupSession, shouldLogoutOriginalSession } from './safety.mjs';
+import { requiredSettings, logoutAccepted, verifiedCleanupSession, shouldLogoutOriginalSession, assertOwnedAccountFixture } from './safety.mjs';
 
 const URL = 'https://phiscfwfuzeptetimdbo.supabase.co';
 const YEAR = 2026;
 const RUN = randomUUID();
+const FIXTURE_ACCOUNT_ID = 'integration-' + RUN;
 let settings;
 let accounts = [];
 let uiLoggedOutOwners;
@@ -52,7 +53,7 @@ function fixture(label) {
       code: name.slice(0, 3).toUpperCase(),
       name,
       recordedLeftover: 0,
-      income: index === 0 ? [{ name: label, cpm: 100, usaa: 0 }] : [],
+      income: index === 0 ? [{ name: label, amount: 100, accountId: FIXTURE_ACCOUNT_ID }] : [],
       fixed: [],
       variable: [],
       creditCards: [],
@@ -62,6 +63,10 @@ function fixture(label) {
 }
 
 async function seed(account, label) {
+  const inserted = await api('/rest/v1/budget_accounts', account, 'POST', {
+    id: FIXTURE_ACCOUNT_ID, user_id: account.user.id, name: 'Integration account ' + RUN, included: true
+  });
+  expect(inserted[0].id).toBe(FIXTURE_ACCOUNT_ID);
   const result = await api('/rest/v1/budget_ui_years', account, 'POST', {
     user_id: account.user.id,
     year: YEAR,
@@ -128,6 +133,10 @@ async function cleanup(account, letter) {
     return response.json();
   });
   try {
+  const accountPath = '/rest/v1/budget_accounts?select=id,user_id,name&user_id=eq.' + encodeURIComponent(owner.user.id) + '&id=eq.' + encodeURIComponent(FIXTURE_ACCOUNT_ID);
+  const ownedAccounts = await api(accountPath, owner);
+  if (ownedAccounts.length > 1) throw new Error('Unexpected duplicate integration accounts; refusing cleanup');
+  if (ownedAccounts.length) assertOwnedAccountFixture(ownedAccounts[0], FIXTURE_ACCOUNT_ID, owner.user.id, RUN);
   const existing = await rows(owner);
   if (existing.length) {
     const row = existing[0];
@@ -137,6 +146,13 @@ async function cleanup(account, letter) {
     await api('/rest/v1/budget_ui_years?user_id=eq.' + account.user.id + '&year=eq.' + YEAR, owner, 'DELETE');
   }
   expect(await rows(owner)).toHaveLength(0);
+  // Delete only the verified run-owned account, after its budget references are gone.
+  if (ownedAccounts.length) {
+    const deleted = await api(accountPath, owner, 'DELETE');
+    expect(deleted).toHaveLength(1);
+    assertOwnedAccountFixture(deleted[0], FIXTURE_ACCOUNT_ID, owner.user.id, RUN);
+  }
+  expect(await api(accountPath, owner)).toHaveLength(0);
   } finally {
     const result = await request('/auth/v1/logout?scope=local', owner, 'POST');
     if (!logoutAccepted(result.status, result.data)) throw new Error('Cleanup session logout failed');
@@ -193,19 +209,23 @@ test('authenticated cloud save survives a fresh browser context', async ({ brows
   const name = page.locator('#incomeBody input:not([type])').first();
   await name.fill('UI-SAVED');
   await name.press('Tab');
-  const cpm = page.locator("#incomeBody input[onchange*=\"'cpm'\"]");
-  await expect(cpm).toHaveCount(1);
-  await cpm.fill('4321.25');
-  await cpm.press('Tab');
-  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.cpm)).toBe(4321.25);
+  const amount = page.locator('#incomeBody tr:not(.roll-row) input[aria-label="Income amount"]');
+  await expect(amount).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.accountId)).toBe(FIXTURE_ACCOUNT_ID);
+  await amount.fill('4321.25');
+  await amount.press('Tab');
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.amount)).toBe(4321.25);
 
   await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.name).toBe('UI-SAVED');
-  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.cpm).toBe(4321.25);
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.amount).toBe(4321.25);
+  await expect.poll(async () => (await rows(account))[0]?.budget_data?.months?.[0]?.income?.[0]?.accountId).toBe(FIXTURE_ACCOUNT_ID);
 
   const fresh = await browser.newContext({ locale: 'en-US', trace: 'off' });
   try {
     const restored = await open(fresh, account, 'UI-SAVED');
-    await expect(restored.locator("#incomeBody input[onchange*=\"'cpm'\"]")).toHaveValue('4321.25');
+    await expect(restored.locator('#incomeBody tr:not(.roll-row) input[aria-label="Income amount"]')).toHaveValue('4321.25');
+    await expect.poll(() => restored.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.accountId)).toBe(FIXTURE_ACCOUNT_ID);
+    await expect.poll(() => restored.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.amount)).toBe(4321.25);
     await expect(restored.locator('#incTotalBadge')).toHaveText('$4,321.25');
   } finally {
     await fresh.close();

@@ -16,8 +16,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
+          cache: npm
       - name: Install pinned runner without lifecycle scripts or staging credentials
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Validate JavaScript syntax
         run: |
           node --check playwright.live.config.js
@@ -25,7 +26,7 @@ jobs:
           node --check tests/live/safe-reporter.cjs
           node --check tests/live/safety.mjs
           node --check scripts/live-staging-tests.mjs
-      - name: Test safety helpers and current staging UI contract
-        run: node --test tests/live/*.test.mjs
+      # The primary build runs tests/live/*.test.mjs; this required check
+      # remains focused on syntax and secret-free Playwright discovery.
       - name: Discover authenticated cases without secrets or live requests
         run: npx playwright test --config=playwright.live.config.js --list

@@ -1,4 +1,13 @@
 ## Unreleased
+
+- Temporarily permitted protected manual live integration on PR #33 for pre-merge verification; restored the workflow's main-only execution gate before merging.
+
+- Adopt the committed npm v3 lockfile in all staging CI workflows with `npm ci` and lockfile-keyed npm download caching; retain `--ignore-scripts` for secret-free and credentialed live validation. No change to required check names or deployment gates.
+
+- Harden staging live integration account cleanup with run/owner/name verification before deletion, checked DELETE results and post-delete absence; add regression tests for ownership mismatches. Document CI workflow ownership and safe prerequisite for a future lockfile/cache change.
+
+- Separate live authenticated persistence fixtures from legacy migration: seed a run-scoped modern account and `amount`/`accountId` income, verify Supabase persistence and fresh-context restoration, and clean up only the test-owned account after deleting its budget. Dedicated browser and unit migration regressions continue to cover legacy CPM/USAA records.
+- Reduce staging CI duplication by running live safety unit tests in the primary build only, cancel superseded PR builds without cancelling main deployments, and retain Playwright reports on failure rather than every successful run. Required `build` and `validate` checks remain unchanged; live credentialed workflow remains isolated.
 - Staging: seed legacy accounts only when referenced by budget data; allow empty catalogs and unassigned income, and align desktop/mobile income-entry fields. Added regression tests.
 - Harden account migration against missing legacy accounts and local cache failures; enable editable account-linked income amounts and add regression coverage.
 
