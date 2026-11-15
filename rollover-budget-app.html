@@ -1249,7 +1249,10 @@ async function loadAllYears() {
         const conflictKey = storageKey(year) + '_cloud_conflict';
         const pendingConflict = localStorage.getItem(conflictKey) === '1';
         const newest = pendingConflict && localRecord ? localRecord : chooseNewestBudget(localRecord, cloudRecord);
-        if (pendingConflict) { cloudBudgetConflicts.add(currentUser.id + ':' + year); showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
+        if (pendingConflict) {
+          cloudBudgetConflicts.add(currentUser.id + ':' + year);
+          showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
+        }
         all[year] = newest.data;
         // Normalize the chosen copy to the timestamped envelope so future loads compare versions.
         if (newest === cloudRecord) {
@@ -1260,6 +1263,10 @@ async function loadAllYears() {
     } catch (error) { console.error("Cloud load error; local data was retained:", error); }
   }
   db = all;
+  if (currentUser && localStorage.getItem(conflictStorageKey(activeYear)) === '1') {
+    cloudBudgetConflicts.add(currentUser.id + ':' + activeYear);
+    showCloudSaveStatus('Unsynced local changes require reconciliation before cloud saving.');
+  }
   await refreshRecurringPreview();
 }
 async function refreshRecurringPreview() {
