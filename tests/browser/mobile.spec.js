@@ -245,6 +245,12 @@ test('auto-cascade persists from mobile and desktop through the same budget sett
   await expect(page.locator('#autoRollToggle')).not.toBeChecked();
   await page.reload();
   await page.locator('#mobileMenuButton').click();
+  // The sidebar animates in from off-screen; a visible element may still be outside the viewport.
+  await expect(page.locator('#mobileSidebar')).toHaveAttribute('aria-hidden', 'false');
+  await expect.poll(async () => {
+    const box = await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').boundingBox();
+    return Boolean(box && box.x >= 0 && box.x + box.width <= page.viewportSize().width);
+  }).toBe(true);
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Rollover & Automation' }).click();
   await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
