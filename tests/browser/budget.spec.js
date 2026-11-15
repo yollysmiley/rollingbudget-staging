@@ -475,3 +475,23 @@ test('desktop explicitly keeping local changes resolves a conflict with conditio
   });
   expect(result).toEqual({ present: true, backup: true });
 });
+
+
+test('desktop overview selects the current month for current year and January for other years', async ({ page }) => {
+  const initial = await page.evaluate(() => ({ year: activeYear, month: selectedIdx, nowYear: new Date().getFullYear(), nowMonth: new Date().getMonth() }));
+  expect(initial.month).toBe(initial.year === String(initial.nowYear) ? initial.nowMonth : 0);
+  await page.evaluate(() => selectMonth(4));
+  await page.evaluate(() => render());
+  expect(await page.evaluate(() => selectedIdx)).toBe(4);
+  const otherYear = String(initial.nowYear === 2026 ? 2027 : 2026);
+  await page.evaluate(year => switchYear(year), otherYear);
+  expect(await page.evaluate(() => selectedIdx)).toBe(0);
+  await page.evaluate(year => switchYear(year), String(initial.nowYear));
+  expect(await page.evaluate(() => selectedIdx)).toBe(initial.nowMonth);
+});
+
+test('recurring manager heading is global and contains no budget year', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('.recurring-eyebrow')).toHaveText('RECURRING RULES');
+  await expect(page.locator('#recurringYearLabel')).toHaveCount(0);
+});
