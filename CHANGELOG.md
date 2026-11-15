@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Phase A2 steps 1–2 (staging): add a pure year-plan copy module and distinct desktop/mobile **Copy Previous Year’s Plan** actions, requiring confirmation and protecting existing entries, recurring occurrences, historical debt balances, and account assignments. Add unit and responsive browser regression coverage. No schema changes.
+
 - Phase A1 (staging): automatically expose the current year plus two future years, discover all older saved and owner-scoped unsynced years, preserve diverged local budgets instead of choosing by timestamps, remember the selected year per user/session, and move distinct desktop/mobile year selectors outside Settings. Remove manual New Year controls, apply global recurring rules after a virtual year's first successful cloud save, and update impacted unit/browser regression tests. No database schema changes.
 
 - Staging: wait for the mobile navigation drawer to finish entering the viewport before SPA route test clicks; add explicit desktop/mobile recurring date-field acceptance tests and a staging build guard against reintroducing Due day / Start month controls. The live site still requires a successful staging deployment to receive these changes.
