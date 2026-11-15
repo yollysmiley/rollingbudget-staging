@@ -32,6 +32,8 @@ export async function loadRecurringPreviewRules(client, userId) {
     const displayVersion = currentVersion || rule.versions
       .slice().sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))[0];
     rule.displayActive = row.active !== false && (displayVersion?.enabled !== false);
+    rule.displayAmount = displayVersion?.amount ?? rule.amount;
+    rule.displayFrequency = displayVersion?.frequency ?? rule.frequency;
     rules.push(rule);
   }
   return { rules, held };
