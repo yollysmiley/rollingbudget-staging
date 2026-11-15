@@ -14,11 +14,17 @@ function isPossibleDuplicate(entry, occurrence) {
   const existing = normalizedName(entry.name);
   const proposed = normalizedName(occurrence.name);
   if (!existing || !proposed) return false;
-  const words = name => name.split(' ').filter(word => word.length > 3);
-  const similar = existing.includes(proposed) || proposed.includes(existing) ||
-    words(existing).some(word => words(proposed).includes(word));
-  // Amount and account differences are review signals, not proof of uniqueness.
-  return similar;
+  if (existing === proposed) return true;
+  const generic = new Set(['payment', 'monthly', 'annual', 'invoice', 'bill', 'charge', 'transfer']);
+  const prefix = (shorter, longer) => longer.startsWith(shorter + ' ') &&
+    shorter.length >= 4 && !generic.has(shorter);
+  // A distinctive leading name may be the same transaction despite an amount change.
+  if (prefix(existing, proposed) || prefix(proposed, existing)) return true;
+  const words = name => name.split(' ').filter(word => word.length >= 5 && !generic.has(word));
+  const shared = words(existing).filter(word => words(proposed).includes(word));
+  // A shared descriptive word alone is insufficient: require financial context too.
+  return shared.length > 0 && amountOf(entry) === Number(occurrence.amount) &&
+    accountOf(entry) === (occurrence.accountId ?? null);
 }
 
 // Pure preview used by both desktop and mobile views. It never changes budgets.
