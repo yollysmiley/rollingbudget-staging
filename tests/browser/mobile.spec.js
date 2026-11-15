@@ -109,11 +109,11 @@ test('mobile sidebar exposes core pages and year management without burying recu
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
   await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
-  await expect(page.locator('#mobileSettingsPanel #activeYearSelect')).toHaveCount(1);
-  await expect(page.locator('#mobileSidebar #activeYearSelect')).toHaveCount(0);
-  await page.locator('#activeYearSelect').selectOption('2027');
-  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
-  await expect(page.locator('#autoRollToggle')).toBeVisible();
+  await expect(page.locator('#mobileSettingsPanel #mobileActiveYearSelect')).toHaveCount(1);
+  await expect(page.locator('#mobileSidebar #mobileActiveYearSelect')).toHaveCount(0);
+  await page.locator('#mobileActiveYearSelect').selectOption('2027');
+  await expect(page.locator('#mobileActiveYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#mobileAutoRollToggle')).toBeVisible();
   await expect(page.locator('#authBtn')).toBeHidden();
   await expect(page.locator('#mobileAuthBtn')).toBeVisible();
 });
@@ -181,4 +181,24 @@ test('cancelling mobile sign-out keeps the authenticated budget visible', async 
   await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
   await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign Out');
   await expect(page.locator('#mobileOverview')).toBeVisible();
+});
+
+test('mobile Settings uses independent controls and preserves state after viewport switch', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await expect(page.locator('#mobileActiveYearSelect')).toBeVisible();
+  await expect(page.locator('#activeYearSelect')).toBeHidden();
+  await page.locator('#mobileActiveYearSelect').selectOption('2027');
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await page.locator('#mobileAutoRollToggle').uncheck();
+  await expect(page.locator('#autoRollToggle')).not.toBeChecked();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#activeYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#autoRollToggle')).not.toBeChecked();
+  await expect(page.locator('#mobileSettingsPanel')).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#mobileActiveYearSelect')).toHaveValue('2027');
+  await expect(page.locator('#mobileAutoRollToggle')).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
