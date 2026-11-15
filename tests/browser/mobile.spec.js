@@ -284,18 +284,15 @@ test('mobile apply action saves verified entries once and desktop sees the same 
   await page.evaluate(() => {
     const verifiedRule = {
       id: 'verified-demo', name: 'Verified expense', category: 'fixed', amount: 125,
-      due: '5th', accountId: null, frequency: 'monthly', startDate: '2026-01-01',
-      endDate: null, active: true, versions: [{
+      due: '5th', account_id: null, frequency: 'monthly', start_date: '2026-01-01',
+      end_date: null, active: true, source_year: null, versions: [{
         effectiveFrom: '2026-01-01', name: 'Verified expense', amount: 125,
         due: '5th', accountId: null, frequency: 'monthly'
       }]
     };
-    recurringAppService.loadRecurringPreviewRules = async () => ({
-      rules: [verifiedRule], held: 0
-    });
-    loadedRecurringPreview = { rules: [verifiedRule], held: 0 };
-    recurringPreviewError = '';
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([verifiedRule]));
   });
+  await page.reload();
   page.once('dialog', dialog => dialog.accept());
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-action="recurring"]').click();
