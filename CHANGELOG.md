@@ -1,5 +1,7 @@
 ## Unreleased
 
+- PR #42 Phase 3 staging: connect future-effective recurring edits and reactivation to automatic missing-entry synchronization; disabling preserves existing entries. Display upcoming changes in distinct desktop/mobile views, synchronize global rules on new budget-year creation, and prevent accidentally replacing an existing year. Add service and browser regression tests.
+
 - PR #42 staging: restrict automatic recurring backfill to owner-saved cloud years, explicitly save only the selected eligible year on rule creation, pin cloud revisions during synchronization, and preserve unsynced local changes with conflict recovery. Added service and desktop/mobile regression coverage. Existing saved entries are never rewritten; no production changes.
 
 - Temporarily permitted protected manual live integration on PR #33 for pre-merge verification; restored the workflow's main-only execution gate before merging.

@@ -1485,8 +1485,12 @@ function switchYear(yr) {
 async function createNewYear() {
   const newYr = prompt("Enter new year to plan (e.g. 2028):", String(parseInt(activeYear) + 1));
   if (!newYr) return;
-  if (!/^\d{4}$/.test(newYr)) { alert("Enter a four-digit year."); return; }
-  
+  if (!/^\d{4}$/.test(newYr) || Number(newYr) < 1900 || Number(newYr) > 2200) {
+    alert("Enter a valid four-digit budget year."); return;
+  }
+  if (db[newYr]) { alert("That budget year already exists. Select it instead."); return; }
+  const owner = currentUser?.id;
+  if (!owner) return;
   const computed = computeRolling(activeYear);
   const decEnding = computed[11].endingRollover;
 
@@ -1512,8 +1516,14 @@ async function createNewYear() {
   sel.value = newYr;
   activeYear = newYr;
   selectedIdx = restoreSelectedMonth(activeYear);
-  await saveDB();
-  render();
+  const status = await saveDB();
+  if (currentUser?.id !== owner) return;
+  if (status === 'cloud-saved') {
+    await backfillSavedRecurringYears(owner, newYr + '-01-01', newYr + '-12-31');
+  } else {
+    alert("Budget year created locally, but recurring entries were not synchronized. Resolve the cloud save before retrying.");
+  }
+  if (currentUser?.id === owner) render();
 }
 
 function fmt(n) {
@@ -1970,6 +1980,13 @@ function openRecurringModal(){
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
 function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
 function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.displayFrequency || rule.frequency]?.label||"Monthly (legacy)";}
+function nextRecurringEffectiveMonth(rule) {
+  const now = new Date();
+  const firstOfNextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+    .toISOString().slice(0, 10);
+  const ruleStartMonth = rule.startDate.slice(0, 7) + '-01';
+  return ruleStartMonth > firstOfNextMonth ? ruleStartMonth : firstOfNextMonth;
+}
 function renderRulesList(){
   const rules = loadedRecurringPreview.rules || [];
   const count = rules.length + ' rule' + (rules.length === 1 ? '' : 's');
@@ -1981,13 +1998,27 @@ function renderRulesList(){
     return;
   }
   const startOf = rule => rule.startDate || '—';
-  document.getElementById('desktopRulesList').innerHTML = rules.map((rule, i) => {
+  const futureStatus = rule => {
     const on = rule.displayActive !== false;
-    return `<tr><td><strong>${esc(rule.name)}</strong><div>${esc(rule.endDate ? 'Ends ' + rule.endDate : 'No end date')}</div></td><td>${esc(rule.category.toUpperCase())}</td><td>${fmt(rule.displayAmount ?? rule.amount)}</td><td>${esc(recurringRuleFrequency(rule))}</td><td>${esc(startOf(rule))}</td><td><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></td><td><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable' : 'Enable'}</button><button type="button" onclick="editRecurringRule(${i})">Edit</button><button type="button" onclick="deleteRecurringRule(${i})">Delete</button></td></tr>`;
+    const nextOn = rule.upcomingActive !== false;
+    const amount = rule.upcomingAmount ?? rule.displayAmount ?? rule.amount;
+    const frequency = rule.upcomingFrequency || rule.displayFrequency || rule.frequency;
+    const differs = on !== nextOn || Number(amount) !== Number(rule.displayAmount ?? rule.amount) ||
+      frequency !== (rule.displayFrequency || rule.frequency);
+    return { on, nextOn, effective: rule.upcomingEffectiveFrom || nextRecurringEffectiveMonth(rule),
+      notice: differs ? 'Scheduled from ' + (rule.upcomingEffectiveFrom || nextRecurringEffectiveMonth(rule)) +
+        ': ' + (nextOn ? 'Enabled' : 'Disabled') + ', ' + fmt(amount) +
+        ', ' + (RECURRING_FREQUENCIES[frequency]?.label || frequency) : '' };
+  };
+  document.getElementById('desktopRulesList').innerHTML = rules.map((rule, i) => {
+    const status = futureStatus(rule);
+    const pending = status.notice ? '<div class="recurring-pending">' + esc(status.notice) + '</div>' : '';
+    return `<tr><td><strong>${esc(rule.name)}</strong><div>${esc(rule.endDate ? 'Ends ' + rule.endDate : 'No end date')}</div></td><td>${esc(rule.category.toUpperCase())}</td><td>${fmt(rule.displayAmount ?? rule.amount)}</td><td>${esc(recurringRuleFrequency(rule))}</td><td>${esc(startOf(rule))}</td><td><span class="recurring-status ${status.on ? '' : 'disabled'}">${status.on ? 'Enabled' : 'Disabled'}</span>${pending}</td><td><button type="button" onclick="toggleRecurringRule(${i})">${status.nextOn ? 'Disable' : 'Enable'} from ${esc(status.effective)}</button><button type="button" onclick="editRecurringRule(${i})">Edit</button><button type="button" onclick="deleteRecurringRule(${i})">Delete</button></td></tr>`;
   }).join('');
   document.getElementById('mobileRulesList').innerHTML = rules.map((rule, i) => {
-    const on = rule.displayActive !== false;
-    return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(rule.name)}</h4><span class="recurring-status ${on ? '' : 'disabled'}">${on ? 'Enabled' : 'Disabled'}</span></div><div class="recurring-rule-card-meta"><div>Category<strong>${esc(rule.category.toUpperCase())}</strong></div><div>Amount<strong>${fmt(rule.displayAmount ?? rule.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(rule))}</strong></div><div>Starts<strong>${esc(startOf(rule))}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${on ? 'Disable rule' : 'Enable rule'}</button><button type="button" onclick="editRecurringRule(${i})">Edit</button><button type="button" onclick="deleteRecurringRule(${i})">Delete rule</button></article>`;
+    const status = futureStatus(rule);
+    const pending = status.notice ? '<p class="recurring-pending">' + esc(status.notice) + '</p>' : '';
+    return `<article class="recurring-rule-card"><div class="recurring-rule-card-head"><h4>${esc(rule.name)}</h4><span class="recurring-status ${status.on ? '' : 'disabled'}">${status.on ? 'Enabled' : 'Disabled'}</span></div>${pending}<div class="recurring-rule-card-meta"><div>Category<strong>${esc(rule.category.toUpperCase())}</strong></div><div>Amount<strong>${fmt(rule.displayAmount ?? rule.amount)}</strong></div><div>Frequency<strong>${esc(recurringRuleFrequency(rule))}</strong></div><div>Starts<strong>${esc(startOf(rule))}</strong></div></div><button type="button" onclick="toggleRecurringRule(${i})">${status.nextOn ? 'Disable' : 'Enable'} from ${esc(status.effective)}</button><button type="button" onclick="editRecurringRule(${i})">Edit</button><button type="button" onclick="deleteRecurringRule(${i})">Delete rule</button></article>`;
   }).join('');
 }
 function recurringRuleItem(r){
@@ -2116,35 +2147,47 @@ async function addRecurringRule(view) {
 async function editRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
-  const amountInput = prompt('New recurring amount (future months only):', String(rule.displayAmount ?? rule.amount));
+  const owner = currentUser.id;
+  const amountInput = prompt('New recurring amount (future months only):',
+    String(rule.upcomingAmount ?? rule.displayAmount ?? rule.amount));
   if (amountInput === null) return;
   const amount = Number(amountInput);
   if (!Number.isFinite(amount) || amount < 0) { alert('Enter a valid non-negative amount.'); return; }
-  const frequency = prompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually', rule.displayFrequency || rule.frequency);
+  const frequency = prompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually',
+    rule.upcomingFrequency || rule.displayFrequency || rule.frequency);
   if (frequency === null) return;
   if (!RECURRING_FREQUENCIES[frequency]) { alert('Select a supported frequency.'); return; }
-  const effectiveFrom = [new Date().toISOString().slice(0, 7) + '-01', rule.startDate].sort().at(-1);
+  const effectiveFrom = nextRecurringEffectiveMonth(rule);
   try {
-    await recurringAppService.editRecurringRule(supabaseClient, currentUser.id, rule.id,
+    await recurringAppService.editRecurringRule(supabaseClient, owner, rule.id,
       { amount, frequency }, effectiveFrom);
+    if (currentUser?.id !== owner) return;
     await refreshRecurringPreview();
-    renderRulesList();
+    if (currentUser?.id !== owner) return;
+    await backfillSavedRecurringYears(owner, effectiveFrom, rule.endDate);
+    if (currentUser?.id === owner) renderRulesList();
   } catch (error) {
     console.error('Could not edit recurring rule:', error);
-    alert('Recurring rule could not be edited.');
+    if (currentUser?.id === owner) alert('Recurring rule could not be edited.');
   }
 }
 async function toggleRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
+  const owner = currentUser.id;
+  const enabling = !(rule.upcomingActive ?? rule.displayActive);
+  const effectiveFrom = nextRecurringEffectiveMonth(rule);
   try {
-    await recurringAppService.setRecurringRuleActive(supabaseClient, currentUser.id, rule.id, !rule.displayActive,
-      [new Date().toISOString().slice(0, 7) + '-01', rule.startDate].sort().at(-1));
+    await recurringAppService.setRecurringRuleActive(supabaseClient, owner, rule.id, enabling, effectiveFrom);
+    if (currentUser?.id !== owner) return;
     await refreshRecurringPreview();
-    renderRulesList();
+    if (currentUser?.id !== owner) return;
+    // Disabling only changes the rule version. It never deletes or backfills saved entries.
+    if (enabling) await backfillSavedRecurringYears(owner, effectiveFrom, rule.endDate);
+    if (currentUser?.id === owner) renderRulesList();
   } catch (error) {
     console.error('Could not update recurring rule:', error);
-    alert('Recurring rule could not be updated.');
+    if (currentUser?.id === owner) alert('Recurring rule could not be updated.');
   }
 }
 async function deleteRecurringRule(index) {

@@ -462,3 +462,41 @@ test('mobile recurring synchronization blocks an unsaved local cache instead of 
   expect(after.conflict).toBe('1');
   expect(after.cached).toContainEqual({ name: 'Unsaved cached transaction', amount: 55 });
 });
+
+test('mobile disable preserves saved entries; re-enable backfills missing future month once', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-15T12:00:00Z') });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-action="recurring"]').click();
+  const form = page.locator('[data-recurring-form="mobile"]');
+  await form.locator('[data-rec-field="name"]').fill('Mobile reactivation');
+  await form.locator('[data-rec-field="amount"]').fill('60');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).last().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    entry => entry.name === 'Mobile reactivation').length)).toBe(1);
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows['2026'].budget_data.months[11].fixed =
+      rows['2026'].budget_data.months[11].fixed.filter(x => x.name !== 'Mobile reactivation');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    db['2026'] = structuredClone(rows['2026'].budget_data);
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: db['2026'], updatedAt: rows['2026'].updated_at
+    }));
+  });
+  await page.locator('#mobileRulesList').getByRole('button', { name: 'Disable from 2026-12-01' }).click();
+  await expect(page.locator('#mobileRulesList')).toContainText('Scheduled from 2026-12-01: Disabled');
+  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
+    x => x.name === 'Mobile reactivation').length)).toBe(0);
+  expect(await page.evaluate(() => db['2026'].months[10].fixed.filter(
+    x => x.name === 'Mobile reactivation').length)).toBe(1);
+  await page.locator('#mobileRulesList').getByRole('button', { name: 'Enable from 2026-12-01' }).click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    x => x.name === 'Mobile reactivation').length)).toBe(1);
+  const counts = await page.evaluate(() => db['2026'].months.map(month =>
+    month.fixed.filter(x => x.name === 'Mobile reactivation').length));
+  expect(counts).toEqual(Array(12).fill(1));
+  await page.reload();
+  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
+    x => x.name === 'Mobile reactivation').length)).toBe(1);
+});

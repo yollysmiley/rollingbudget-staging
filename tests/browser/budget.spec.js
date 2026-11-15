@@ -519,3 +519,68 @@ test('cloud fixture discovers only explicitly saved years for the authenticated 
   });
   expect(rows).toEqual({ own: [2026], other: [] });
 });
+
+test('desktop edit only fills missing future entries and preserves existing amounts', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-15T12:00:00Z') });
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Future price edit');
+  await form.locator('[data-rec-field="amount"]').fill('100');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    entry => entry.name === 'Future price edit').length)).toBe(1);
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows['2026'].budget_data.months[11].fixed =
+      rows['2026'].budget_data.months[11].fixed.filter(x => x.name !== 'Future price edit');
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    db['2026'] = structuredClone(rows['2026'].budget_data);
+    localStorage.setItem(storageKey('2026'), JSON.stringify({
+      data: db['2026'], updatedAt: rows['2026'].updated_at
+    }));
+  });
+  const answers = ['150', 'monthly'];
+  page.on('dialog', dialog => dialog.accept(answers.shift() ?? ''));
+  await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
+    entry => entry.name === 'Future price edit').map(entry => entry.amount))).toEqual([150]);
+  const state = await page.evaluate(() => ({
+    january: db['2026'].months[0].fixed.filter(x => x.name === 'Future price edit').map(x => x.amount),
+    november: db['2026'].months[10].fixed.filter(x => x.name === 'Future price edit').map(x => x.amount),
+    december: db['2026'].months[11].fixed.filter(x => x.name === 'Future price edit').map(x => x.amount),
+    version: JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules'))[0].versions.at(-1)
+  }));
+  expect(state.january).toEqual([100]);
+  expect(state.november).toEqual([100]);
+  expect(state.december).toEqual([150]);
+  expect(state.version.effectiveFrom).toBe('2026-12-01');
+  expect(state.version.amount).toBe(150);
+  await expect(page.locator('#desktopRulesList')).toContainText('Scheduled from 2026-12-01');
+  await page.reload();
+  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
+    x => x.name === 'Future price edit').map(x => x.amount))).toEqual([150]);
+});
+
+test('creating a budget year safely applies global recurring rules without saving other templates', async ({ page }) => {
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Future year payment');
+  await form.locator('[data-rec-field="amount"]').fill('45');
+  await form.locator('[data-rec-field="startDate"]').fill('2026-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(
+    entry => entry.name === 'Future year payment').length)).toBe(1);
+  await page.locator('#desktopSettingsButton').click();
+  await page.locator('[data-settings-section="years"]').click();
+  page.once('dialog', dialog => dialog.accept('2028'));
+  await page.locator('button[onclick="createNewYear()"]').first().click();
+  await expect.poll(() => page.evaluate(() => db['2028']?.months?.[0].fixed.filter(
+    entry => entry.name === 'Future year payment').length)).toBe(1);
+  const state = await page.evaluate(() => ({
+    savedYears: Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))).sort(),
+    count: db['2028'].months.flatMap(month => month.fixed).filter(x => x.name === 'Future year payment').length,
+    active: activeYear
+  }));
+  expect(state).toEqual({ savedYears: ['2026', '2028'], count: 12, active: '2028' });
+});
