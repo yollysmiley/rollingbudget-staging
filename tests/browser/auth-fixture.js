@@ -20,7 +20,7 @@ export async function mockSignedInBudget(page) {
               select() { return chain; },
               eq(field, value) {
                 if (table === 'budget_ui_years') {
-                  // Seed only from the current isolated test account's in-memory budget.
+                  // Cloud rows exist only after an explicit insert/update in this isolated test.
                   const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
                   if (field === 'user_id') return {
                     eq(yearField, year) {
@@ -28,17 +28,15 @@ export async function mockSignedInBudget(page) {
                         return Promise.resolve({ data: [], error: null });
                       }
                       const key = String(year);
-                      if (!rows[key] && typeof db !== 'undefined' && db[key]) {
-                        rows[key] = { year: Number(year), budget_data: structuredClone(db[key]), updated_at: '2026-01-01T00:00:00.000Z' };
-                        sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
-                      }
                       return Promise.resolve({ data: rows[key] ? [rows[key]] : [], error: null });
                     },
                     // Supabase queries are thenable both with and without a year filter.
                     then(resolve, reject) {
-                      return Promise.resolve({
-                        data: value === user.id ? Object.values(rows) : [], error: null
-                      }).then(resolve, reject);
+                      const failure = sessionStorage.getItem('__mock_budget_cloud_discovery_failure') === '1';
+                      return Promise.resolve(failure
+                        ? { data: null, error: { message: 'discovery offline' } }
+                        : { data: value === user.id ? Object.values(rows) : [], error: null }
+                      ).then(resolve, reject);
                     }
                   };
                   return Promise.resolve({ data: Object.values(rows), error: null });
@@ -77,7 +75,10 @@ export async function mockSignedInBudget(page) {
                   const query = {
                     eq(field, value) { filters[field] = value; return query; },
                     select() {
-                      if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ data: null, error: { message: 'offline' } });
+                      if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1' ||
+                          sessionStorage.getItem('__mock_budget_cloud_update_failure') === '1') {
+                        return Promise.resolve({ data: null, error: { message: 'offline' } });
+                      }
                       const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
                       const key = String(filters.year), row = rows[key];
                       if (filters.user_id !== user.id || !row || row.updated_at !== filters.updated_at) return Promise.resolve({ data: [], error: null });

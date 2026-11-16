@@ -683,10 +683,14 @@
   <div class="budget-year-picker budget-year-picker-desktop">
     <label for="activeYearSelect">Budget year</label>
     <select id="activeYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
+    <button type="button" id="desktopCopyPreviousYear" class="copy-previous-year-button" onclick="copyPreviousYearPlan()" hidden>Copy Previous Year’s Plan</button>
+    <button type="button" id="desktopProjectJanuary" class="copy-previous-year-button" onclick="applyProjectedJanuaryOpening()" hidden>Use December Rollover for January</button>
   </div>
   <div class="budget-year-picker budget-year-picker-mobile">
     <label for="mobileActiveYearSelect">Budget year</label>
     <select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
+    <button type="button" id="mobileCopyPreviousYear" class="copy-previous-year-button" onclick="copyPreviousYearPlan()" hidden>Copy Previous Year’s Plan</button>
+    <button type="button" id="mobileProjectJanuary" class="copy-previous-year-button" onclick="applyProjectedJanuaryOpening()" hidden>Use December Rollover for January</button>
   </div>
 </section>
 
@@ -822,7 +826,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newFixName" placeholder="Fixed bill name" style="flex:1;min-width:130px" />
-        <input type="text" id="newFixDue" placeholder="Due (e.g. 5th)" style="width:95px" />
+        <select id="newFixDue" aria-label="Due day for new fixed expense" style="width:95px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newFixAmt" placeholder="Amount $" style="width:95px" />
         <label>Account <select id="newFixAccount" data-new-entry-account aria-label="Account for new newFix"></select></label>
         <button class="primary" onclick="addExpense('fixed')">Add</button>
@@ -848,7 +852,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newVarName" placeholder="Variable expense" style="flex:1;min-width:130px" />
-        <input type="text" id="newVarDue" placeholder="Due" style="width:95px" />
+        <select id="newVarDue" aria-label="Due day for new variable expense" style="width:95px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newVarAmt" placeholder="Amount $" style="width:95px" />
         <label>Account <select id="newVarAccount" data-new-entry-account aria-label="Account for new newVar"></select></label>
         <button class="primary" onclick="addExpense('variable')">Add</button>
@@ -876,7 +880,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newLoanName" placeholder="Loan name" style="flex:1;min-width:110px" />
-        <input type="text" id="newLoanDue" placeholder="Due" style="width:65px" />
+        <select id="newLoanDue" aria-label="Due day for new loan" style="width:65px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newLoanBal" placeholder="Balance $" style="width:90px" />
         <input type="number" step="0.01" id="newLoanPay" placeholder="Pay $" style="width:85px" />
         <label>Account <select id="newLoanAccount" data-new-entry-account aria-label="Account for new newLoan"></select></label>
@@ -905,7 +909,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newCcName" placeholder="Card name" style="flex:1;min-width:140px" />
-        <input type="text" id="newCcDue" placeholder="Due" style="width:95px" />
+        <select id="newCcDue" aria-label="Due day for new credit card" style="width:95px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newCcStmt" placeholder="Statement $" style="width:110px" />
         <input type="number" step="0.01" id="newCcApr" placeholder="APR/Min" style="width:95px" />
         <input type="number" step="0.01" id="newCcPay" placeholder="Payment $" style="width:110px" />
@@ -1051,6 +1055,7 @@ let budgetAccounts = [];
 let accountService = null;
 let accountBudgetModule = null;
 let recurringAppService = null;
+let dueDayModule = null;
 let loadedRecurringPreview = { rules: [], held: 0 };
 let recurringPreviewError = '';
 
@@ -1076,22 +1081,42 @@ function ensureRecurringSyncOwner(owner) {
   recurringSyncBusy = false;
   if (!owner) return;
   try {
-    const saved = JSON.parse(sessionStorage.getItem(recurringSyncPendingKey(owner)) || '[]');
+    const key = recurringSyncPendingKey(owner);
+    const durable = localStorage.getItem(key);
+    const legacy = sessionStorage.getItem(key);
+    const saved = JSON.parse(durable || legacy || '[]');
     if (Array.isArray(saved)) {
       recurringSyncScopes = saved.filter(validRecurringSyncScope)
         .slice(0, 50).map(s => ({ startDate: s.startDate, endDate: s.endDate || null }));
+    }
+    // Upgrade tab-only pending scopes without losing an unfinished retry.
+    if (durable === null && legacy && recurringSyncScopes.length) {
+      localStorage.setItem(key, JSON.stringify(recurringSyncScopes));
+      sessionStorage.removeItem(key);
     }
   } catch (error) { console.warn('Could not restore recurring sync status:', error); }
 }
 function rememberRecurringSyncScopes(owner) {
   if (currentUser?.id !== owner) return;
   try {
+    const key = recurringSyncPendingKey(owner);
     if (recurringSyncScopes.length) {
-      sessionStorage.setItem(recurringSyncPendingKey(owner), JSON.stringify(recurringSyncScopes));
+      localStorage.setItem(key, JSON.stringify(recurringSyncScopes));
     } else {
-      sessionStorage.removeItem(recurringSyncPendingKey(owner));
+      localStorage.removeItem(key);
     }
-  } catch (error) { console.warn('Could not save recurring sync status:', error); }
+    sessionStorage.removeItem(key);
+  } catch (error) { console.warn('Could not persist recurring sync status:', error); }
+}
+function recordPendingRecurringScope(owner, startDate, endDate = null) {
+  const scope = { startDate, endDate };
+  if (currentUser?.id !== owner || !validRecurringSyncScope(scope)) return;
+  ensureRecurringSyncOwner(owner);
+  if (!recurringSyncScopes.some(item => recurringSyncScopeMatches(item, scope))) {
+    recurringSyncScopes.push(scope);
+  }
+  rememberRecurringSyncScopes(owner);
+  renderRecurringSyncStatus();
 }
 function recurringSyncScopeMatches(a, b) {
   return a.startDate === b.startDate && a.endDate === b.endDate;
@@ -1120,7 +1145,7 @@ function renderRecurringSyncStatus() {
   let message = '';
   if (recurringSyncBusy || recurringSyncRetryBusy) message = 'Synchronizing recurring entries…';
   else if (pending) message = 'Recurring synchronization incomplete for ' + pending +
-    ' date range' + (pending === 1 ? '' : 's') + '. Resolve cloud conflicts before retrying.';
+    ' date range' + (pending === 1 ? '' : 's') + '. Check connectivity or resolve cloud conflicts, then retry.';
   else if (report) {
     const added = report.years.reduce((sum, item) => sum + item.added, 0);
     const skipped = report.years.reduce((sum, item) => sum + item.ambiguous.length, 0);
@@ -1162,7 +1187,15 @@ async function retryRecurringSynchronization() {
       await backfillSavedRecurringYears(owner, scope.startDate, scope.endDate);
     }
   } finally {
-    if (currentUser?.id === owner) recurringSyncRetryBusy = false;
+    if (currentUser?.id === owner) {
+      recurringSyncRetryBusy = false;
+      if (!recurringSyncScopes.length && !cloudBudgetConflicts.has(owner + ':' + activeYear)) {
+        const status = document.getElementById('cloudSaveStatus');
+        if (status?.firstChild?.textContent?.includes('Recurring entries are still pending')) {
+          showCloudSaveStatus('');
+        }
+      }
+    }
     renderRecurringSyncStatus();
   }
 }
@@ -1321,6 +1354,7 @@ async function initApp() {
     return;
   }
   currentUser = user;
+  dueDayModule = await import('./scripts/due-day.mjs');
   selectedIdx = restoreSelectedMonth(activeYear);
   document.documentElement.classList.add("budget-authenticated");
   supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -1348,6 +1382,8 @@ async function initApp() {
         if (currentUser) await initializeAccounts();
         render();
         applyPage(pageFromLocation());
+        ensureRecurringSyncOwner(currentUser?.id);
+        if (recurringSyncScopes.length) void retryRecurringSynchronization();
       }, 0);
     }
   });
@@ -1358,6 +1394,8 @@ async function initApp() {
   await initializeAccounts();
   render();
   applyPage(pageFromLocation());
+  ensureRecurringSyncOwner(currentUser?.id);
+  if (recurringSyncScopes.length) void retryRecurringSynchronization();
 }
 function parseLocalBudgetRecord(raw) {
   if (raw === null) return null;
@@ -1478,6 +1516,7 @@ async function refreshRecurringPreview() {
   }
 }
 const cloudSaveQueues = new Map();
+const reconcilingBudgetYears = new Set();
 const cloudBudgetVersions = new Map();
 let cloudYearLoadSucceeded = false;
 const cloudBudgetConflicts = new Set();
@@ -1487,53 +1526,117 @@ function markCloudConflict(key, year) {
   localStorage.setItem(conflictStorageKey(year), '1');
 }
 function clearCloudConflict(key, year) {
-  cloudBudgetConflicts.delete(key);
   localStorage.removeItem(conflictStorageKey(year));
+  cloudBudgetConflicts.delete(key);
 }
 async function reconcileCloudBudget(useLocal) {
   const year = activeYear, owner = currentUser?.id;
-  if (!owner || !supabaseClient || localStorage.getItem(conflictStorageKey(year)) !== '1') return;
+  if (!owner || !supabaseClient) return;
   const key = owner + ':' + year;
+  const budgetKey = storageKey(year), markerKey = conflictStorageKey(year);
+  if (reconcilingBudgetYears.has(key) || localStorage.getItem(markerKey) !== '1') return;
   if (!confirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
+  const originalMemory = structuredClone(db[year]);
+  const originalLocalRaw = localStorage.getItem(budgetKey);
+  let insertedNewYear = false;
+  let recurringPendingMessage = '';
+  reconcilingBudgetYears.add(key);
+  showCloudSaveStatus('Reconciling budget. Wait before making further changes.');
   try {
+    const { sameBudgetDocument } = await import('./scripts/year-discovery.mjs');
     await queueCloudSave(key, async () => {
+      const assertUnchanged = () => {
+        if (currentUser?.id !== owner || activeYear !== year) {
+          throw new Error('Account or selected year changed during reconciliation');
+        }
+        if (localStorage.getItem(markerKey) !== '1' ||
+            localStorage.getItem(budgetKey) !== originalLocalRaw ||
+            !sameBudgetDocument(db[year], originalMemory)) {
+          throw new Error('Local budget changed during reconciliation; retry with the latest changes');
+        }
+      };
+      assertUnchanged();
       const { data, error } = await supabaseClient.from('budget_ui_years')
         .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
       if (error) throw error;
+      assertUnchanged();
       if (!Array.isArray(data) || data.length > 1) throw new Error('Cloud budget unavailable');
       const cloud = data[0] || null;
-      const local = JSON.parse(localStorage.getItem(storageKey(year)) || 'null');
-      if (local?.data) localStorage.setItem(storageKey(year) + '_conflict_backup', JSON.stringify(local));
+      if (cloud && !validYearData(cloud.budget_data)) {
+        throw new Error('Cloud budget is invalid; local data was not replaced');
+      }
+      const local = parseLocalBudgetRecord(originalLocalRaw);
+      if (originalLocalRaw !== null && !local) {
+        throw new Error('Unreadable local snapshot must be preserved before reconciliation');
+      }
+      if (local && !sameBudgetDocument(local.data, originalMemory)) {
+        throw new Error('Local budget changed since it was saved; retry reconciliation');
+      }
+      if (useLocal && !local) throw new Error('Local budget unavailable');
+      if (!useLocal && !cloud) throw new Error('No cloud copy exists; keep local changes instead');
+      const backup = local ? JSON.parse(originalLocalRaw) : { data: originalMemory, updatedAt: null };
+      // Back up the original local copy before any destructive cloud/local replacement.
+      localStorage.setItem(budgetKey + '_conflict_backup', JSON.stringify(backup));
+      assertUnchanged();
       if (useLocal) {
-        if (!local?.data) throw new Error('Local budget unavailable');
+        const normalizedLocal = dueDayModule.migrateYearDueDays(local.data).year;
         const nextTimestamp = new Date(Math.max(Date.now(), cloud ? Date.parse(cloud.updated_at) + 1 : 0)).toISOString();
         if (cloud) {
           const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
-            .update({ budget_data: local.data, updated_at: nextTimestamp })
+            .update({ budget_data: normalizedLocal, updated_at: nextTimestamp })
             .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
           if (writeError) throw writeError;
           if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
         } else {
           const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
-            user_id: owner, year: Number(year), budget_data: local.data, updated_at: nextTimestamp
+            user_id: owner, year: Number(year), budget_data: normalizedLocal, updated_at: nextTimestamp
           });
           if (insertError) throw insertError;
+          insertedNewYear = true;
         }
+        // A cloud commit may have succeeded, but never overwrite edits made while awaiting it.
+        assertUnchanged();
+        localStorage.setItem(budgetKey, JSON.stringify({ data: normalizedLocal, updatedAt: nextTimestamp }));
+        db[year] = normalizedLocal;
         cloudBudgetVersions.set(key, nextTimestamp);
-        db[year] = local.data;
       } else {
-        if (!cloud) throw new Error('No cloud copy exists; keep local changes instead');
-        db[year] = cloud.budget_data;
+        const nextCloud = structuredClone(cloud.budget_data);
+        localStorage.setItem(budgetKey, JSON.stringify({ data: nextCloud, updatedAt: cloud.updated_at }));
+        db[year] = nextCloud;
         cloudBudgetVersions.set(key, cloud.updated_at);
-        localStorage.setItem(storageKey(year), JSON.stringify({ data: cloud.budget_data, updatedAt: cloud.updated_at }));
       }
       clearCloudConflict(key, year);
     });
-    showCloudSaveStatus('');
-    render();
+    if (currentUser?.id === owner) {
+      showCloudSaveStatus('');
+      render();
+      if (insertedNewYear) {
+        // Cloud reconciliation succeeded even if subsequent recurring backfill is deferred.
+        try {
+          const report = await backfillSavedRecurringYears(owner, year + '-01-01', year + '-12-31');
+          if (!report || report.discoveryFailed || report.deferred.length) {
+            recurringPendingMessage = 'Budget reconciled in cloud. Recurring entries are still pending; retry in Recurring Rules.';
+          }
+        } catch (error) {
+          console.warn('Recurring backfill deferred after cloud reconciliation:', error);
+          recordPendingRecurringScope(owner, year + '-01-01', year + '-12-31');
+          recurringPendingMessage = 'Budget reconciled in cloud. Recurring entries are still pending; retry in Recurring Rules.';
+        }
+        if (recurringPendingMessage) showCloudSaveStatus(recurringPendingMessage);
+      }
+    }
   } catch (error) {
     console.error('Cloud reconciliation failed:', error);
-    showCloudSaveStatus('Reconciliation failed; local changes are preserved. Retry when connected.');
+    if (currentUser?.id === owner && activeYear === year) {
+      showCloudSaveStatus('Reconciliation failed: ' + String(error?.message || 'retry required') +
+        '. Local changes and backups were preserved.');
+    }
+  } finally {
+    reconcilingBudgetYears.delete(key);
+    if (currentUser?.id === owner && activeYear === year) showCloudSaveStatus(
+      localStorage.getItem(markerKey) === '1'
+        ? document.getElementById('cloudSaveStatus')?.firstChild?.textContent || 'Reconciliation still required.'
+        : recurringPendingMessage);
   }
 }
 function showCloudSaveStatus(message) {
@@ -1553,9 +1656,11 @@ function showCloudSaveStatus(message) {
     const localButton = document.createElement('button');
     localButton.textContent = 'Keep local changes';
     localButton.onclick = () => reconcileCloudBudget(true);
+    localButton.disabled = reconcilingBudgetYears.has(currentUser.id + ':' + activeYear);
     const cloudButton = document.createElement('button');
     cloudButton.textContent = 'Use cloud version';
     cloudButton.onclick = () => reconcileCloudBudget(false);
+    cloudButton.disabled = reconcilingBudgetYears.has(currentUser.id + ':' + activeYear);
     status.append(localButton, cloudButton);
   }
 }
@@ -1571,17 +1676,29 @@ function queueCloudSave(key, operation) {
 async function saveDB({ backfillNewYear = true } = {}) {
   const year = activeYear;
   const userId = currentUser?.id || null;
+  if (userId && reconcilingBudgetYears.has(userId + ':' + year)) {
+    showCloudSaveStatus('Reconciliation is in progress. Wait before editing this budget.');
+    return 'not-saved';
+  }
   let insertedNewYear = false;
-  const snapshot = JSON.parse(JSON.stringify(db[year]));
+  const original = db[year];
+  const migrated = dueDayModule.migrateYearDueDays(original);
+  const snapshot = JSON.parse(JSON.stringify(migrated.year));
   const updatedAt = new Date().toISOString();
+  const dueWarning = migrated.unrecognized.length
+    ? 'Some legacy due dates need review. Select a valid day (1–31) for the affected expenses.' : '';
   try {
     localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+    if (migrated.changed && db[year] === original) db[year] = snapshot;
   } catch (error) {
     console.error("Local save error:", error);
     alert("Could not save this budget in browser storage. Your changes may not persist.");
     return 'not-saved';
   }
-  if (!supabaseClient || !userId) return 'local-saved';
+  if (!supabaseClient || !userId) {
+    if (dueWarning) showCloudSaveStatus(dueWarning);
+    return 'local-saved';
+  }
   const client = supabaseClient;
   const key = userId + ":" + year;
   try {
@@ -1611,13 +1728,23 @@ async function saveDB({ backfillNewYear = true } = {}) {
       cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) {
+      let recurringPending = false;
       if (insertedNewYear && backfillNewYear) {
-        // Available years are virtual until edited. Apply global schedules only
-        // after the year's first confirmed cloud save.
-        await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
+        // The budget is already saved: a failed recurring backfill must not
+        // turn a confirmed cloud save into a misleading conflict or success.
+        try {
+          const report = await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
+          recurringPending = !report || report.discoveryFailed || report.deferred.length > 0;
+        } catch (error) {
+          console.warn('Recurring backfill deferred after cloud budget save:', error);
+          recordPendingRecurringScope(userId, year + '-01-01', year + '-12-31');
+          recurringPending = true;
+        }
       }
       const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
-      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' : '');
+      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' :
+        recurringPending ? 'Budget saved to cloud. Recurring entries are still pending; retry in Recurring Rules.' : dueWarning);
+      return recurringPending ? 'cloud-saved-recurring-pending' : 'cloud-saved';
     }
     return 'cloud-saved';
   } catch (error) {
@@ -1625,6 +1752,191 @@ async function saveDB({ backfillNewYear = true } = {}) {
     try { markCloudConflict(key, year); } catch (storageError) { console.error("Could not persist cloud conflict marker:", storageError); }
     if (currentUser?.id === userId) showCloudSaveStatus("Cloud save rejected or unavailable. Local changes were preserved; choose a reconciliation option.");
     return 'local-saved';
+  }
+}
+function yearPlanSourceAvailable(owner, year) {
+  const key = owner + ':' + year;
+  return Boolean(owner && supabaseClient && db[year] && cloudBudgetVersions.has(key) &&
+    !cloudBudgetConflicts.has(key) && localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    !cloudSaveQueues.has(key));
+}
+async function verifiedYearPlanSource(owner, year) {
+  if (!yearPlanSourceAvailable(owner, year) || currentUser?.id !== owner) {
+    throw new Error('Previous year must be cloud-saved and reconciled before planning');
+  }
+  const key = owner + ':' + year;
+  const snapshot = structuredClone(db[year]);
+  const revision = cloudBudgetVersions.get(key);
+  const { data: rows, error } = await supabaseClient.from('budget_ui_years')
+    .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
+  if (error) throw new Error('Could not verify the previous year against cloud storage');
+  if (!yearPlanSourceAvailable(owner, year) || currentUser?.id !== owner ||
+      cloudBudgetVersions.get(key) !== revision) {
+    throw new Error('Previous year changed while planning; retry after synchronization');
+  }
+  const cloud = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
+  const raw = localStorage.getItem(storageKey(year));
+  const cached = parseLocalBudgetRecord(raw);
+  const { sameBudgetDocument } = await import('./scripts/year-discovery.mjs');
+  if (!sameBudgetDocument(snapshot, db[year])) {
+    throw new Error('Previous year changed while planning; retry');
+  }
+  try {
+    const service = recurringAppService || await import('./scripts/recurring-app-service.mjs');
+    service.requireRecurringCloudSnapshot({
+      owner, activeOwner: currentUser?.id, cloudRow: cloud, knownRevision: revision,
+      inMemoryBudget: db[year], cachedBudget: cached?.data,
+      hasLocalCache: raw !== null, conflicted: !yearPlanSourceAvailable(owner, year)
+    });
+  } catch (error) {
+    if (currentUser?.id === owner) {
+      try { markCloudConflict(key, year); }
+      catch (storageError) { console.warn('Could not retain previous-year conflict marker:', storageError); }
+    }
+    throw new Error('Previous year differs from its cloud version. Reconcile it before planning', { cause: error });
+  }
+  return snapshot;
+}
+// The two year-planning actions share a lock: neither may snapshot the same
+// target while the other is awaiting a cloud save or recurring backfill.
+let yearPlanActionBusy = false;
+async function persistYearPlanChange(owner, year, updated, localOnlyMessage) {
+  const original = db[year];
+  db[year] = updated;
+  const status = await saveDB();
+  if (status === 'not-saved' && currentUser?.id === owner && db[year] === updated) {
+    // No local or cloud write occurred. Restore the previous working document.
+    db[year] = original;
+  }
+  if (currentUser?.id === owner && activeYear === year) {
+    render();
+    if (status === 'not-saved') {
+      showCloudSaveStatus('Budget change was not saved. Free browser storage and retry.');
+    } else if (status === 'local-saved') {
+      showCloudSaveStatus(localOnlyMessage);
+    } else if (status === 'cloud-saved-recurring-pending') {
+      showCloudSaveStatus('Budget saved to cloud. Recurring entries are still pending; retry in Recurring Rules.');
+    }
+  }
+  return status;
+}
+async function applyProjectedJanuaryOpening() {
+  if (yearPlanActionBusy || !currentUser) return;
+  const year = activeYear, previous = String(Number(year) - 1), owner = currentUser.id;
+  if (!yearPlanSourceAvailable(owner, previous) || !db[year] || !accountBudgetModule ||
+      cloudBudgetConflicts.has(owner + ':' + year) ||
+      localStorage.getItem(conflictStorageKey(year)) === '1') return;
+  yearPlanActionBusy = true;
+  syncJanuaryProjectionControls();
+  syncCopyPreviousYearControls();
+  try {
+    const { projectedJanuaryOpening, canApplyJanuaryOpening } = await import('./scripts/year-plan.mjs');
+    if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
+    const source = await verifiedYearPlanSource(owner, previous);
+    const projection = projectedJanuaryOpening(source, budgetAccounts, accountBudgetModule.computeAccountBudget);
+    if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
+        ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
+    if (activeYear !== year || currentUser?.id !== owner ||
+        cloudBudgetConflicts.has(owner + ':' + year) ||
+        localStorage.getItem(conflictStorageKey(year)) === '1' ||
+        !canApplyJanuaryOpening(db[year])) return;
+    const confirmedSource = await verifiedYearPlanSource(owner, previous);
+    const updated = structuredClone(db[year]);
+    updated.months[0].recordedLeftover = projectedJanuaryOpening(
+      confirmedSource, budgetAccounts, accountBudgetModule.computeAccountBudget);
+    await persistYearPlanChange(owner, year, updated,
+      'January projection saved in this browser only. Cloud synchronization is pending; reconcile before using another device.');
+  } catch (error) {
+    console.error('Could not apply January projection:', error);
+    if (currentUser?.id === owner) {
+      showCloudSaveStatus('January projection blocked: verify and reconcile the previous budget year before retrying.');
+      alert('January projection could not be applied. Check the previous year and retry.');
+    }
+  } finally {
+    yearPlanActionBusy = false;
+    if (currentUser?.id === owner) {
+      syncJanuaryProjectionControls();
+      syncCopyPreviousYearControls();
+    }
+  }
+}
+function syncJanuaryProjectionControls() {
+  const year = activeYear, previous = String(Number(year) - 1);
+  const source = db[previous];
+  const eligible = Boolean(currentUser && accountBudgetModule && source && db[year] &&
+    yearPlanSourceAvailable(currentUser.id, previous) &&
+    !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
+    localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    Number(db[year].months?.[0]?.recordedLeftover) === 0 &&
+    source.months?.some(month =>
+      ['income','fixed','variable','creditCards','loans'].some(type =>
+        month[type]?.length > 0) || Number(month.recordedLeftover) !== 0));
+  for (const id of ['desktopProjectJanuary', 'mobileProjectJanuary']) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.hidden = !eligible;
+    button.disabled = yearPlanActionBusy;
+  }
+}
+async function copyPreviousYearPlan() {
+  if (yearPlanActionBusy || !currentUser) return;
+  const year = activeYear;
+  const previous = String(Number(year) - 1);
+  const owner = currentUser.id;
+  if (!yearPlanSourceAvailable(owner, previous) || !Object.hasOwn(db, year) ||
+      cloudBudgetConflicts.has(owner + ':' + year) ||
+      localStorage.getItem(conflictStorageKey(year)) === '1') return;
+  yearPlanActionBusy = true;
+  syncCopyPreviousYearControls();
+  syncJanuaryProjectionControls();
+  try {
+    const { copyPreviousYearPlan: copyPlan } = await import('./scripts/year-plan.mjs');
+    if (activeYear !== year || currentUser?.id !== owner) return;
+    // Validate the cloud-backed source before prompting, then revalidate after confirmation.
+    const source = await verifiedYearPlanSource(owner, previous);
+    copyPlan(source, db[year]);
+    if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
+        year + '? Existing opening balances and recurring entries will remain unchanged.')) return;
+    if (activeYear !== year || currentUser?.id !== owner ||
+        cloudBudgetConflicts.has(owner + ':' + year) ||
+        localStorage.getItem(conflictStorageKey(year)) === '1') return;
+    const confirmedSource = await verifiedYearPlanSource(owner, previous);
+    const updated = copyPlan(confirmedSource, db[year]);
+    await persistYearPlanChange(owner, year, updated,
+      'Plan copied in this browser only. Cloud synchronization is pending; reconcile before using another device.');
+  } catch (error) {
+    console.error('Could not copy previous year plan:', error);
+    if (currentUser?.id === owner) {
+      showCloudSaveStatus('Plan copy blocked: verify and reconcile the previous budget year before retrying.');
+      alert('The plan could not be copied. Check the previous year and retry.');
+    }
+  } finally {
+    yearPlanActionBusy = false;
+    if (currentUser?.id === owner) {
+      syncCopyPreviousYearControls();
+      syncJanuaryProjectionControls();
+    }
+  }
+}
+function syncCopyPreviousYearControls() {
+  const year = activeYear;
+  const previous = String(Number(year) - 1);
+  const eligible = Boolean(currentUser && Object.hasOwn(db, previous) && Object.hasOwn(db, year) &&
+    yearPlanSourceAvailable(currentUser.id, previous) &&
+    !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
+    localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    // Recurring-only years remain eligible; a manual entry blocks overwrites.
+    db[year].months?.every(month => ['income','fixed','variable','creditCards','loans']
+      .every(type => Array.isArray(month[type]) && month[type].every(entry =>
+        entry.occurrenceId || entry.recurringRuleId || entry.scheduledMonth))) &&
+    db[previous].months?.some(month => ['income','fixed','variable','creditCards','loans']
+      .some(type => Array.isArray(month[type]) && month[type].some(entry =>
+        !entry.occurrenceId && !entry.recurringRuleId && !entry.scheduledMonth))));
+  for (const id of ['desktopCopyPreviousYear', 'mobileCopyPreviousYear']) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.hidden = !eligible;
+    button.disabled = yearPlanActionBusy;
   }
 }
 function switchYear(yr) {
@@ -1648,10 +1960,9 @@ function fmt(n) {
   return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-function parseDayNum(dueStr) {
-  if (!dueStr) return 99;
-  const match = String(dueStr).match(/\d+/);
-  return match ? parseInt(match[0], 10) : 99;
+function parseDayNum(entry) {
+  try { return dueDayModule?.dueDayOf(entry) ?? 99; }
+  catch { return 99; } // Preserve invalid legacy data until the user corrects it.
 }
 
 function computeRolling(yrKey) {
@@ -1677,10 +1988,10 @@ function computeRolling(yrKey) {
     const totalOutflow = fixedTotal + varTotal + ccTotal + loanTotal;
 
     let pre15Outflow = 0;
-    m.fixed.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.amount) || 0; });
-    m.variable.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.amount) || 0; });
-    m.creditCards.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.payment) || 0; });
-    m.loans.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.payment) || 0; });
+    m.fixed.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.amount) || 0; });
+    m.variable.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.amount) || 0; });
+    m.creditCards.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.payment) || 0; });
+    m.loans.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.payment) || 0; });
 
     const pre15Buffer = startLeftover - pre15Outflow;
     const endingRollover = totalAvailable - totalOutflow;
@@ -1697,6 +2008,36 @@ function computeRolling(yrKey) {
 }
 
 
+function dueDayOptions(selected) {
+  return '<option value=""' + (selected === null ? ' selected' : '') + '>No day</option>' +
+    Array.from({ length: 31 }, (_, i) => {
+      const day = i + 1;
+      return '<option value="' + day + '"' + (selected === day ? ' selected' : '') + '>' + day + '</option>';
+    }).join('');
+}
+function populateNewDueDaySelectors() {
+  for (const id of ['newFixDue', 'newVarDue', 'newLoanDue', 'newCcDue']) {
+    const select = document.getElementById(id);
+    if (select && select.options.length === 1) select.innerHTML = dueDayOptions(null);
+  }
+}
+function dueDayPicker(type, idx, item) {
+  let selected = null, invalid = false;
+  try { selected = dueDayModule.dueDayOf(item); }
+  catch { invalid = true; }
+  const action = type === 'fixed' || type === 'variable'
+    ? "editExp('" + type + "', " + idx + ", 'dueDay', this.value)"
+    : type === 'loans' ? "editLoan(" + idx + ", 'dueDay', this.value)"
+      : "editCC(" + idx + ", 'dueDay', this.value)";
+  const options = invalid
+    ? '<option value="" selected>Review legacy date</option>' + dueDayOptions(-1)
+    : dueDayOptions(selected);
+  return '<select class="inline-input sm" aria-label="Due day for ' + type + ' entry" onchange="' + action + '">' + options + '</select>';
+}
+function setEntryDueDay(entry, value) {
+  entry.dueDay = dueDayModule.parseDueDay(value);
+  delete entry.due;
+}
 function accountOptions(selectedId, unassigned = true) {
   const blank = unassigned ? '<option value="">Unassigned (included)</option>' : '';
   return blank + budgetAccounts.map(account => '<option value="' + esc(account.id) + '"' + (account.id === selectedId ? ' selected' : '') + '>' + esc(account.name) + (account.included ? '' : ' (excluded)') + '</option>').join('');
@@ -1725,6 +2066,9 @@ function render() {
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
+  populateNewDueDaySelectors();
+  syncCopyPreviousYearControls();
+  syncJanuaryProjectionControls();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
   document.getElementById("mobileOverview").innerHTML = `
@@ -1872,7 +2216,7 @@ function render() {
   document.getElementById("fixedBody").innerHTML = m.fixed.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('fixed', ${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("fixed", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
       <td>${accountPicker("fixed", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('fixed', ${idx})">×</button></td>
@@ -1883,7 +2227,7 @@ function render() {
   document.getElementById("variableBody").innerHTML = m.variable.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('variable', ${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("variable", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
       <td>${accountPicker("variable", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('variable', ${idx})">×</button></td>
@@ -1894,7 +2238,7 @@ function render() {
   document.getElementById("loanBody").innerHTML = m.loans.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editLoan(${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editLoan(${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("loans", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.balance) || 0}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
       <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
@@ -1908,7 +2252,7 @@ function render() {
   document.getElementById("ccBody").innerHTML = m.creditCards.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editCC(${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editCC(${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("creditCards", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.statement) || 0}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
@@ -1946,37 +2290,52 @@ async function addIncome() {
   document.getElementById("newIncName").value = ""; document.getElementById("newIncAmount").value = "";
   await saveDB(); render();
 }
-async function editExp(type, idx, f, v) { db[activeYear].months[selectedIdx][type][idx][f] = f==='amount'?parseFloat(v)||0:v; await saveDB(); render(); }
+async function editExp(type, idx, f, v) {
+  const entry = db[activeYear].months[selectedIdx][type][idx];
+  if (f === 'dueDay') setEntryDueDay(entry, v);
+  else entry[f] = f === 'amount' ? parseFloat(v) || 0 : v;
+  await saveDB(); render();
+}
 async function addExpense(type) {
   const p = type === 'fixed' ? 'newFix' : 'newVar';
   const name = document.getElementById(p + 'Name').value.trim();
-  const due = document.getElementById(p + 'Due').value.trim();
+  const dueDay = dueDayModule.parseDueDay(document.getElementById(p + 'Due').value);
   const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx][type].push({ name, due, amount, accountId: document.getElementById(p + 'Account').value || null });
+  db[activeYear].months[selectedIdx][type].push({ name, dueDay, amount, accountId: document.getElementById(p + 'Account').value || null });
   document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
   await saveDB(); render();
 }
-async function editLoan(idx, f, v) { db[activeYear].months[selectedIdx].loans[idx][f] = ['name','due'].includes(f)?v:parseFloat(v)||0; await saveDB(); render(); }
+async function editLoan(idx, f, v) {
+  const entry = db[activeYear].months[selectedIdx].loans[idx];
+  if (f === 'dueDay') setEntryDueDay(entry, v);
+  else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
+  await saveDB(); render();
+}
 async function addLoan() {
   const name = document.getElementById("newLoanName").value.trim();
-  const due = document.getElementById("newLoanDue").value.trim();
+  const dueDay = dueDayModule.parseDueDay(document.getElementById("newLoanDue").value);
   const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
   const payment = parseFloat(document.getElementById("newLoanPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment, accountId: document.getElementById('newLoanAccount').value || null });
+  db[activeYear].months[selectedIdx].loans.push({ name, dueDay, balance, apr: 0, payment, accountId: document.getElementById('newLoanAccount').value || null });
   ['newLoanName','newLoanDue','newLoanBal','newLoanPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
-async function editCC(idx, f, v) { db[activeYear].months[selectedIdx].creditCards[idx][f] = ['name','due'].includes(f)?v:parseFloat(v)||0; await saveDB(); render(); }
+async function editCC(idx, f, v) {
+  const entry = db[activeYear].months[selectedIdx].creditCards[idx];
+  if (f === 'dueDay') setEntryDueDay(entry, v);
+  else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
+  await saveDB(); render();
+}
 async function addCC() {
   const name = document.getElementById("newCcName").value.trim();
-  const due = document.getElementById("newCcDue").value.trim();
+  const dueDay = dueDayModule.parseDueDay(document.getElementById("newCcDue").value);
   const statement = parseFloat(document.getElementById("newCcStmt").value) || 0;
   const apr = parseFloat(document.getElementById("newCcApr").value) || 0;
   const payment = parseFloat(document.getElementById("newCcPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment, accountId: document.getElementById('newCcAccount').value || null });
+  db[activeYear].months[selectedIdx].creditCards.push({ name, dueDay, statement, apr, payment, accountId: document.getElementById('newCcAccount').value || null });
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
@@ -2141,23 +2500,24 @@ function renderRulesList(){
 function recurringRuleItem(r){
   const accountId = r.accountId || r.acct || null;
   if(r.cat==="income")return {name:r.name,accountId,amount:r.amount,recurringRuleId:r.id};
-  if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,accountId,recurringRuleId:r.id};
-  if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
-  if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,dueDay:dueDayModule.dueDayOf(r),amount:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="loan")return{name:r.name,dueDay:dueDayModule.dueDayOf(r),balance:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="cc")return{name:r.name,dueDay:dueDayModule.dueDayOf(r),statement:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
   return null;
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
 
 async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
-  if (currentUser?.id !== owner || !recurringAppService || !supabaseClient) return null;
+  if (currentUser?.id !== owner || !supabaseClient) return null;
   const scope = { startDate, endDate };
   if (!validRecurringSyncScope(scope)) throw new Error('Invalid recurring sync date range');
-  ensureRecurringSyncOwner(owner);
-  if (!recurringSyncScopes.some(item => recurringSyncScopeMatches(item, scope))) {
-    recurringSyncScopes.push(scope);
+  recordPendingRecurringScope(owner, startDate, endDate);
+  if (!recurringAppService) {
+    const report = { years: [], deferred: [], discoveryFailed: true };
+    recurringSyncLastReport = report;
+    renderRecurringSyncStatus();
+    return report;
   }
-  rememberRecurringSyncScopes(owner);
-  renderRecurringSyncStatus();
   // Serialize sync runs as well as individual cloud-year writes. Retry never
   // reuses a stale preview; every run starts with owner-scoped cloud reads.
   const operation = recurringSyncQueue.catch(() => {}).then(async () => {

@@ -315,6 +315,53 @@ test('mobile automatic backfill preserves existing manual transactions', async (
   expect(entries).toHaveLength(1);
   expect(entries[0].amount).toBe(500);
 });
+
+test('mobile reconciliation aborts when the signed-in owner changes during cloud loading', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const year = activeYear, owner = currentUser;
+    db[year].months[0].fixed.push({ name: 'Owner-protected', amount: 33 });
+    await saveDB();
+    markCloudConflict(owner.id + ':' + year, year);
+    const originalFrom = supabaseClient.from.bind(supabaseClient);
+    let releaseRead;
+    supabaseClient.from = table => {
+      const query = originalFrom(table);
+      if (table !== 'budget_ui_years') return query;
+      const originalSelect = query.select.bind(query);
+      query.select = (...args) => {
+        const selected = originalSelect(...args);
+        const originalEq = selected.eq.bind(selected);
+        selected.eq = (field, value) => {
+          const scoped = originalEq(field, value);
+          const originalYearEq = scoped.eq.bind(scoped);
+          scoped.eq = (yearField, number) => new Promise(resolve => {
+            releaseRead = () => Promise.resolve(originalYearEq(yearField, number)).then(resolve);
+          });
+          return scoped;
+        };
+        return selected;
+      };
+      return query;
+    };
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    const pending = reconcileCloudBudget(false);
+    for (let i = 0; i < 20 && !releaseRead; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    if (!releaseRead) throw new Error('Cloud read was not intercepted');
+    currentUser = { ...owner, id: 'different-test-owner' };
+    releaseRead();
+    await pending;
+    currentUser = owner;
+    supabaseClient.from = originalFrom;
+    window.confirm = originalConfirm;
+    return {
+      marker: localStorage.getItem(conflictStorageKey(year)),
+      names: db[year].months[0].fixed.map(item => item.name)
+    };
+  });
+  expect(result).toEqual({ marker: '1', names: ['Owner-protected'] });
+});
+
 test('mobile preserves an unresolved cloud conflict across reload and offers explicit recovery', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const year = activeYear, key = currentUser.id + ':' + year;
@@ -602,4 +649,155 @@ test('mobile recurring form only shows start and optional end dates', async ({ p
   await expect(form.getByLabel('End date (optional)')).toBeVisible();
   await expect(form.getByLabel(/Due day|Start month/i)).toHaveCount(0);
   await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
+});
+
+test('mobile copy action confirms and shares saved plan across viewport changes', async ({ page }) => {
+  const year=String(new Date().getFullYear()),next=String(Number(year)+1);
+  await page.evaluate(async y => { db[y].months[0].variable.push({name:'Groceries plan',amount:250,dueDay:5}); await saveDB(); },year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#mobileCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].variable[0]?.name,next)).toBe('Groceries plan');
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeHidden();
+  await page.setViewportSize({width:1280,height:900});
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].variable[0].amount,next)).toBe(250);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth+1)).toBe(true);
+});
+
+
+
+test('mobile blocks both planning actions when the previous year is unsynced', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].income.push({ name: 'Protected income', amount: 250 });
+    await saveDB();
+  }, year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  await page.evaluate(y => { markCloudConflict(currentUser.id + ':' + y, y); render(); }, year);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeHidden();
+  await expect(page.locator('#mobileProjectJanuary')).toBeHidden();
+});
+
+test('mobile January rollover is opt-in and shares state with desktop', async ({ page }) => {
+  const year=String(new Date().getFullYear()),next=String(Number(year)+1);
+  await page.evaluate(async y => {
+    db[y].months[11].fixed.push({name:'December cost',amount:50});
+    await saveDB();
+    render();
+  },year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+  page.once('dialog',dialog => dialog.accept());
+  await page.locator('#mobileProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(-50);
+  await expect(page.locator('#mobileProjectJanuary')).toBeHidden();
+  await page.setViewportSize({width:1280,height:900});
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(-50);
+});
+
+test('mobile planning actions cannot overlap while a first-year save is pending', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].fixed.push({ name: 'Manual January', amount: 20 });
+    db[y].months[11].income.push({ name: 'December pay', amount: 150 });
+    await saveDB();
+    render();
+  }, year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  await page.evaluate(() => {
+    window.__originalSaveDB = saveDB;
+    window.saveDB = async (...args) => {
+      await new Promise(resolve => { window.__releasePlanSave = resolve; });
+      return window.__originalSaveDB(...args);
+    };
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#mobileCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePlanSave)).toBe('function');
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeDisabled();
+  await expect(page.locator('#mobileProjectJanuary')).toBeDisabled();
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(0);
+  await page.evaluate(() => window.__releasePlanSave());
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Manual January');
+  await expect(page.locator('#mobileProjectJanuary')).toBeEnabled();
+  await page.evaluate(() => { window.saveDB = window.__originalSaveDB; });
+  await page.locator('#mobileProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(130);
+});
+
+test('mobile January projection restores its prior value when browser storage fails', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => { db[y].months[11].income.push({ name: 'December pay', amount: 180 }); await saveDB(); render(); }, year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await page.evaluate(() => {
+    window.__storageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === storageKey(activeYear)) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return window.__storageSetItem.call(this, key, value);
+    };
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#mobileProjectJanuary').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('was not saved');
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(0);
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  expect(await page.evaluate(y => JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null, next)).toBe(null);
+  await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await page.locator('#mobileProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
+  await page.reload();
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
+});
+
+
+test('mobile preserves a failed recurring-year discovery across reload and retries automatically', async ({ page }) => {
+  const year = String(new Date().getFullYear());
+  const initial = await page.evaluate(async y => {
+    db[y].months[0].variable.push({ name: 'Saved mobile budget', amount: 17 });
+    await saveDB();
+    sessionStorage.setItem('__mock_budget_cloud_discovery_failure', '1');
+    const report = await backfillSavedRecurringYears(currentUser.id, y + '-01-01', y + '-12-31');
+    return {
+      discoveryFailed: report.discoveryFailed,
+      pending: Boolean(localStorage.getItem(recurringSyncPendingKey(currentUser.id)))
+    };
+  }, year);
+  expect(initial).toEqual({ discoveryFailed: true, pending: true });
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_discovery_failure'));
+  await page.reload();
+  await expect.poll(() => page.evaluate(() =>
+    localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
+  expect(await page.evaluate(y => db[y].months[0].variable.some(
+    item => item.name === 'Saved mobile budget'), year)).toBe(true);
+});
+
+test('mobile plan day selectors use integers and persist after reload', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page.locator('#newVarDue')).toBeVisible();
+  await page.locator('#newVarName').fill('Mobile utility');
+  await page.locator('#newVarDue').selectOption('31');
+  await page.locator('#newVarAmt').fill('75');
+  await page.locator('button[onclick="addExpense(\'variable\')"]').click();
+  await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('31');
+  await page.locator('#variableBody select[aria-label="Due day for variable entry"]').selectOption('22');
+  expect(await page.evaluate(() => {
+    const entry = db[activeYear].months[selectedIdx].variable[0];
+    return { dueDay: entry.dueDay, hasLegacyDue: Object.hasOwn(entry, 'due') };
+  })).toEqual({ dueDay: 22, hasLegacyDue: false });
+  await page.reload();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('22');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });

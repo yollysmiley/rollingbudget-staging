@@ -1,4 +1,5 @@
 import { FREQUENCY_MONTHS, normalizeRecurringRule } from './recurring-foundation.mjs';
+import { calendarDueDay } from './due-day.mjs';
 
 // Pure calendar arithmetic; never use local timezone or mutate source documents.
 const monthNumber = date => {
@@ -11,9 +12,12 @@ const monthDate = index =>
 function versionsFor(rule) {
   const versions = rule.versions ?? [];
   if (!Array.isArray(versions) || !versions.length) throw new Error('Rule versions required');
+  const defaultDueDay = normalizeRecurringRule(rule).dueDay;
   const sorted = versions.map(version => {
+    const versionDue = version.dueDay ?? (version.due === '' ? null : version.due);
     const normalized = normalizeRecurringRule({
       ...rule, ...version, id: rule.id,
+      dueDay: versionDue ?? defaultDueDay, due: null,
       startDate: version.effectiveFrom, endDate: null,
       category: rule.category
     });
@@ -38,10 +42,10 @@ export function scheduledOccurrences(rule, year) {
   const results = [];
   for (let month = first; month <= last; month++) {
     const monthStart = monthDate(month);
-    const day = Math.min(Number(normalized.startDate.slice(8, 10)), new Date(Date.UTC(Math.floor(month / 12), month % 12 + 1, 0)).getUTCDate());
+    const version = versions.filter(v => v.effectiveFrom <= monthStart).at(-1);
+    const day = calendarDueDay(Math.floor(month / 12), month % 12, version.dueDay);
     const date = monthStart.slice(0, 8) + String(day).padStart(2, '0');
     if (date < normalized.startDate || (normalized.endDate && date > normalized.endDate)) continue;
-    const version = versions.filter(v => v.effectiveFrom <= monthStart).at(-1);
     // Frequency remains anchored to the original start month, even when edited.
     if (!version.enabled) continue;
     const interval = FREQUENCY_MONTHS[version.frequency];
@@ -53,7 +57,7 @@ export function scheduledOccurrences(rule, year) {
       category: normalized.category,
       name: version.name,
       amount: version.amount,
-      due: String(day),
+      dueDay: version.dueDay,
       accountId: version.accountId,
     });
   }

@@ -46,7 +46,7 @@ test('income and expenses recalculate the rollover', async ({ page }) => {
   await expect(page.locator('#incTotalBadge')).toHaveText('$3,000.00');
 
   await page.locator('#newFixName').fill('Rent');
-  await page.locator('#newFixDue').fill('1st');
+  await page.locator('#newFixDue').selectOption('1');
   await page.locator('#newFixAmt').fill('1200');
   await page.locator('button[onclick="addExpense(\'fixed\')"]').click();
   await expect(page.locator('#fixTotalBadge')).toHaveText('$1,200.00');
@@ -78,7 +78,7 @@ test('authenticated storage is owner-scoped and existing browser keys are preser
 test('user-entered markup is rendered as text, not executable HTML', async ({ page }) => {
   const payload = '<img src=x onerror=alert(1)>';
   await page.locator('#newVarName').fill(payload);
-  await page.locator('#newVarDue').fill('4th');
+  await page.locator('#newVarDue').selectOption('4');
   await page.locator('#newVarAmt').fill('25');
   await page.evaluate(() => addExpense('variable'));
   await expect(page.locator('#variableBody input:not([type])').first()).toHaveValue(payload);
@@ -405,6 +405,54 @@ test('desktop preserves an unresolved cloud conflict across reload and offers ex
   expect(await page.evaluate(() => Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')))).toBe(true);
 });
 
+
+test('desktop rejects malformed cloud reconciliation without replacing local expenses', async ({ page }) => {
+  const year = await page.evaluate(async () => {
+    const y = activeYear;
+    db[y].months[0].fixed.push({ name: 'Preserve me', amount: 41 });
+    await saveDB();
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].budget_data = { months: [] };
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    markCloudConflict(currentUser.id + ':' + y, y);
+    showCloudSaveStatus('Unsynced local budget changes require reconciliation.');
+    return y;
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Cloud budget is invalid');
+  const result = await page.evaluate(y => ({
+    names: db[y].months[0].fixed.map(item => item.name),
+    marker: localStorage.getItem(conflictStorageKey(y)),
+    cached: JSON.parse(localStorage.getItem(storageKey(y))).data.months[0].fixed.map(item => item.name)
+  }), year);
+  expect(result).toEqual({ names: ['Preserve me'], marker: '1', cached: ['Preserve me'] });
+});
+
+test('desktop refuses destructive reconciliation when the local backup cannot be written', async ({ page }) => {
+  await page.evaluate(async () => {
+    const y = activeYear;
+    db[y].months[0].fixed.push({ name: 'Protected backup', amount: 19 });
+    await saveDB();
+    markCloudConflict(currentUser.id + ':' + y, y);
+    showCloudSaveStatus('Unsynced local budget changes require reconciliation.');
+    window.__originalStorageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === storageKey(y) + '_conflict_backup') throw new DOMException('Storage full', 'QuotaExceededError');
+      return window.__originalStorageSetItem.call(this, key, value);
+    };
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation failed');
+  const result = await page.evaluate(() => ({
+    marker: localStorage.getItem(conflictStorageKey(activeYear)),
+    names: db[activeYear].months[0].fixed.map(item => item.name)
+  }));
+  expect(result).toEqual({ marker: '1', names: ['Protected backup'] });
+  await page.evaluate(() => { Storage.prototype.setItem = window.__originalStorageSetItem; });
+});
+
 test('browser cloud fixture rejects another owner\'s conditional budget update', async ({ page }) => {
   const outcome = await page.evaluate(async () => {
     const year = Number(activeYear);
@@ -693,4 +741,308 @@ test('desktop recurring form only shows start and optional end dates', async ({ 
   await expect(form.getByLabel('End date (optional)')).toBeVisible();
   await expect(form.getByLabel(/Due day|Start month/i)).toHaveCount(0);
   await expect(form.locator('[data-rec-field="due"], [data-rec-field="startMonth"]')).toHaveCount(0);
+});
+
+test('desktop plan copy confirms, skips recurring entries, persists and prevents overwrites', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year)+1);
+  await page.evaluate(async y => { db[y].months[0].fixed.push({name:'Rent plan',amount:900,dueDay:1}); db[y].months[0].fixed.push({name:'Generated',amount:30,occurrenceId:'occ',recurringRuleId:'rule'}); await saveDB(); }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  let confirmations = 0;
+  page.on('dialog', async dialog => {
+    confirmations += 1;
+    if (confirmations === 1) await dialog.dismiss();
+    else await dialog.accept();
+  });
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => confirmations).toBe(1);
+  expect(await page.evaluate(y => db[y].months[0].fixed.length, next)).toBe(0);
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => confirmations).toBe(2);
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.map(e => e.name), next)).toEqual(['Rent plan']);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].fixed[0].name, next)).toBe('Rent plan');
+});
+
+
+test('desktop blocks copying and January projection from a conflicted source year', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].fixed.push({ name: 'Protected source', amount: 45 });
+    await saveDB();
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  await page.evaluate(y => { markCloudConflict(currentUser.id + ':' + y, y); render(); }, year);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+  expect(await page.evaluate(y => db[y].months[0].fixed.length, next)).toBe(0);
+});
+
+test('desktop detects a stale source cloud revision before copying', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].fixed.push({ name: 'Protected plan', amount: 75 });
+    await saveDB();
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].updated_at = '2099-01-01T00:00:00.000Z';
+    rows[y].budget_data.months[0].fixed[0].amount = 99;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  expect(await page.evaluate(y => db[y].months[0].fixed, next)).toEqual([]);
+});
+
+test('copy action is hidden for conflicted target years', async ({ page }) => {
+  const year=String(new Date().getFullYear());
+  await page.evaluate(async y => { db[y].months[0].income.push({name:'Salary',amount:1000}); await saveDB(); }, year);
+  await page.locator('#activeYearSelect').selectOption(String(Number(year)+1));
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.evaluate(() => { markCloudConflict(currentUser.id+':'+activeYear,activeYear);render(); });
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+});
+
+
+test('desktop January rollover is opt-in and preserves manual opening balances', async ({ page }) => {
+  const year=String(new Date().getFullYear()),next=String(Number(year)+1);
+  await page.evaluate(async y => {
+    db[y].months[11].income.push({name:'December pay',amount:500,accountId:null});
+    db[y].months[11].fixed.push({name:'December bill',amount:200});
+    await saveDB();
+    render();
+  },year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  let confirmations=0;
+  page.on('dialog',async dialog => {
+    confirmations += 1;
+    if(confirmations === 1) await dialog.dismiss();
+    else await dialog.accept();
+  });
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => confirmations).toBe(1);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(0);
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => confirmations).toBe(2);
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
+});
+
+test('failed browser storage rolls back a plan copy without claiming it was saved', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => { db[y].months[0].fixed.push({ name: 'Rent plan', amount: 900 }); await saveDB(); render(); }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.evaluate(() => {
+    window.__storageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === storageKey(activeYear)) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return window.__storageSetItem.call(this, key, value);
+    };
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('was not saved');
+  const result = await page.evaluate(y => ({
+    entries: db[y].months[0].fixed,
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null
+  }), next);
+  expect(result).toEqual({ entries: [], cloud: null });
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Rent plan');
+});
+
+test('January first save backfills rules before a manual plan copy without duplicates', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => {
+    db[y].months[0].fixed.push({ name: 'Manual insurance', amount: 125, due: '7th' });
+    db[y].months[11].income.push({ name: 'December bonus', amount: 1000 });
+    render();
+  }, year);
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Auto subscription');
+  await form.locator('[data-rec-field="amount"]').fill('15');
+  await form.locator('[data-rec-field="startDate"]').fill(year + '-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
+    entry => entry.name === 'Auto subscription'), year)).toBe(true);
+  await page.locator('#desktopBudgetButton').click();
+  await page.locator('#activeYearSelect').selectOption(next);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Auto subscription').length, next)).toBe(12);
+  const opening = await page.evaluate(y => db[y].months[0].recordedLeftover, next);
+  expect(opening).not.toBe(0);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
+    entry => entry.name === 'Manual insurance'), next)).toBe(true);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  await page.evaluate(y => backfillSavedRecurringYears(currentUser.id, y + '-01-01', y + '-12-31'), next);
+  const state = await page.evaluate(y => ({
+    opening: db[y].months[0].recordedLeftover,
+    recurring: db[y].months.flatMap(m => m.fixed).filter(e => e.name === 'Auto subscription').length,
+    manual: db[y].months.flatMap(m => m.fixed).filter(e => e.name === 'Manual insurance').length
+  }), next);
+  expect(state).toEqual({ opening, recurring: 12, manual: 1 });
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].fixed.map(e => e.name).sort(), next))
+    .toEqual(['Auto subscription', 'Manual insurance']);
+});
+
+test('failed first cloud save reconciles local plan and backfills recurring rules exactly once', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => { db[y].months[0].variable.push({ name: 'Manual groceries', amount: 85 }); render(); }, year);
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Auto rent');
+  await form.locator('[data-rec-field="amount"]').fill('500');
+  await form.locator('[data-rec-field="startDate"]').fill(year + '-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(e => e.name === 'Auto rent'), year)).toBe(true);
+  await page.locator('#desktopBudgetButton').click();
+  await page.locator('#activeYearSelect').selectOption(next);
+  await page.evaluate(() => sessionStorage.setItem('__mock_budget_cloud_failure', '1'));
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Cloud synchronization is pending');
+  expect(await page.evaluate(y => ({
+    local: db[y].months[0].variable.map(e => e.name),
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null,
+    conflict: localStorage.getItem(conflictStorageKey(y))
+  }), next)).toEqual({ local: ['Manual groceries'], cloud: null, conflict: '1' });
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
+  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(m => m.fixed)
+    .filter(e => e.name === 'Auto rent').length, next)).toBe(12);
+  await page.evaluate(y => backfillSavedRecurringYears(currentUser.id, y + '-01-01', y + '-12-31'), next);
+  expect(await page.evaluate(y => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[y];
+    return {
+      cloudRecurring: row.budget_data.months.flatMap(m => m.fixed).filter(e => e.name === 'Auto rent').length,
+      localRecurring: db[y].months.flatMap(m => m.fixed).filter(e => e.name === 'Auto rent').length,
+      manual: db[y].months[0].variable.map(e => e.name),
+      conflict: localStorage.getItem(conflictStorageKey(y))
+    };
+  }, next)).toEqual({ cloudRecurring: 12, localRecurring: 12, manual: ['Manual groceries'], conflict: null });
+});
+
+
+test('desktop distinguishes a cloud-saved future year from deferred recurring backfill and resumes after reload', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Recoverable recurring');
+  await form.locator('[data-rec-field="amount"]').fill('25');
+  await form.locator('[data-rec-field="startDate"]').fill(year + '-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
+    entry => entry.name === 'Recoverable recurring'), year)).toBe(true);
+  await page.locator('#desktopBudgetButton').click();
+  await page.locator('#activeYearSelect').selectOption(next);
+  const outcome = await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_budget_cloud_update_failure', '1');
+    db[y].months[0].variable.push({ name: 'First manual edit', amount: 12 });
+    const status = await saveDB();
+    return {
+      status,
+      cloudExists: Boolean(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y]),
+      pending: Boolean(localStorage.getItem(recurringSyncPendingKey(currentUser.id))),
+      conflict: localStorage.getItem(conflictStorageKey(y))
+    };
+  }, next);
+  expect(outcome).toEqual({
+    status: 'cloud-saved-recurring-pending', cloudExists: true, pending: true, conflict: null
+  });
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Recurring entries are still pending');
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_update_failure'));
+  await page.reload();
+  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+  expect(await page.evaluate(() => localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
+  await page.reload();
+  expect(await page.evaluate(y => db[y].months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+});
+
+test('desktop due-day selectors save integer days across all expense categories', async ({ page }) => {
+  await page.locator('#newFixName').fill('Rent');
+  await page.locator('#newFixDue').selectOption('31');
+  await page.locator('#newFixAmt').fill('500');
+  await page.locator('button[onclick="addExpense(\'fixed\')"]').click();
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('31');
+
+  await page.locator('#newVarName').fill('Groceries');
+  await page.locator('#newVarDue').selectOption('15');
+  await page.locator('#newVarAmt').fill('30');
+  await page.locator('button[onclick="addExpense(\'variable\')"]').click();
+
+  await page.locator('#newLoanName').fill('Car');
+  await page.locator('#newLoanDue').selectOption('22');
+  await page.locator('#newLoanBal').fill('5000');
+  await page.locator('#newLoanPay').fill('100');
+  await page.locator('button[onclick="addLoan()"]').click();
+
+  await page.locator('#newCcName').fill('Card');
+  await page.locator('#newCcDue').selectOption('9');
+  await page.locator('#newCcStmt').fill('500');
+  await page.locator('#newCcApr').fill('12');
+  await page.locator('#newCcPay').fill('50');
+  await page.locator('button[onclick="addCC()"]').click();
+
+  await page.locator('#fixedBody select[aria-label="Due day for fixed entry"]').selectOption('1');
+  const year = String(new Date().getFullYear());
+  const before = await page.evaluate(y => {
+    const month = db[y].months[selectedIdx];
+    return [month.fixed[0], month.variable[0], month.loans[0], month.creditCards[0]]
+      .map(entry => ({ dueDay: entry.dueDay, hasLegacyDue: Object.hasOwn(entry, 'due') }));
+  }, year);
+  expect(before).toEqual([1, 15, 22, 9].map(dueDay => ({ dueDay, hasLegacyDue: false })));
+  await page.reload();
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
+  expect(await page.evaluate(y => db[y].months[selectedIdx].loans[0].dueDay, year)).toBe(22);
+});
+
+test('desktop save migrates known legacy ordinals without altering expense amounts', async ({ page }) => {
+  const year = String(new Date().getFullYear());
+  await page.evaluate(y => {
+    db[y].months[selectedIdx].fixed.push({ name: 'Legacy Rent', due: '1st', amount: 900 });
+    db[y].months[selectedIdx].loans.push({ name: 'Legacy Loan', due: '22nd', payment: 200, balance: 500 });
+    render();
+  }, year);
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
+  await page.evaluate(() => saveDB());
+  const saved = await page.evaluate(y => {
+    const month = db[y].months[selectedIdx];
+    const cloud = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y];
+    return {
+      local: [month.fixed[0], month.loans[0]],
+      cloud: cloud?.budget_data.months[selectedIdx].fixed[0]
+    };
+  }, year);
+  expect(saved.local[0]).toMatchObject({ dueDay: 1, amount: 900 });
+  expect(saved.local[1]).toMatchObject({ dueDay: 22, payment: 200, balance: 500 });
+  expect(saved.cloud).toMatchObject({ dueDay: 1, amount: 900 });
+  expect(saved.local[0].due).toBeUndefined();
+  expect(saved.local[1].due).toBeUndefined();
+  await page.reload();
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
 });

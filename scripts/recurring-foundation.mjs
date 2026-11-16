@@ -1,3 +1,5 @@
+import { dueDayOf } from './due-day.mjs';
+
 // Validate owner-scoped recurring definitions without altering budget transactions.
 export const FREQUENCY_MONTHS = Object.freeze({
   monthly: 1, 'every-2-months': 2, quarterly: 3,
@@ -29,12 +31,12 @@ export function normalizeRecurringRule(rule) {
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) throw new Error('Invalid recurring amount');
   const name = typeof rule.name === 'string' ? rule.name.trim() : '';
   if (!name) throw new Error('Rule name required');
-  const due = String(rule.due ?? '');
+  const dueDay = dueDayOf(rule) ?? Number(startDate.slice(8, 10));
   const accountId = rule.accountId || null;
   return {
-    id, name, category, amount, due, accountId,
+    id, name, category, amount, dueDay, accountId,
     frequency, startDate, endDate, active: rule.active !== false,
-    versions: [{ effectiveFrom: startDate.slice(0, 7) + '-01', name, amount, due, accountId, frequency }]
+    versions: [{ effectiveFrom: startDate.slice(0, 7) + '-01', name, amount, dueDay, accountId, frequency }]
   };
 }
 

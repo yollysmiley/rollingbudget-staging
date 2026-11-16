@@ -1,4 +1,5 @@
 import { accountIncluded } from './account-model.mjs';
+import { dueDayOf } from './due-day.mjs';
 
 export function entryAccount(entry, accounts) {
   if (!entry.accountId) return null;
@@ -37,7 +38,9 @@ export function computeAccountBudget(year, accounts) {
     const pre15Outflow = [
       ['fixed', 'amount'], ['variable', 'amount'], ['creditCards', 'payment'], ['loans', 'payment']
     ].reduce((sum, [key, field]) => sum + month[key].reduce((subtotal, entry) => {
-      const day = Number(String(entry.due || '').match(/\d+/)?.[0] || 99);
+      let day = 99;
+      try { day = dueDayOf(entry) ?? 99; }
+      catch { /* Unknown legacy due dates do not count as pre-15. */ }
       return subtotal + (day <= 15 ? includedAmount(entry, accounts, field) : 0);
     }, 0), 0);
     const totalAvailable = startLeftover + newIncome;

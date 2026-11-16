@@ -31,3 +31,10 @@ body.desktop-settings-open .budget-year-toolbar,body.mobile-tab-settings .budget
 .mobile-settings-menu button:focus-visible,.mobile-settings-menu button:hover{border-color:var(--rb-accent);background:#ede9fe}
 .mobile-settings-back{min-height:44px;margin-bottom:14px;background:transparent;color:#5b21b6;border:0;font-weight:700;padding:8px}
 .mobile-settings-intro{color:var(--muted);font-size:.86rem;margin:8px 0 16px}
+
+/* A2: distinct budget plan-copy controls, shared planning behavior. */
+.budget-year-picker{flex-wrap:wrap}
+.copy-previous-year-button{min-height:44px;padding:8px 12px;border:1px solid var(--rb-border);border-radius:10px;background:var(--rb-surface);color:var(--text);font:inherit;font-weight:650;cursor:pointer}
+.copy-previous-year-button[hidden]{display:none!important}
+.copy-previous-year-button:disabled{opacity:.55;cursor:wait}
+@media(max-width:768px){.budget-year-picker-mobile{flex-wrap:wrap}.copy-previous-year-button{width:100%}}
