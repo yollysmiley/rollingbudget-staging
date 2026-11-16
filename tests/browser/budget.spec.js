@@ -181,7 +181,7 @@ test('rolling future years are selectable without creating empty cloud records',
   expect(await page.evaluate(() => Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')))).toEqual(before);
 });
 
-test('older saved years and divergent unsynced custom years are restored without overwriting local data', async ({ page }) => {
+test('historical and distant future records remain protected but are not selectable', async ({ page }) => {
   await page.evaluate(() => {
     const original = structuredClone(db[activeYear]);
     const local = structuredClone(original);
@@ -195,9 +195,10 @@ test('older saved years and divergent unsynced custom years are restored without
     localStorage.setItem(storageKey('2034'), JSON.stringify({ data: local, updatedAt: '2026-11-15T11:00:00.000Z' }));
   });
   await page.reload();
-  await expect(page.locator('#activeYearSelect option[value="2023"]')).toHaveCount(1);
-  await expect(page.locator('#activeYearSelect option[value="2034"]')).toContainText('Unsynced');
-  await page.locator('#activeYearSelect').selectOption('2034');
+  await expect(page.locator('#activeYearSelect option[value="2023"]')).toHaveCount(0);
+  await expect(page.locator('#activeYearSelect option[value="2034"]')).toHaveCount(0);
+  expect(await page.locator('#activeYearSelect option').count()).toBe(3);
+  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
   await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced');
   const result = await page.evaluate(() => ({
     localInMemory: db['2034'].months[0].fixed[0].name,
@@ -206,6 +207,10 @@ test('older saved years and divergent unsynced custom years are restored without
     marker: localStorage.getItem(conflictStorageKey('2034'))
   }));
   expect(result).toEqual({ localInMemory: 'LOCAL-2034', localInCache: 'LOCAL-2034', cloud: 'CLOUD-2034', marker: '1' });
+  await page.evaluate(() => switchYear('2034'));
+  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
 });
 
 test('desktop header uses the approved email branding', async ({ page }) => {
