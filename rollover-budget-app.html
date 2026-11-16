@@ -1491,8 +1491,9 @@ async function loadAllYears() {
     const key = selectedYearSessionKey();
     preference = key ? sessionStorage.getItem(key) : null;
   } catch (error) { console.warn('Could not restore budget year preference:', error); }
-  activeYear = preference && Object.hasOwn(db, preference) ? preference :
-    (Object.hasOwn(db, calendarYear) ? calendarYear : Object.keys(db).sort()[0]);
+  const { selectableBudgetYears } = await import('./scripts/year-discovery.mjs');
+  const selectable = selectableBudgetYears(Number(calendarYear));
+  activeYear = preference && selectable.includes(preference) && Object.hasOwn(db, preference) ? preference : calendarYear;
   selectedIdx = restoreSelectedMonth(activeYear);
   if (localStorage.getItem(conflictStorageKey(activeYear)) === '1') {
     showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
@@ -1942,6 +1943,8 @@ function syncCopyPreviousYearControls() {
 function switchYear(yr) {
   const next = String(yr);
   if (!/^\d{4}$/.test(next) || !Object.hasOwn(db, next)) return;
+  const calendarYear = new Date().getFullYear();
+  if (Number(next) < calendarYear || Number(next) > calendarYear + 2) return;
   activeYear = next;
   selectedIdx = restoreSelectedMonth(activeYear);
   try {
@@ -2818,9 +2821,9 @@ function setDesktopSettings(open) {
   if (settings) settings.setAttribute("aria-expanded", String(enabled));
 }
 function syncMobileSettingsControls() {
-  const years = Object.keys(db).filter(year =>
-    /^\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200
-  ).sort((a, b) => Number(a) - Number(b));
+  const currentYear = new Date().getFullYear();
+  const years = [0, 1, 2].map(offset => String(currentYear + offset))
+    .filter(year => Object.hasOwn(db, year));
   for (const id of ['activeYearSelect', 'mobileActiveYearSelect']) {
     const select = document.getElementById(id);
     if (!select) continue;
