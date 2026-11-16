@@ -23,6 +23,7 @@ function harness() {
   };
   const context = {
     Map, Promise, JSON, Date, Number, console, document,
+    STAGING_STORAGE_PREFIX: '',
     dueDayModule: { migrateYearDueDays },
     writeBudgetRevision,
     localStorage: { setItem: (key, value) => store.set(key, value),
