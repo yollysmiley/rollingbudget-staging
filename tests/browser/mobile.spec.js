@@ -620,3 +620,22 @@ test('mobile copy action confirms and shares saved plan across viewport changes'
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth+1)).toBe(true);
 });
+
+
+test('mobile January rollover is opt-in and shares state with desktop', async ({ page }) => {
+  const year=String(new Date().getFullYear()),next=String(Number(year)+1);
+  await page.evaluate(y => {
+    db[y].months[11].fixed.push({name:'December cost',amount:50});
+    render();
+  },year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+  page.once('dialog',dialog => dialog.accept());
+  await page.locator('#mobileProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(-50);
+  await expect(page.locator('#mobileProjectJanuary')).toBeHidden();
+  await page.setViewportSize({width:1280,height:900});
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(-50);
+});
