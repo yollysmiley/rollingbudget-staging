@@ -18,7 +18,10 @@ test('reconciliation records committed revision before checking local state and 
   const cache = source.indexOf('localStorage.setItem(budgetKey, JSON.stringify({ data: normalizedLocal', write);
   assert.ok(write >= 0 && revision > write && check > revision && cache > check);
   assert.match(source, /localStorage\.setItem\(budgetKey \+ '_conflict_backup'/);
-  assert.match(source, /catch \(error\) \{[\s\S]*?markCloudConflict\(key, year\)/);
+  assert.match(source, /catch \(error\) \{[\s\S]*?Local changes and backups were preserved/);
+  assert.match(source, /localStorage\.getItem\(markerKey\) === '1'/);
+  assert.ok(!source.includes('clearCloudConflict(key, year);\n    });\n  } catch'),
+    'Failure handling must not clear the unresolved conflict marker');
 });
 
 test('recurring post-commit owner guard precedes local cache writes and retains conflict on failure', () => {
