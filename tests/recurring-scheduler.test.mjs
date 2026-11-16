@@ -81,20 +81,30 @@ test('effective-dated disable and frequency changes affect only later occurrence
 
 
 test('uses calendar start day, clamps short months, and stops at optional end date', () => {
-  const input = rule({ startDate: '2027-01-31', endDate: '2027-04-29', versions: [
-    { effectiveFrom: '2027-01-01', name: 'Rent', amount: 900, accountId: 'checking', frequency: 'monthly' }
+  const input = rule({ startDate: '2027-01-31', dueDay: 31, due: undefined, endDate: '2027-04-29', versions: [
+    { effectiveFrom: '2027-01-01', name: 'Rent', amount: 900, dueDay: 31, accountId: 'checking', frequency: 'monthly' }
   ] });
   assert.deepEqual(scheduledOccurrences(input, 2027).map(x => x.scheduledMonth),
     ['2027-01-31', '2027-02-28', '2027-03-31']);
-  assert.deepEqual(scheduledOccurrences(input, 2027).map(x => x.due), ['31', '28', '31']);
+  assert.deepEqual(scheduledOccurrences(input, 2027).map(x => x.dueDay), [31, 31, 31]);
 });
 
 test('preserves stable calendar occurrence identifiers for repeated generation', () => {
-  const input = rule({ startDate: '2028-02-29', versions: [
-    { effectiveFrom: '2028-02-01', name: 'Rent', amount: 900, frequency: 'annually' }
+  const input = rule({ startDate: '2028-02-29', dueDay: 29, due: undefined, versions: [
+    { effectiveFrom: '2028-02-01', name: 'Rent', amount: 900, dueDay: 29, frequency: 'annually' }
   ] });
   // Monthly frequency comes from the first rule version, not the top-level fallback.
   const occurrences = scheduledOccurrences(input, 2028);
   assert.equal(occurrences[0].scheduledMonth, '2028-02-29');
   assert.deepEqual(appendMissingOccurrences(occurrences, occurrences), occurrences);
+});
+
+test('new recurring rules use start date as nominal due day, not a text field', () => {
+  const input = rule({ startDate: '2027-01-31', due: undefined, dueDay: undefined,
+    versions: [{ effectiveFrom: '2027-01-01', name: 'Rent', amount: 900, frequency: 'monthly' }] });
+  const occurrences = scheduledOccurrences(input, 2027);
+  assert.deepEqual(occurrences.slice(0, 4).map(x => x.scheduledMonth),
+    ['2027-01-31', '2027-02-28', '2027-03-31', '2027-04-30']);
+  assert.deepEqual(occurrences.slice(0, 4).map(x => x.dueDay), [31, 31, 31, 31]);
+  assert.equal(occurrences[0].due, undefined);
 });

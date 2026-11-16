@@ -11,6 +11,9 @@ const rule = () => ({
 test('new owner-scoped recurring definitions have stable identifiers and no legacy source', () => {
   const normalized = normalizeRecurringRule(rule());
   assert.equal(normalized.id, 'rent');
+  assert.equal(normalized.dueDay, 1);
+  assert.equal(normalized.versions[0].dueDay, 1);
+  assert.equal(normalized.due, undefined);
   assert.equal(normalized.versions[0].effectiveFrom, '2027-01-01');
   assert.equal(normalized.versions[0].amount, 900);
   assert.equal(normalized.sourceYear, undefined);
@@ -39,4 +42,6 @@ test('supports full start dates and optional end dates with strict calendar vali
   assert.equal(result.versions[0].effectiveFrom, '2027-01-01');
   assert.throws(() => normalizeRecurringRule({ ...rule(), startDate: '2027-02-29' }), /start date/);
   assert.equal(normalizeRecurringRule({ ...rule(), startDate: '2028-02-29' }).startDate, '2028-02-29');
+  assert.equal(normalizeRecurringRule({ ...rule(), due: undefined, startDate: '2028-02-29' }).dueDay, 29);
+  assert.throws(() => normalizeRecurringRule({ ...rule(), dueDay: 32, due: undefined }), /Due day/);
 });
