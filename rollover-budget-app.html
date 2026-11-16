@@ -826,7 +826,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newFixName" placeholder="Fixed bill name" style="flex:1;min-width:130px" />
-        <input type="text" id="newFixDue" placeholder="Due (e.g. 5th)" style="width:95px" />
+        <select id="newFixDue" aria-label="Due day for new fixed expense" style="width:95px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newFixAmt" placeholder="Amount $" style="width:95px" />
         <label>Account <select id="newFixAccount" data-new-entry-account aria-label="Account for new newFix"></select></label>
         <button class="primary" onclick="addExpense('fixed')">Add</button>
@@ -852,7 +852,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newVarName" placeholder="Variable expense" style="flex:1;min-width:130px" />
-        <input type="text" id="newVarDue" placeholder="Due" style="width:95px" />
+        <select id="newVarDue" aria-label="Due day for new variable expense" style="width:95px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newVarAmt" placeholder="Amount $" style="width:95px" />
         <label>Account <select id="newVarAccount" data-new-entry-account aria-label="Account for new newVar"></select></label>
         <button class="primary" onclick="addExpense('variable')">Add</button>
@@ -880,7 +880,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newLoanName" placeholder="Loan name" style="flex:1;min-width:110px" />
-        <input type="text" id="newLoanDue" placeholder="Due" style="width:65px" />
+        <select id="newLoanDue" aria-label="Due day for new loan" style="width:65px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newLoanBal" placeholder="Balance $" style="width:90px" />
         <input type="number" step="0.01" id="newLoanPay" placeholder="Pay $" style="width:85px" />
         <label>Account <select id="newLoanAccount" data-new-entry-account aria-label="Account for new newLoan"></select></label>
@@ -909,7 +909,7 @@
       </table>
       <div class="add-row">
         <input type="text" id="newCcName" placeholder="Card name" style="flex:1;min-width:140px" />
-        <input type="text" id="newCcDue" placeholder="Due" style="width:95px" />
+        <select id="newCcDue" aria-label="Due day for new credit card" style="width:95px"><option value="">No day</option></select>
         <input type="number" step="0.01" id="newCcStmt" placeholder="Statement $" style="width:110px" />
         <input type="number" step="0.01" id="newCcApr" placeholder="APR/Min" style="width:95px" />
         <input type="number" step="0.01" id="newCcPay" placeholder="Payment $" style="width:110px" />
@@ -1055,6 +1055,7 @@ let budgetAccounts = [];
 let accountService = null;
 let accountBudgetModule = null;
 let recurringAppService = null;
+let dueDayModule = null;
 let loadedRecurringPreview = { rules: [], held: 0 };
 let recurringPreviewError = '';
 
@@ -1325,6 +1326,7 @@ async function initApp() {
     return;
   }
   currentUser = user;
+  dueDayModule = await import('./scripts/due-day.mjs');
   selectedIdx = restoreSelectedMonth(activeYear);
   document.documentElement.classList.add("budget-authenticated");
   supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -1511,22 +1513,24 @@ async function reconcileCloudBudget(useLocal) {
       if (local?.data) localStorage.setItem(storageKey(year) + '_conflict_backup', JSON.stringify(local));
       if (useLocal) {
         if (!local?.data) throw new Error('Local budget unavailable');
+        const normalizedLocal = dueDayModule.migrateYearDueDays(local.data).year;
         const nextTimestamp = new Date(Math.max(Date.now(), cloud ? Date.parse(cloud.updated_at) + 1 : 0)).toISOString();
         if (cloud) {
           const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
-            .update({ budget_data: local.data, updated_at: nextTimestamp })
+            .update({ budget_data: normalizedLocal, updated_at: nextTimestamp })
             .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
           if (writeError) throw writeError;
           if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
         } else {
           const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
-            user_id: owner, year: Number(year), budget_data: local.data, updated_at: nextTimestamp
+            user_id: owner, year: Number(year), budget_data: normalizedLocal, updated_at: nextTimestamp
           });
           if (insertError) throw insertError;
           insertedNewYear = true;
         }
         cloudBudgetVersions.set(key, nextTimestamp);
-        db[year] = local.data;
+        db[year] = normalizedLocal;
+        localStorage.setItem(storageKey(year), JSON.stringify({ data: normalizedLocal, updatedAt: nextTimestamp }));
       } else {
         if (!cloud) throw new Error('No cloud copy exists; keep local changes instead');
         db[year] = cloud.budget_data;
@@ -1583,16 +1587,24 @@ async function saveDB({ backfillNewYear = true } = {}) {
   const year = activeYear;
   const userId = currentUser?.id || null;
   let insertedNewYear = false;
-  const snapshot = JSON.parse(JSON.stringify(db[year]));
+  const original = db[year];
+  const migrated = dueDayModule.migrateYearDueDays(original);
+  const snapshot = JSON.parse(JSON.stringify(migrated.year));
   const updatedAt = new Date().toISOString();
+  const dueWarning = migrated.unrecognized.length
+    ? 'Some legacy due dates need review. Select a valid day (1–31) for the affected expenses.' : '';
   try {
     localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+    if (migrated.changed && db[year] === original) db[year] = snapshot;
   } catch (error) {
     console.error("Local save error:", error);
     alert("Could not save this budget in browser storage. Your changes may not persist.");
     return 'not-saved';
   }
-  if (!supabaseClient || !userId) return 'local-saved';
+  if (!supabaseClient || !userId) {
+    if (dueWarning) showCloudSaveStatus(dueWarning);
+    return 'local-saved';
+  }
   const client = supabaseClient;
   const key = userId + ":" + year;
   try {
@@ -1628,7 +1640,7 @@ async function saveDB({ backfillNewYear = true } = {}) {
         await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
       }
       const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
-      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' : '');
+      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' : dueWarning);
     }
     return 'cloud-saved';
   } catch (error) {
@@ -1787,10 +1799,9 @@ function fmt(n) {
   return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-function parseDayNum(dueStr) {
-  if (!dueStr) return 99;
-  const match = String(dueStr).match(/\d+/);
-  return match ? parseInt(match[0], 10) : 99;
+function parseDayNum(entry) {
+  try { return dueDayModule?.dueDayOf(entry) ?? 99; }
+  catch { return 99; } // Preserve invalid legacy data until the user corrects it.
 }
 
 function computeRolling(yrKey) {
@@ -1816,10 +1827,10 @@ function computeRolling(yrKey) {
     const totalOutflow = fixedTotal + varTotal + ccTotal + loanTotal;
 
     let pre15Outflow = 0;
-    m.fixed.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.amount) || 0; });
-    m.variable.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.amount) || 0; });
-    m.creditCards.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.payment) || 0; });
-    m.loans.forEach(x => { if (parseDayNum(x.due) <= 15) pre15Outflow += Number(x.payment) || 0; });
+    m.fixed.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.amount) || 0; });
+    m.variable.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.amount) || 0; });
+    m.creditCards.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.payment) || 0; });
+    m.loans.forEach(x => { if (parseDayNum(x) <= 15) pre15Outflow += Number(x.payment) || 0; });
 
     const pre15Buffer = startLeftover - pre15Outflow;
     const endingRollover = totalAvailable - totalOutflow;
@@ -1836,6 +1847,36 @@ function computeRolling(yrKey) {
 }
 
 
+function dueDayOptions(selected) {
+  return '<option value=""' + (selected === null ? ' selected' : '') + '>No day</option>' +
+    Array.from({ length: 31 }, (_, i) => {
+      const day = i + 1;
+      return '<option value="' + day + '"' + (selected === day ? ' selected' : '') + '>' + day + '</option>';
+    }).join('');
+}
+function populateNewDueDaySelectors() {
+  for (const id of ['newFixDue', 'newVarDue', 'newLoanDue', 'newCcDue']) {
+    const select = document.getElementById(id);
+    if (select && select.options.length === 1) select.innerHTML = dueDayOptions(null);
+  }
+}
+function dueDayPicker(type, idx, item) {
+  let selected = null, invalid = false;
+  try { selected = dueDayModule.dueDayOf(item); }
+  catch { invalid = true; }
+  const action = type === 'fixed' || type === 'variable'
+    ? "editExp('" + type + "', " + idx + ", 'dueDay', this.value)"
+    : type === 'loans' ? "editLoan(" + idx + ", 'dueDay', this.value)"
+      : "editCC(" + idx + ", 'dueDay', this.value)";
+  const options = invalid
+    ? '<option value="" selected>Review legacy date</option>' + dueDayOptions(-1)
+    : dueDayOptions(selected);
+  return '<select class="inline-input sm" aria-label="Due day for ' + type + ' entry" onchange="' + action + '">' + options + '</select>';
+}
+function setEntryDueDay(entry, value) {
+  entry.dueDay = dueDayModule.parseDueDay(value);
+  delete entry.due;
+}
 function accountOptions(selectedId, unassigned = true) {
   const blank = unassigned ? '<option value="">Unassigned (included)</option>' : '';
   return blank + budgetAccounts.map(account => '<option value="' + esc(account.id) + '"' + (account.id === selectedId ? ' selected' : '') + '>' + esc(account.name) + (account.included ? '' : ' (excluded)') + '</option>').join('');
@@ -1864,6 +1905,7 @@ function render() {
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
+  populateNewDueDaySelectors();
   syncCopyPreviousYearControls();
   syncJanuaryProjectionControls();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
@@ -2013,7 +2055,7 @@ function render() {
   document.getElementById("fixedBody").innerHTML = m.fixed.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('fixed', ${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("fixed", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('fixed', ${idx}, 'amount', this.value)" /></td>
       <td>${accountPicker("fixed", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('fixed', ${idx})">×</button></td>
@@ -2024,7 +2066,7 @@ function render() {
   document.getElementById("variableBody").innerHTML = m.variable.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editExp('variable', ${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("variable", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.amount) || 0}" onchange="editExp('variable', ${idx}, 'amount', this.value)" /></td>
       <td>${accountPicker("variable", idx, item.accountId)}</td>
       <td><button class="del-btn" onclick="delItem('variable', ${idx})">×</button></td>
@@ -2035,7 +2077,7 @@ function render() {
   document.getElementById("loanBody").innerHTML = m.loans.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editLoan(${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editLoan(${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("loans", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.balance) || 0}" onchange="editLoan(${idx}, 'balance', this.value)" /></td>
       <td class="num"><input class="inline-input num sm" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editLoan(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editLoan(${idx}, 'payment', this.value)" /></td>
@@ -2049,7 +2091,7 @@ function render() {
   document.getElementById("ccBody").innerHTML = m.creditCards.map((item, idx) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editCC(${idx}, 'name', this.value)" /></td>
-      <td><input class="inline-input sm" value="${esc(item.due||"")}" onchange="editCC(${idx}, 'due', this.value)" /></td>
+      <td>${dueDayPicker("creditCards", idx, item)}</td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.statement) || 0}" onchange="editCC(${idx}, 'statement', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.apr) || 0}" onchange="editCC(${idx}, 'apr', this.value)" /></td>
       <td class="num"><input class="inline-input num" type="number" step="0.01" value="${Number(item.payment) || 0}" onchange="editCC(${idx}, 'payment', this.value)" /></td>
@@ -2087,37 +2129,52 @@ async function addIncome() {
   document.getElementById("newIncName").value = ""; document.getElementById("newIncAmount").value = "";
   await saveDB(); render();
 }
-async function editExp(type, idx, f, v) { db[activeYear].months[selectedIdx][type][idx][f] = f==='amount'?parseFloat(v)||0:v; await saveDB(); render(); }
+async function editExp(type, idx, f, v) {
+  const entry = db[activeYear].months[selectedIdx][type][idx];
+  if (f === 'dueDay') setEntryDueDay(entry, v);
+  else entry[f] = f === 'amount' ? parseFloat(v) || 0 : v;
+  await saveDB(); render();
+}
 async function addExpense(type) {
   const p = type === 'fixed' ? 'newFix' : 'newVar';
   const name = document.getElementById(p + 'Name').value.trim();
-  const due = document.getElementById(p + 'Due').value.trim();
+  const dueDay = dueDayModule.parseDueDay(document.getElementById(p + 'Due').value);
   const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx][type].push({ name, due, amount, accountId: document.getElementById(p + 'Account').value || null });
+  db[activeYear].months[selectedIdx][type].push({ name, dueDay, amount, accountId: document.getElementById(p + 'Account').value || null });
   document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
   await saveDB(); render();
 }
-async function editLoan(idx, f, v) { db[activeYear].months[selectedIdx].loans[idx][f] = ['name','due'].includes(f)?v:parseFloat(v)||0; await saveDB(); render(); }
+async function editLoan(idx, f, v) {
+  const entry = db[activeYear].months[selectedIdx].loans[idx];
+  if (f === 'dueDay') setEntryDueDay(entry, v);
+  else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
+  await saveDB(); render();
+}
 async function addLoan() {
   const name = document.getElementById("newLoanName").value.trim();
-  const due = document.getElementById("newLoanDue").value.trim();
+  const dueDay = dueDayModule.parseDueDay(document.getElementById("newLoanDue").value);
   const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
   const payment = parseFloat(document.getElementById("newLoanPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].loans.push({ name, due, balance, apr: 0, payment, accountId: document.getElementById('newLoanAccount').value || null });
+  db[activeYear].months[selectedIdx].loans.push({ name, dueDay, balance, apr: 0, payment, accountId: document.getElementById('newLoanAccount').value || null });
   ['newLoanName','newLoanDue','newLoanBal','newLoanPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
-async function editCC(idx, f, v) { db[activeYear].months[selectedIdx].creditCards[idx][f] = ['name','due'].includes(f)?v:parseFloat(v)||0; await saveDB(); render(); }
+async function editCC(idx, f, v) {
+  const entry = db[activeYear].months[selectedIdx].creditCards[idx];
+  if (f === 'dueDay') setEntryDueDay(entry, v);
+  else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
+  await saveDB(); render();
+}
 async function addCC() {
   const name = document.getElementById("newCcName").value.trim();
-  const due = document.getElementById("newCcDue").value.trim();
+  const dueDay = dueDayModule.parseDueDay(document.getElementById("newCcDue").value);
   const statement = parseFloat(document.getElementById("newCcStmt").value) || 0;
   const apr = parseFloat(document.getElementById("newCcApr").value) || 0;
   const payment = parseFloat(document.getElementById("newCcPay").value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx].creditCards.push({ name, due, statement, apr, payment, accountId: document.getElementById('newCcAccount').value || null });
+  db[activeYear].months[selectedIdx].creditCards.push({ name, dueDay, statement, apr, payment, accountId: document.getElementById('newCcAccount').value || null });
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
@@ -2282,9 +2339,9 @@ function renderRulesList(){
 function recurringRuleItem(r){
   const accountId = r.accountId || r.acct || null;
   if(r.cat==="income")return {name:r.name,accountId,amount:r.amount,recurringRuleId:r.id};
-  if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,due:r.due,amount:r.amount,accountId,recurringRuleId:r.id};
-  if(r.cat==="loan")return{name:r.name,due:r.due,balance:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
-  if(r.cat==="cc")return{name:r.name,due:r.due,statement:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="fixed"||r.cat==="variable")return{name:r.name,dueDay:dueDayModule.dueDayOf(r),amount:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="loan")return{name:r.name,dueDay:dueDayModule.dueDayOf(r),balance:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
+  if(r.cat==="cc")return{name:r.name,dueDay:dueDayModule.dueDayOf(r),statement:0,apr:0,payment:r.amount,accountId,recurringRuleId:r.id};
   return null;
 }
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
