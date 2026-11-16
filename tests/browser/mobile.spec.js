@@ -759,6 +759,28 @@ test('mobile January projection restores its prior value when browser storage fa
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
 });
 
+
+test('mobile preserves a failed recurring-year discovery across reload and retries automatically', async ({ page }) => {
+  const year = String(new Date().getFullYear());
+  const initial = await page.evaluate(async y => {
+    db[y].months[0].variable.push({ name: 'Saved mobile budget', amount: 17 });
+    await saveDB();
+    sessionStorage.setItem('__mock_budget_cloud_discovery_failure', '1');
+    const report = await backfillSavedRecurringYears(currentUser.id, y + '-01-01', y + '-12-31');
+    return {
+      discoveryFailed: report.discoveryFailed,
+      pending: Boolean(localStorage.getItem(recurringSyncPendingKey(currentUser.id)))
+    };
+  }, year);
+  expect(initial).toEqual({ discoveryFailed: true, pending: true });
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_discovery_failure'));
+  await page.reload();
+  await expect.poll(() => page.evaluate(() =>
+    localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
+  expect(await page.evaluate(y => db[y].months[0].variable.some(
+    item => item.name === 'Saved mobile budget'), year)).toBe(true);
+});
+
 test('mobile plan day selectors use integers and persist after reload', async ({ page }) => {
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();

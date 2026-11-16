@@ -1081,22 +1081,42 @@ function ensureRecurringSyncOwner(owner) {
   recurringSyncBusy = false;
   if (!owner) return;
   try {
-    const saved = JSON.parse(sessionStorage.getItem(recurringSyncPendingKey(owner)) || '[]');
+    const key = recurringSyncPendingKey(owner);
+    const durable = localStorage.getItem(key);
+    const legacy = sessionStorage.getItem(key);
+    const saved = JSON.parse(durable || legacy || '[]');
     if (Array.isArray(saved)) {
       recurringSyncScopes = saved.filter(validRecurringSyncScope)
         .slice(0, 50).map(s => ({ startDate: s.startDate, endDate: s.endDate || null }));
+    }
+    // Upgrade tab-only pending scopes without losing an unfinished retry.
+    if (durable === null && legacy && recurringSyncScopes.length) {
+      localStorage.setItem(key, JSON.stringify(recurringSyncScopes));
+      sessionStorage.removeItem(key);
     }
   } catch (error) { console.warn('Could not restore recurring sync status:', error); }
 }
 function rememberRecurringSyncScopes(owner) {
   if (currentUser?.id !== owner) return;
   try {
+    const key = recurringSyncPendingKey(owner);
     if (recurringSyncScopes.length) {
-      sessionStorage.setItem(recurringSyncPendingKey(owner), JSON.stringify(recurringSyncScopes));
+      localStorage.setItem(key, JSON.stringify(recurringSyncScopes));
     } else {
-      sessionStorage.removeItem(recurringSyncPendingKey(owner));
+      localStorage.removeItem(key);
     }
-  } catch (error) { console.warn('Could not save recurring sync status:', error); }
+    sessionStorage.removeItem(key);
+  } catch (error) { console.warn('Could not persist recurring sync status:', error); }
+}
+function recordPendingRecurringScope(owner, startDate, endDate = null) {
+  const scope = { startDate, endDate };
+  if (currentUser?.id !== owner || !validRecurringSyncScope(scope)) return;
+  ensureRecurringSyncOwner(owner);
+  if (!recurringSyncScopes.some(item => recurringSyncScopeMatches(item, scope))) {
+    recurringSyncScopes.push(scope);
+  }
+  rememberRecurringSyncScopes(owner);
+  renderRecurringSyncStatus();
 }
 function recurringSyncScopeMatches(a, b) {
   return a.startDate === b.startDate && a.endDate === b.endDate;
@@ -1125,7 +1145,7 @@ function renderRecurringSyncStatus() {
   let message = '';
   if (recurringSyncBusy || recurringSyncRetryBusy) message = 'Synchronizing recurring entries…';
   else if (pending) message = 'Recurring synchronization incomplete for ' + pending +
-    ' date range' + (pending === 1 ? '' : 's') + '. Resolve cloud conflicts before retrying.';
+    ' date range' + (pending === 1 ? '' : 's') + '. Check connectivity or resolve cloud conflicts, then retry.';
   else if (report) {
     const added = report.years.reduce((sum, item) => sum + item.added, 0);
     const skipped = report.years.reduce((sum, item) => sum + item.ambiguous.length, 0);
@@ -1167,7 +1187,15 @@ async function retryRecurringSynchronization() {
       await backfillSavedRecurringYears(owner, scope.startDate, scope.endDate);
     }
   } finally {
-    if (currentUser?.id === owner) recurringSyncRetryBusy = false;
+    if (currentUser?.id === owner) {
+      recurringSyncRetryBusy = false;
+      if (!recurringSyncScopes.length && !cloudBudgetConflicts.has(owner + ':' + activeYear)) {
+        const status = document.getElementById('cloudSaveStatus');
+        if (status?.firstChild?.textContent?.includes('Recurring entries are still pending')) {
+          showCloudSaveStatus('');
+        }
+      }
+    }
     renderRecurringSyncStatus();
   }
 }
@@ -1354,6 +1382,8 @@ async function initApp() {
         if (currentUser) await initializeAccounts();
         render();
         applyPage(pageFromLocation());
+        ensureRecurringSyncOwner(currentUser?.id);
+        if (recurringSyncScopes.length) void retryRecurringSynchronization();
       }, 0);
     }
   });
@@ -1364,6 +1394,8 @@ async function initApp() {
   await initializeAccounts();
   render();
   applyPage(pageFromLocation());
+  ensureRecurringSyncOwner(currentUser?.id);
+  if (recurringSyncScopes.length) void retryRecurringSynchronization();
 }
 function parseLocalBudgetRecord(raw) {
   if (raw === null) return null;
@@ -1507,6 +1539,7 @@ async function reconcileCloudBudget(useLocal) {
   const originalMemory = structuredClone(db[year]);
   const originalLocalRaw = localStorage.getItem(budgetKey);
   let insertedNewYear = false;
+  let recurringPendingMessage = '';
   reconcilingBudgetYears.add(key);
   showCloudSaveStatus('Reconciling budget. Wait before making further changes.');
   try {
@@ -1578,8 +1611,18 @@ async function reconcileCloudBudget(useLocal) {
       showCloudSaveStatus('');
       render();
       if (insertedNewYear) {
-        // Only a confirmed first cloud insert is eligible for global rule backfill.
-        await backfillSavedRecurringYears(owner, year + '-01-01', year + '-12-31');
+        // Cloud reconciliation succeeded even if subsequent recurring backfill is deferred.
+        try {
+          const report = await backfillSavedRecurringYears(owner, year + '-01-01', year + '-12-31');
+          if (!report || report.discoveryFailed || report.deferred.length) {
+            recurringPendingMessage = 'Budget reconciled in cloud. Recurring entries are still pending; retry in Recurring Rules.';
+          }
+        } catch (error) {
+          console.warn('Recurring backfill deferred after cloud reconciliation:', error);
+          recordPendingRecurringScope(owner, year + '-01-01', year + '-12-31');
+          recurringPendingMessage = 'Budget reconciled in cloud. Recurring entries are still pending; retry in Recurring Rules.';
+        }
+        if (recurringPendingMessage) showCloudSaveStatus(recurringPendingMessage);
       }
     }
   } catch (error) {
@@ -1593,7 +1636,7 @@ async function reconcileCloudBudget(useLocal) {
     if (currentUser?.id === owner && activeYear === year) showCloudSaveStatus(
       localStorage.getItem(markerKey) === '1'
         ? document.getElementById('cloudSaveStatus')?.firstChild?.textContent || 'Reconciliation still required.'
-        : '');
+        : recurringPendingMessage);
   }
 }
 function showCloudSaveStatus(message) {
@@ -1685,13 +1728,23 @@ async function saveDB({ backfillNewYear = true } = {}) {
       cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) {
+      let recurringPending = false;
       if (insertedNewYear && backfillNewYear) {
-        // Available years are virtual until edited. Apply global schedules only
-        // after the year's first confirmed cloud save.
-        await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
+        // The budget is already saved: a failed recurring backfill must not
+        // turn a confirmed cloud save into a misleading conflict or success.
+        try {
+          const report = await backfillSavedRecurringYears(userId, year + '-01-01', year + '-12-31');
+          recurringPending = !report || report.discoveryFailed || report.deferred.length > 0;
+        } catch (error) {
+          console.warn('Recurring backfill deferred after cloud budget save:', error);
+          recordPendingRecurringScope(userId, year + '-01-01', year + '-12-31');
+          recurringPending = true;
+        }
       }
       const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
-      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' : dueWarning);
+      showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' :
+        recurringPending ? 'Budget saved to cloud. Recurring entries are still pending; retry in Recurring Rules.' : dueWarning);
+      return recurringPending ? 'cloud-saved-recurring-pending' : 'cloud-saved';
     }
     return 'cloud-saved';
   } catch (error) {
@@ -1761,6 +1814,8 @@ async function persistYearPlanChange(owner, year, updated, localOnlyMessage) {
       showCloudSaveStatus('Budget change was not saved. Free browser storage and retry.');
     } else if (status === 'local-saved') {
       showCloudSaveStatus(localOnlyMessage);
+    } else if (status === 'cloud-saved-recurring-pending') {
+      showCloudSaveStatus('Budget saved to cloud. Recurring entries are still pending; retry in Recurring Rules.');
     }
   }
   return status;
@@ -2453,15 +2508,16 @@ function recurringRuleItem(r){
 function recurringRuleTargetMonths(r){const interval=RECURRING_FREQUENCIES[r.frequency]?.interval||1,start=Number.isInteger(r.startMonth)?r.startMonth:(Number.isInteger(r.start)?r.start:0),months=[];for(let i=Math.max(0,start);i<12;i+=interval)months.push(i);return months;}
 
 async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
-  if (currentUser?.id !== owner || !recurringAppService || !supabaseClient) return null;
+  if (currentUser?.id !== owner || !supabaseClient) return null;
   const scope = { startDate, endDate };
   if (!validRecurringSyncScope(scope)) throw new Error('Invalid recurring sync date range');
-  ensureRecurringSyncOwner(owner);
-  if (!recurringSyncScopes.some(item => recurringSyncScopeMatches(item, scope))) {
-    recurringSyncScopes.push(scope);
+  recordPendingRecurringScope(owner, startDate, endDate);
+  if (!recurringAppService) {
+    const report = { years: [], deferred: [], discoveryFailed: true };
+    recurringSyncLastReport = report;
+    renderRecurringSyncStatus();
+    return report;
   }
-  rememberRecurringSyncScopes(owner);
-  renderRecurringSyncStatus();
   // Serialize sync runs as well as individual cloud-year writes. Retry never
   // reuses a stale preview; every run starts with owner-scoped cloud reads.
   const operation = recurringSyncQueue.catch(() => {}).then(async () => {

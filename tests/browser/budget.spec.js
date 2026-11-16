@@ -945,6 +945,44 @@ test('failed first cloud save reconciles local plan and backfills recurring rule
   }, next)).toEqual({ cloudRecurring: 12, localRecurring: 12, manual: ['Manual groceries'], conflict: null });
 });
 
+
+test('desktop distinguishes a cloud-saved future year from deferred recurring backfill and resumes after reload', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Recoverable recurring');
+  await form.locator('[data-rec-field="amount"]').fill('25');
+  await form.locator('[data-rec-field="startDate"]').fill(year + '-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
+    entry => entry.name === 'Recoverable recurring'), year)).toBe(true);
+  await page.locator('#desktopBudgetButton').click();
+  await page.locator('#activeYearSelect').selectOption(next);
+  const outcome = await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_budget_cloud_update_failure', '1');
+    db[y].months[0].variable.push({ name: 'First manual edit', amount: 12 });
+    const status = await saveDB();
+    return {
+      status,
+      cloudExists: Boolean(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y]),
+      pending: Boolean(localStorage.getItem(recurringSyncPendingKey(currentUser.id))),
+      conflict: localStorage.getItem(conflictStorageKey(y))
+    };
+  }, next);
+  expect(outcome).toEqual({
+    status: 'cloud-saved-recurring-pending', cloudExists: true, pending: true, conflict: null
+  });
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Recurring entries are still pending');
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_update_failure'));
+  await page.reload();
+  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+  expect(await page.evaluate(() => localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
+  await page.reload();
+  expect(await page.evaluate(y => db[y].months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+});
+
 test('desktop due-day selectors save integer days across all expense categories', async ({ page }) => {
   await page.locator('#newFixName').fill('Rent');
   await page.locator('#newFixDue').selectOption('31');

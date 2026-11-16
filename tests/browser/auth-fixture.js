@@ -32,9 +32,11 @@ export async function mockSignedInBudget(page) {
                     },
                     // Supabase queries are thenable both with and without a year filter.
                     then(resolve, reject) {
-                      return Promise.resolve({
-                        data: value === user.id ? Object.values(rows) : [], error: null
-                      }).then(resolve, reject);
+                      const failure = sessionStorage.getItem('__mock_budget_cloud_discovery_failure') === '1';
+                      return Promise.resolve(failure
+                        ? { data: null, error: { message: 'discovery offline' } }
+                        : { data: value === user.id ? Object.values(rows) : [], error: null }
+                      ).then(resolve, reject);
                     }
                   };
                   return Promise.resolve({ data: Object.values(rows), error: null });
@@ -73,7 +75,10 @@ export async function mockSignedInBudget(page) {
                   const query = {
                     eq(field, value) { filters[field] = value; return query; },
                     select() {
-                      if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1') return Promise.resolve({ data: null, error: { message: 'offline' } });
+                      if (sessionStorage.getItem('__mock_budget_cloud_failure') === '1' ||
+                          sessionStorage.getItem('__mock_budget_cloud_update_failure') === '1') {
+                        return Promise.resolve({ data: null, error: { message: 'offline' } });
+                      }
                       const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
                       const key = String(filters.year), row = rows[key];
                       if (filters.user_id !== user.id || !row || row.updated_at !== filters.updated_at) return Promise.resolve({ data: [], error: null });
