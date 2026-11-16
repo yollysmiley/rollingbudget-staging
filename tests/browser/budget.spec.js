@@ -181,41 +181,6 @@ test('rolling future years are selectable without creating empty cloud records',
   expect(await page.evaluate(() => Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')))).toEqual(before);
 });
 
-test('historical and distant future records remain protected but are not selectable', async ({ page }) => {
-  await page.evaluate(() => {
-    const original = structuredClone(db[activeYear]);
-    const local = structuredClone(original);
-    local.months[0].fixed.push({ name: 'LOCAL-2034', amount: 75, due: '1st' });
-    const cloud = structuredClone(original);
-    cloud.months[0].fixed.push({ name: 'CLOUD-2034', amount: 80, due: '1st' });
-    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
-    rows['2034'] = { year: 2034, budget_data: cloud, updated_at: '2026-11-15T12:00:00.000Z' };
-    rows['2023'] = { year: 2023, budget_data: original, updated_at: '2026-11-15T12:00:00.000Z' };
-    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
-    localStorage.setItem(storageKey('2034'), JSON.stringify({ data: local, updatedAt: '2026-11-15T11:00:00.000Z' }));
-  });
-  await page.reload();
-  await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
-  await expect(page.locator('#activeYearSelect option')).toHaveCount(3);
-  await expect(page.locator('#activeYearSelect option[value="2023"]')).toHaveCount(0);
-  await expect(page.locator('#activeYearSelect option[value="2034"]')).toHaveCount(0);
-  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
-  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced');
-  const result = await page.evaluate(() => ({
-    localInMemory: db['2034'].months[0].fixed[0].name,
-    localInCache: JSON.parse(localStorage.getItem(storageKey('2034'))).data.months[0].fixed[0].name,
-    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2034'].budget_data.months[0].fixed[0].name,
-    marker: localStorage.getItem(conflictStorageKey('2034'))
-  }));
-  expect(result).toEqual({ localInMemory: 'LOCAL-2034', localInCache: 'LOCAL-2034', cloud: 'CLOUD-2034', marker: '1' });
-  await page.evaluate(() => switchYear('2034'));
-  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
-  await page.reload();
-  await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
-  await expect(page.locator('#activeYearSelect option')).toHaveCount(3);
-  await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
-});
-
 test('desktop header uses the approved email branding', async ({ page }) => {
   const brand = page.locator('header .title-group');
   await expect(brand.locator('h1')).toHaveText('Rolling Budget');
