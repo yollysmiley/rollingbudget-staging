@@ -53,3 +53,22 @@ export function copyPreviousYearPlan(source, target) {
   });
   return result;
 }
+
+export function projectedJanuaryOpening(previousYear, accounts, computeBudget) {
+  assertYear(previousYear, 'Previous year');
+  if (!Array.isArray(accounts) || typeof computeBudget !== 'function') {
+    throw new TypeError('Accounts and budget calculator required');
+  }
+  const months = computeBudget(previousYear, accounts);
+  const december = months?.[11]?.endingRollover;
+  if (typeof december !== 'number' || !Number.isFinite(december)) {
+    throw new Error('December rollover could not be calculated');
+  }
+  return december;
+}
+
+export function canApplyJanuaryOpening(targetYear) {
+  assertYear(targetYear, 'Target year');
+  // A nonzero opening balance represents an existing manual choice.
+  return Number(targetYear.months[0].recordedLeftover) === 0;
+}
