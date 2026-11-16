@@ -154,3 +154,27 @@ test('successful cloud insert with deferred recurring backfill reports partial c
   assert.match(status.textContent, /Budget saved to cloud.*Recurring entries are still pending/);
   assert.equal(status.hidden, false);
 });
+
+
+test('account switch during queued save never marks the newly signed-in owner', async () => {
+  const { context, writes, store } = harness();
+  const saving = vm.runInContext('saveDB()', context);
+  // Let the queued operation start before switching accounts.
+  await flush();
+  assert.equal(writes.length, 1);
+  context.currentUser = { id: 'other-owner' };
+  writes[0].resolve({ error: { message: 'simulated rejected write' } });
+  assert.equal(await saving, 'local-saved');
+  assert.equal(store.get('owner_budget_2026_cloud_conflict'), '1');
+  assert.equal(store.get('other-owner_budget_2026_cloud_conflict'), undefined);
+});
+
+test('account switch before queued write prevents a cross-account write', async () => {
+  const { context, writes, store } = harness();
+  const saving = vm.runInContext('saveDB()', context);
+  context.currentUser = { id: 'other-owner' };
+  assert.equal(await saving, 'local-saved');
+  assert.equal(writes.length, 0);
+  assert.equal(store.get('owner_budget_2026_cloud_conflict'), '1');
+  assert.equal(store.get('other-owner_budget_2026_cloud_conflict'), undefined);
+});
