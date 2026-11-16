@@ -18,7 +18,9 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
   assert.ok(html.includes('function storageKey(year)'));
   assert.ok(html.includes('currentUser?.id || "guest"'));
   assert.ok(!html.includes('localStorage.removeItem(storageKey('));
-  assert.ok(html.includes('localStorage.removeItem(conflictStorageKey(year))'));
+  assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year, owner))"));
+  assert.ok(html.includes("localStorage.setItem(conflictStorageKey(year, owner), '1')"));
+  assert.ok(html.includes("key !== owner + ':' + year"));
   assert.ok(html.includes('localStorage.getItem(storageKey(yr))'));
   assert.ok(html.includes('availableBudgetYears(new Date().getFullYear()'));
   assert.ok(!html.includes('for (const yr of ["2026", "2027"])'));
