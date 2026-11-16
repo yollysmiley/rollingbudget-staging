@@ -952,8 +952,8 @@ test('desktop distinguishes a cloud-saved future year from deferred recurring ba
     .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
   expect(await page.evaluate(() => localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
   await page.reload();
-  expect(await page.evaluate(y => db[y].months.flatMap(month => month.fixed)
-    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+  await expect.poll(() => page.evaluate(y => db[y]?.months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length ?? 0, next)).toBe(12);
 });
 
 test('desktop due-day selectors save integer days across all expense categories', async ({ page }) => {
