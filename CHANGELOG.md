@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Phase A2 step 3: opt-in December-to-January projected opening balance with confirmation, nonzero manual opening protection, and desktop/mobile and unit regression tests. No schema changes.
+
 - Phase A2 steps 1–2 (staging): add a pure year-plan copy module and distinct desktop/mobile **Copy Previous Year’s Plan** actions, requiring confirmation and protecting existing entries, recurring occurrences, historical debt balances, and account assignments. Add unit and responsive browser regression coverage. No schema changes.
 
 - Phase A1 (staging): automatically expose the current year plus two future years, discover all older saved and owner-scoped unsynced years, preserve diverged local budgets instead of choosing by timestamps, remember the selected year per user/session, and move distinct desktop/mobile year selectors outside Settings. Remove manual New Year controls, apply global recurring rules after a virtual year's first successful cloud save, and update impacted unit/browser regression tests. No database schema changes.
