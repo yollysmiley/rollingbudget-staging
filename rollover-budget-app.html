@@ -684,11 +684,13 @@
     <label for="activeYearSelect">Budget year</label>
     <select id="activeYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
     <button type="button" id="desktopCopyPreviousYear" class="copy-previous-year-button" onclick="copyPreviousYearPlan()" hidden>Copy Previous Year’s Plan</button>
+    <button type="button" id="desktopProjectJanuary" class="copy-previous-year-button" onclick="applyProjectedJanuaryOpening()" hidden>Use December Rollover for January</button>
   </div>
   <div class="budget-year-picker budget-year-picker-mobile">
     <label for="mobileActiveYearSelect">Budget year</label>
     <select id="mobileActiveYearSelect" aria-label="Budget year" onchange="switchYear(this.value)"></select>
     <button type="button" id="mobileCopyPreviousYear" class="copy-previous-year-button" onclick="copyPreviousYearPlan()" hidden>Copy Previous Year’s Plan</button>
+    <button type="button" id="mobileProjectJanuary" class="copy-previous-year-button" onclick="applyProjectedJanuaryOpening()" hidden>Use December Rollover for January</button>
   </div>
 </section>
 
@@ -1629,6 +1631,55 @@ async function saveDB({ backfillNewYear = true } = {}) {
     return 'local-saved';
   }
 }
+let januaryProjectionInProgress = false;
+async function applyProjectedJanuaryOpening() {
+  if (januaryProjectionInProgress || !currentUser) return;
+  const year = activeYear, previous = String(Number(year) - 1), owner = currentUser.id;
+  if (!db[previous] || !db[year] || !accountBudgetModule ||
+      cloudBudgetConflicts.has(owner + ':' + year) ||
+      localStorage.getItem(conflictStorageKey(year)) === '1') return;
+  const { projectedJanuaryOpening, canApplyJanuaryOpening } = await import('./scripts/year-plan.mjs');
+  if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
+  const projection = projectedJanuaryOpening(db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
+  if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
+      ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
+  if (activeYear !== year || currentUser?.id !== owner ||
+      cloudBudgetConflicts.has(owner + ':' + year) ||
+      localStorage.getItem(conflictStorageKey(year)) === '1' ||
+      !canApplyJanuaryOpening(db[year])) return;
+  januaryProjectionInProgress = true;
+  try {
+    db[year].months[0].recordedLeftover = projectedJanuaryOpening(
+      db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
+    const status = await saveDB();
+    if (activeYear === year && currentUser?.id === owner) {
+      render();
+      if (status !== 'cloud-saved') {
+        showCloudSaveStatus('January projection saved locally. Cloud synchronization is pending.');
+      }
+    }
+  } finally {
+    januaryProjectionInProgress = false;
+    if (currentUser?.id === owner) syncJanuaryProjectionControls();
+  }
+}
+function syncJanuaryProjectionControls() {
+  const year = activeYear, previous = String(Number(year) - 1);
+  const source = db[previous];
+  const eligible = Boolean(currentUser && accountBudgetModule && source && db[year] &&
+    !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
+    localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    Number(db[year].months?.[0]?.recordedLeftover) === 0 &&
+    source.months?.some(month =>
+      ['income','fixed','variable','creditCards','loans'].some(type =>
+        month[type]?.length > 0) || Number(month.recordedLeftover) !== 0));
+  for (const id of ['desktopProjectJanuary', 'mobileProjectJanuary']) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.hidden = !eligible;
+    button.disabled = januaryProjectionInProgress;
+  }
+}
 let yearPlanCopyInProgress = false;
 async function copyPreviousYearPlan() {
   if (yearPlanCopyInProgress || !currentUser) return;
@@ -1789,6 +1840,7 @@ function render() {
   document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
   syncCopyPreviousYearControls();
+  syncJanuaryProjectionControls();
   const mobileBase = Math.max(c.totalAvailable, c.totalOutflow, 1);
   const committed = Math.min(100, (c.totalOutflow / Math.max(c.totalAvailable, 1)) * 100);
   document.getElementById("mobileOverview").innerHTML = `
