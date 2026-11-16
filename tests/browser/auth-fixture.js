@@ -20,7 +20,7 @@ export async function mockSignedInBudget(page) {
               select() { return chain; },
               eq(field, value) {
                 if (table === 'budget_ui_years') {
-                  // Seed only from the current isolated test account's in-memory budget.
+                  // Cloud rows exist only after an explicit insert/update in this isolated test.
                   const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
                   if (field === 'user_id') return {
                     eq(yearField, year) {
@@ -28,10 +28,6 @@ export async function mockSignedInBudget(page) {
                         return Promise.resolve({ data: [], error: null });
                       }
                       const key = String(year);
-                      if (!rows[key] && typeof db !== 'undefined' && db[key]) {
-                        rows[key] = { year: Number(year), budget_data: structuredClone(db[key]), updated_at: '2026-01-01T00:00:00.000Z' };
-                        sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
-                      }
                       return Promise.resolve({ data: rows[key] ? [rows[key]] : [], error: null });
                     },
                     // Supabase queries are thenable both with and without a year filter.

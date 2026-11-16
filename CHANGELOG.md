@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Phase A2 step 4 (staging): preserve generated recurring entries when copying manual plans into future years, avoid exact scheduled duplicates, serialize year-planning actions, roll back unsaved browser-storage failures, and backfill global rules when a local-only year is first inserted through cloud reconciliation. Correct the isolated Supabase browser fixture to avoid silently seeding cloud rows; extend unit and desktop/mobile tests for first-save, recovery, idempotency and failure paths. No schema or production changes.
+
 - Phase A2 step 3: opt-in December-to-January projected opening balance with confirmation, nonzero manual opening protection, and desktop/mobile and unit regression tests. No schema changes.
 
 - Phase A2 steps 1–2 (staging): add a pure year-plan copy module and distinct desktop/mobile **Copy Previous Year’s Plan** actions, requiring confirmation and protecting existing entries, recurring occurrences, historical debt balances, and account assignments. Add unit and responsive browser regression coverage. No schema changes.

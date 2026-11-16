@@ -670,3 +670,27 @@ test('mobile planning actions cannot overlap while a first-year save is pending'
   await page.locator('#mobileProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(130);
 });
+
+test('mobile January projection restores its prior value when browser storage fails', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => { db[y].months[11].income.push({ name: 'December pay', amount: 180 }); render(); }, year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await page.evaluate(() => {
+    window.__storageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === storageKey(activeYear)) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return window.__storageSetItem.call(this, key, value);
+    };
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#mobileProjectJanuary').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('was not saved');
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(0);
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  expect(await page.evaluate(y => JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null, next)).toBe(null);
+  await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await page.locator('#mobileProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
+  await page.reload();
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
+});

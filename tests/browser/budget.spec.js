@@ -780,3 +780,84 @@ test('failed browser storage rolls back a plan copy without claiming it was save
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Rent plan');
 });
+
+test('January first save backfills rules before a manual plan copy without duplicates', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => {
+    db[y].months[0].fixed.push({ name: 'Manual insurance', amount: 125, due: '7th' });
+    db[y].months[11].income.push({ name: 'December bonus', amount: 1000 });
+    render();
+  }, year);
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Auto subscription');
+  await form.locator('[data-rec-field="amount"]').fill('15');
+  await form.locator('[data-rec-field="startDate"]').fill(year + '-01-15');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
+    entry => entry.name === 'Auto subscription'), year)).toBe(true);
+  await page.locator('#desktopBudgetButton').click();
+  await page.locator('#activeYearSelect').selectOption(next);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Auto subscription').length, next)).toBe(12);
+  const opening = await page.evaluate(y => db[y].months[0].recordedLeftover, next);
+  expect(opening).not.toBe(0);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
+    entry => entry.name === 'Manual insurance'), next)).toBe(true);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  await page.evaluate(y => backfillSavedRecurringYears(currentUser.id, y + '-01-01', y + '-12-31'), next);
+  const state = await page.evaluate(y => ({
+    opening: db[y].months[0].recordedLeftover,
+    recurring: db[y].months.flatMap(m => m.fixed).filter(e => e.name === 'Auto subscription').length,
+    manual: db[y].months.flatMap(m => m.fixed).filter(e => e.name === 'Manual insurance').length
+  }), next);
+  expect(state).toEqual({ opening, recurring: 12, manual: 1 });
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].fixed.map(e => e.name).sort(), next))
+    .toEqual(['Auto subscription', 'Manual insurance']);
+});
+
+test('failed first cloud save reconciles local plan and backfills recurring rules exactly once', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => { db[y].months[0].variable.push({ name: 'Manual groceries', amount: 85 }); render(); }, year);
+  await page.locator('#desktopRecurringButton').click();
+  const form = page.locator('[data-recurring-form="desktop"]');
+  await form.locator('[data-rec-field="name"]').fill('Auto rent');
+  await form.locator('[data-rec-field="amount"]').fill('500');
+  await form.locator('[data-rec-field="startDate"]').fill(year + '-01-01');
+  await page.getByRole('button', { name: 'Add rule' }).first().click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(e => e.name === 'Auto rent'), year)).toBe(true);
+  await page.locator('#desktopBudgetButton').click();
+  await page.locator('#activeYearSelect').selectOption(next);
+  await page.evaluate(() => sessionStorage.setItem('__mock_budget_cloud_failure', '1'));
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Cloud synchronization is pending');
+  expect(await page.evaluate(y => ({
+    local: db[y].months[0].variable.map(e => e.name),
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null,
+    conflict: localStorage.getItem(conflictStorageKey(y))
+  }), next)).toEqual({ local: ['Manual groceries'], cloud: null, conflict: '1' });
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
+  await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
+  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(m => m.fixed)
+    .filter(e => e.name === 'Auto rent').length, next)).toBe(12);
+  await page.evaluate(y => backfillSavedRecurringYears(currentUser.id, y + '-01-01', y + '-12-31'), next);
+  expect(await page.evaluate(y => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[y];
+    return {
+      cloudRecurring: row.budget_data.months.flatMap(m => m.fixed).filter(e => e.name === 'Auto rent').length,
+      localRecurring: db[y].months.flatMap(m => m.fixed).filter(e => e.name === 'Auto rent').length,
+      manual: db[y].months[0].variable.map(e => e.name),
+      conflict: localStorage.getItem(conflictStorageKey(y))
+    };
+  }, next)).toEqual({ cloudRecurring: 12, localRecurring: 12, manual: ['Manual groceries'], conflict: null });
+});
