@@ -948,8 +948,8 @@ test('desktop distinguishes a cloud-saved future year from deferred recurring ba
   await expect(page.locator('#cloudSaveStatus')).toContainText('Recurring entries are still pending');
   await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_update_failure'));
   await page.reload();
-  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
-    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+  await expect.poll(() => page.evaluate(y => db[y]?.months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length ?? 0, next)).toBe(12);
   expect(await page.evaluate(() => localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
   await page.reload();
   await expect.poll(() => page.evaluate(y => db[y]?.months.flatMap(month => month.fixed)
