@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../dist/rollover-budget-app.html', import.meta.url), 'utf8');
+const revisions = readFileSync(new URL('../dist/scripts/budget-revision.mjs', import.meta.url), 'utf8');
 
 test('staging build uses the redesigned UI and isolated staging project', () => {
   assert.ok(html.includes('STAGING ONLY'));
@@ -28,8 +29,10 @@ test('new UI preserves browser data and uses account-scoped local storage', () =
 
 test('new UI loads and saves its own cloud records without touching Release 2 data', () => {
   assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'));
-  assert.ok(html.includes('from("budget_ui_years").insert('));
-  assert.ok(html.includes('.eq("updated_at", version).select("year")'));
+  assert.ok(html.includes("import('./scripts/budget-revision.mjs')"));
+  assert.ok(html.includes('writeBudgetRevision('));
+  assert.match(revisions, /\.insert\(\{/);
+  assert.match(revisions, /\.eq\('updated_at', knownRevision\)\.select\('year'\)/);
   assert.ok(!html.includes('from("budget_ui_years").upsert('));
   assert.ok(!html.includes('from("budget_data")'));
 });
@@ -58,7 +61,7 @@ test('local and cloud budgets are compared semantically and divergent local reco
   assert.ok(html.includes('sameBudgetDocument(local.data, row.budget_data)'));
   assert.ok(html.includes('markCloudConflict(key, year)'));
   assert.doesNotMatch(html, /function chooseNewestBudget\(/);
-  assert.ok(html.includes('updated_at: updatedAt'));
+  assert.ok(revisions.includes('updated_at: updatedAt'));
   assert.ok(html.includes('select("year,budget_data,updated_at")'));
   assert.ok(html.includes('Never replace an unreadable local snapshot'));
 });
