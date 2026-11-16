@@ -45,7 +45,7 @@ test('refuses to overwrite any existing target entry', () => {
   const target = blank();
   target.months[11].income.push({ name: 'Existing', amount: 5 });
   assert.equal(isEmptyYearPlan(target), false);
-  assert.throws(() => copyPreviousYearPlan(blank(), target), /already contains entries/);
+  assert.throws(() => copyPreviousYearPlan(blank(), target), /already contains manual entries/);
 });
 
 test('rejects malformed source and target documents', () => {
@@ -74,4 +74,45 @@ test('rejects non-finite December projections and preserves manual opening', () 
   assert.throws(() => projectedJanuaryOpening(year, [], () => Array(12).fill({ endingRollover: NaN })), /could not be calculated/);
   year.months[0].recordedLeftover = -25;
   assert.equal(canApplyJanuaryOpening(year), false);
+});
+
+test('copies into a generated-only year without changing or duplicating scheduled entries', () => {
+  const source = blank(), target = blank();
+  source.months[0].fixed.push({ name: 'Rent', due: '1st', amount: 900, accountId: 'checking' });
+  source.months[0].fixed.push({ name: 'Utilities', due: '5th', amount: 70 });
+  target.months[0].fixed.push({
+    name: 'Rent', due: '1st', amount: 900, accountId: 'checking',
+    recurringRuleId: 'rent-rule', occurrenceId: 'rent-2027-01'
+  });
+  target.months[1].income.push({
+    name: 'Paycheck', amount: 2500, occurrenceId: 'pay-2027-02'
+  });
+  const before = structuredClone(target);
+  assert.equal(isEmptyYearPlan(target), true);
+  const copied = copyPreviousYearPlan(source, target);
+  assert.deepEqual(target, before);
+  assert.deepEqual(copied.months[0].fixed.map(entry => entry.name), ['Rent', 'Utilities']);
+  assert.equal(copied.months[0].fixed[0].occurrenceId, 'rent-2027-01');
+  assert.deepEqual(copied.months[1].income, target.months[1].income);
+  assert.equal(isEmptyYearPlan(copied), false);
+  assert.throws(() => copyPreviousYearPlan(source, copied), /already contains manual entries/);
+});
+
+test('different manual amounts and accounts are not silently discarded as generated duplicates', () => {
+  const source = blank(), target = blank();
+  source.months[0].fixed.push({ name: 'Rent', due: '1st', amount: 950, accountId: 'checking' });
+  target.months[0].fixed.push({
+    name: 'Rent', due: '1st', amount: 900, accountId: 'checking', occurrenceId: 'rent-2027-01'
+  });
+  const copied = copyPreviousYearPlan(source, target);
+  assert.deepEqual(copied.months[0].fixed.map(entry => entry.amount), [900, 950]);
+});
+
+test('existing manual target entries block copying even alongside generated entries', () => {
+  const source = blank(), target = blank();
+  source.months[0].income.push({ name: 'Salary', amount: 100 });
+  target.months[0].fixed.push({ name: 'Scheduled', amount: 20, occurrenceId: 'occ' });
+  target.months[2].variable.push({ name: 'Custom budget', amount: 35 });
+  assert.equal(isEmptyYearPlan(target), false);
+  assert.throws(() => copyPreviousYearPlan(source, target), /already contains manual entries/);
 });

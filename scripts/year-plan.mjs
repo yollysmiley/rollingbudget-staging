@@ -32,22 +32,48 @@ function plannedEntry(entry, type) {
   return result;
 }
 
+function isGeneratedEntry(entry) {
+  return Boolean(entry?.occurrenceId || entry?.recurringRuleId || entry?.scheduledMonth);
+}
+
+// A year with generated recurring occurrences but no manual entries is still
+// eligible for a one-time plan copy. Generated entries are never replaced.
 export function isEmptyYearPlan(year) {
   assertYear(year, 'Target year');
-  return year.months.every(month => ENTRY_TYPES.every(type => month[type].length === 0));
+  return year.months.every(month => ENTRY_TYPES.every(type =>
+    month[type].every(isGeneratedEntry)));
+}
+
+function sameGeneratedPlan(entry, generated, type) {
+  if (!isGeneratedEntry(generated)) return false;
+  // Only suppress an exact matching scheduled entry. Different amounts or
+  // account assignments may be intentional separate manual transactions.
+  return ENTRY_FIELDS[type].every(field => {
+    const left = entry[field], right = generated[field];
+    if (['amount', 'payment', 'apr'].includes(field)) return Number(left ?? 0) === Number(right ?? 0);
+    if (field === 'name' || field === 'due') {
+      return String(left ?? '').trim().toLocaleLowerCase() ===
+        String(right ?? '').trim().toLocaleLowerCase();
+    }
+    return (left ?? null) === (right ?? null);
+  });
 }
 
 export function copyPreviousYearPlan(source, target) {
   assertYear(source, 'Source year');
   assertYear(target, 'Target year');
-  if (!isEmptyYearPlan(target)) throw new Error('Target year already contains entries');
-  // Keep target opening balances, auto-cascade settings and unrelated metadata.
+  if (!isEmptyYearPlan(target)) throw new Error('Target year already contains manual entries');
+  // Keep target opening balances, generated occurrences, auto-cascade and metadata.
   const result = structuredClone(target);
   result.months = target.months.map((month, index) => {
     const from = source.months[index];
     const next = structuredClone(month);
     for (const type of ENTRY_TYPES) {
-      next[type] = from[type].map(entry => plannedEntry(entry, type)).filter(Boolean);
+      for (const entry of from[type].map(item => plannedEntry(item, type)).filter(Boolean)) {
+        if (!next[type].some(existing => sameGeneratedPlan(entry, existing, type))) {
+          next[type].push(entry);
+        }
+      }
     }
     return next;
   });
