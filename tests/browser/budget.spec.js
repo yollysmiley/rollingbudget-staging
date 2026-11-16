@@ -195,9 +195,10 @@ test('historical and distant future records remain protected but are not selecta
     localStorage.setItem(storageKey('2034'), JSON.stringify({ data: local, updatedAt: '2026-11-15T11:00:00.000Z' }));
   });
   await page.reload();
+  await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
+  await expect(page.locator('#activeYearSelect option')).toHaveCount(3);
   await expect(page.locator('#activeYearSelect option[value="2023"]')).toHaveCount(0);
   await expect(page.locator('#activeYearSelect option[value="2034"]')).toHaveCount(0);
-  expect(await page.locator('#activeYearSelect option').count()).toBe(3);
   await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
   await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced');
   const result = await page.evaluate(() => ({
@@ -210,6 +211,8 @@ test('historical and distant future records remain protected but are not selecta
   await page.evaluate(() => switchYear('2034'));
   await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
   await page.reload();
+  await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
+  await expect(page.locator('#activeYearSelect option')).toHaveCount(3);
   await expect(page.locator('#activeYearSelect')).toHaveValue(String(new Date().getFullYear()));
 });
 
