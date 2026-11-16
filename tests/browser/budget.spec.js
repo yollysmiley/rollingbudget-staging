@@ -737,11 +737,17 @@ test('desktop January rollover is opt-in and preserves manual opening balances',
   },year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
-  page.once('dialog',dialog => dialog.dismiss());
+  let confirmations=0;
+  page.on('dialog',async dialog => {
+    confirmations += 1;
+    if(confirmations === 1) await dialog.dismiss();
+    else await dialog.accept();
+  });
   await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => confirmations).toBe(1);
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(0);
-  page.once('dialog',dialog => dialog.accept());
   await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => confirmations).toBe(2);
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
   await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
   await page.reload();
