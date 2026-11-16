@@ -46,7 +46,7 @@ test('income and expenses recalculate the rollover', async ({ page }) => {
   await expect(page.locator('#incTotalBadge')).toHaveText('$3,000.00');
 
   await page.locator('#newFixName').fill('Rent');
-  await page.locator('#newFixDue').fill('1st');
+  await page.locator('#newFixDue').selectOption('1');
   await page.locator('#newFixAmt').fill('1200');
   await page.locator('button[onclick="addExpense(\'fixed\')"]').click();
   await expect(page.locator('#fixTotalBadge')).toHaveText('$1,200.00');
@@ -78,7 +78,7 @@ test('authenticated storage is owner-scoped and existing browser keys are preser
 test('user-entered markup is rendered as text, not executable HTML', async ({ page }) => {
   const payload = '<img src=x onerror=alert(1)>';
   await page.locator('#newVarName').fill(payload);
-  await page.locator('#newVarDue').fill('4th');
+  await page.locator('#newVarDue').selectOption('4');
   await page.locator('#newVarAmt').fill('25');
   await page.evaluate(() => addExpense('variable'));
   await expect(page.locator('#variableBody input:not([type])').first()).toHaveValue(payload);
@@ -860,4 +860,68 @@ test('failed first cloud save reconciles local plan and backfills recurring rule
       conflict: localStorage.getItem(conflictStorageKey(y))
     };
   }, next)).toEqual({ cloudRecurring: 12, localRecurring: 12, manual: ['Manual groceries'], conflict: null });
+});
+
+test('desktop due-day selectors save integer days across all expense categories', async ({ page }) => {
+  await page.locator('#newFixName').fill('Rent');
+  await page.locator('#newFixDue').selectOption('31');
+  await page.locator('#newFixAmt').fill('500');
+  await page.locator('button[onclick="addExpense(\'fixed\')"]').click();
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('31');
+
+  await page.locator('#newVarName').fill('Groceries');
+  await page.locator('#newVarDue').selectOption('15');
+  await page.locator('#newVarAmt').fill('30');
+  await page.locator('button[onclick="addExpense(\'variable\')"]').click();
+
+  await page.locator('#newLoanName').fill('Car');
+  await page.locator('#newLoanDue').selectOption('22');
+  await page.locator('#newLoanBal').fill('5000');
+  await page.locator('#newLoanPay').fill('100');
+  await page.locator('button[onclick="addLoan()"]').click();
+
+  await page.locator('#newCcName').fill('Card');
+  await page.locator('#newCcDue').selectOption('9');
+  await page.locator('#newCcStmt').fill('500');
+  await page.locator('#newCcApr').fill('12');
+  await page.locator('#newCcPay').fill('50');
+  await page.locator('button[onclick="addCC()"]').click();
+
+  await page.locator('#fixedBody select[aria-label="Due day for fixed entry"]').selectOption('1');
+  const year = String(new Date().getFullYear());
+  const before = await page.evaluate(y => {
+    const month = db[y].months[selectedIdx];
+    return [month.fixed[0], month.variable[0], month.loans[0], month.creditCards[0]]
+      .map(entry => ({ dueDay: entry.dueDay, hasLegacyDue: Object.hasOwn(entry, 'due') }));
+  }, year);
+  expect(before).toEqual([1, 15, 22, 9].map(dueDay => ({ dueDay, hasLegacyDue: false })));
+  await page.reload();
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
+  expect(await page.evaluate(y => db[y].months[selectedIdx].loans[0].dueDay, year)).toBe(22);
+});
+
+test('desktop save migrates known legacy ordinals without altering expense amounts', async ({ page }) => {
+  const year = String(new Date().getFullYear());
+  await page.evaluate(y => {
+    db[y].months[selectedIdx].fixed.push({ name: 'Legacy Rent', due: '1st', amount: 900 });
+    db[y].months[selectedIdx].loans.push({ name: 'Legacy Loan', due: '22nd', payment: 200, balance: 500 });
+    render();
+  }, year);
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
+  await page.evaluate(() => saveDB());
+  const saved = await page.evaluate(y => {
+    const month = db[y].months[selectedIdx];
+    const cloud = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y];
+    return {
+      local: [month.fixed[0], month.loans[0]],
+      cloud: cloud?.budget_data.months[selectedIdx].fixed[0]
+    };
+  }, year);
+  expect(saved.local[0]).toMatchObject({ dueDay: 1, amount: 900 });
+  expect(saved.local[1]).toMatchObject({ dueDay: 22, payment: 200, balance: 500 });
+  expect(saved.cloud).toMatchObject({ dueDay: 1, amount: 900 });
+  expect(saved.local[0].due).toBeUndefined();
+  expect(saved.local[1].due).toBeUndefined();
+  await page.reload();
+  await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
 });

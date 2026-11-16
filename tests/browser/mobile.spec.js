@@ -694,3 +694,24 @@ test('mobile January projection restores its prior value when browser storage fa
   await page.reload();
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
 });
+
+test('mobile plan day selectors use integers and persist after reload', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page.locator('#newVarDue')).toBeVisible();
+  await page.locator('#newVarName').fill('Mobile utility');
+  await page.locator('#newVarDue').selectOption('31');
+  await page.locator('#newVarAmt').fill('75');
+  await page.locator('button[onclick="addExpense(\'variable\')"]').click();
+  await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('31');
+  await page.locator('#variableBody select[aria-label="Due day for variable entry"]').selectOption('22');
+  expect(await page.evaluate(() => {
+    const entry = db[activeYear].months[selectedIdx].variable[0];
+    return { dueDay: entry.dueDay, hasLegacyDue: Object.hasOwn(entry, 'due') };
+  })).toEqual({ dueDay: 22, hasLegacyDue: false });
+  await page.reload();
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('22');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});

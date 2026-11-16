@@ -82,3 +82,17 @@ test('zero-valued legacy columns do not require unseeded legacy accounts', () =>
   assert.equal(computeAccountBudget(year, [])[0].newIncome, 125);
   assert.equal(incomeAmount({ amount: 125, cpm: 0, usaa: 0 }, []), 125);
 });
+
+test('pre-15 buffer uses integer dueDay and remains compatible with legacy ordinals', () => {
+  const source = { autoCascade: true, months: [month([], [
+    { name: 'Early', amount: 50, dueDay: 1 },
+    { name: 'Legacy', amount: 25, due: '15th' },
+    { name: 'Later', amount: 10, dueDay: 31 },
+    { name: 'Unknown', amount: 15, due: 'end of month' }
+  ])] };
+  const original = structuredClone(source);
+  const result = computeAccountBudget(source, []);
+  assert.equal(result[0].pre15Outflow, 75);
+  assert.equal(result[0].fixedTotal, 100);
+  assert.deepEqual(source, original);
+});
