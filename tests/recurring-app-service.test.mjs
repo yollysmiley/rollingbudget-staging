@@ -25,6 +25,7 @@ test('loads only authenticated owner rules and holds historical imports for revi
   } };
   const loaded = await loadRecurringPreviewRules(client, 'user-a');
   assert.equal(loaded.rules.length, 1);
+  assert.equal(loaded.rules[0].dueDay, '1st');
   assert.equal(loaded.held, 1);
   const source = budget();
   const result = previewLoadedRecurringYear(source, '2027', loaded);
@@ -84,6 +85,8 @@ test('shared recurring rule writes are owner-scoped and never modify historical 
   assert.equal(created.id, 'new-rent');
   assert.equal(calls[0][1].user_id, 'owner-a');
   assert.equal(calls[0][1].source_year, null);
+  assert.equal(calls[0][1].due_day, 1);
+  assert.equal(calls[0][1].due, undefined);
   await setRecurringRuleActive(client, 'owner-a', 'new-rent', false, '2027-03-01');
   await removeRecurringRule(client, 'owner-a', 'new-rent');
   assert.equal(calls[1][0], 'update');
@@ -466,4 +469,21 @@ test('cloud backfill CAS uses authoritative revision after equivalent timestamp 
   assert.equal(written, true);
   await assert.rejects(() => commitRecurringYear(client, 'owner-a', 2027, builder,
     { expectedUpdatedAt: '2026-11-15T12:00:00.123455Z' }), /changed since recurring/);
+});
+
+test('new rules persist a numeric due day derived from the selected calendar start date', async () => {
+  let written;
+  const client = { from(table) {
+    assert.equal(table, 'budget_recurring_rules');
+    return { async insert(row) { written = row; return { error: null }; } };
+  } };
+  const rule = await createRecurringRule(client, 'new-owner', {
+    id: 'rule-new', name: 'New bill', category: 'fixed', amount: 75,
+    startDate: '2028-01-31', endDate: '2028-03-31', frequency: 'monthly'
+  });
+  assert.equal(rule.dueDay, 31);
+  assert.equal(written.due_day, 31);
+  assert.equal(written.due, undefined);
+  assert.equal(written.versions[0].dueDay, 31);
+  assert.equal(written.versions[0].due, undefined);
 });

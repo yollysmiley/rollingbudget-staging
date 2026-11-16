@@ -5,7 +5,7 @@ import { normalizeRecurringRule } from './recurring-foundation.mjs';
 export async function loadRecurringPreviewRules(client, userId) {
   if (!client || !userId) throw new Error('Authenticated recurring preview requires a user');
   const { data, error } = await client.from('budget_recurring_rules')
-    .select('id,name,category,amount,due,account_id,frequency,start_date,end_date,active,versions,source_year')
+    .select('id,name,category,amount,due,due_day,account_id,frequency,start_date,end_date,active,versions,source_year')
     .eq('user_id', userId);
   if (error) throw error;
   const rules = [];
@@ -17,7 +17,7 @@ export async function loadRecurringPreviewRules(client, userId) {
     }
     const rule = {
       id: row.id, name: row.name, category: row.category, amount: Number(row.amount),
-      due: row.due, accountId: row.account_id, frequency: row.frequency,
+      dueDay: row.due_day ?? row.due, accountId: row.account_id, frequency: row.frequency,
       startDate: row.start_date, endDate: row.end_date, active: row.active,
       versions: row.versions
     };
@@ -56,7 +56,7 @@ export async function createRecurringRule(client, userId, input) {
   const rule = normalizeRecurringRule(input);
   const row = {
     user_id: userId, id: rule.id, name: rule.name, category: rule.category,
-    amount: rule.amount, due: rule.due, account_id: rule.accountId,
+    amount: rule.amount, due_day: rule.dueDay, account_id: rule.accountId,
     frequency: rule.frequency, start_date: rule.startDate, end_date: rule.endDate,
     active: rule.active, versions: rule.versions, source_year: null, source_rule_id: null
   };
@@ -70,7 +70,7 @@ export async function editRecurringRule(client, userId, id, changes, effectiveFr
     throw new Error('Authenticated effective-dated rule edit required');
   }
   const { data: rows, error: readError } = await client.from('budget_recurring_rules')
-    .select('id,name,category,amount,due,account_id,frequency,start_date,end_date,active,versions')
+    .select('id,name,category,amount,due,due_day,account_id,frequency,start_date,end_date,active,versions')
     .eq('user_id', userId).eq('id', id);
   if (readError) throw readError;
   if (!Array.isArray(rows) || rows.length !== 1) throw new Error('Recurring rule not found');
@@ -88,7 +88,8 @@ export async function editRecurringRule(client, userId, id, changes, effectiveFr
   const next = { ...current, ...changes, effectiveFrom };
   normalizeRecurringRule({
     id, name: next.name, category: row.category, amount: next.amount,
-    due: next.due, accountId: next.accountId, frequency: next.frequency,
+    dueDay: next.dueDay ?? next.due ?? row.due_day ?? row.due,
+    accountId: next.accountId, frequency: next.frequency,
     startDate: effectiveFrom
   });
   const updated = [...versions.filter(version => version.effectiveFrom !== effectiveFrom), next]

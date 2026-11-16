@@ -18,6 +18,8 @@ test('cross-year preview preserves source budget and emits stable occurrences', 
   assert.equal(result.added, 12);
   assert.equal(source.months[0].fixed.length, 0);
   assert.equal(result.document.months[0].fixed[0].amount, 500);
+  assert.equal(result.document.months[0].fixed[0].dueDay, 1);
+  assert.equal(result.document.months[0].fixed[0].due, undefined);
   assert.equal(result.document.months[0].fixed[0].recurringRuleId, 'rent');
   assert.equal(result.document.months[0].fixed[0].occurrenceId, JSON.stringify(['rent', '2027-01-01']));
   assert.equal(previewRecurringYear(result.document, 2027, [rule()]).added, 0);

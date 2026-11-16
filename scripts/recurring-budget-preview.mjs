@@ -74,7 +74,7 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
         skipped.push(occurrence.occurrenceId);
         continue;
       }
-      const common = { name: occurrence.name, due: occurrence.due,
+      const common = { name: occurrence.name, dueDay: occurrence.dueDay,
         accountId: occurrence.accountId, recurringRuleId: rule.id,
         occurrenceId: occurrence.occurrenceId };
       const item = occurrence.category === 'loan'
