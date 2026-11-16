@@ -1581,20 +1581,13 @@ async function reconcileCloudBudget(useLocal) {
       assertUnchanged();
       if (useLocal) {
         const normalizedLocal = dueDayModule.migrateYearDueDays(local.data).year;
-        const nextTimestamp = new Date(Math.max(Date.now(), cloud ? Date.parse(cloud.updated_at) + 1 : 0)).toISOString();
-        if (cloud) {
-          const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
-            .update({ budget_data: normalizedLocal, updated_at: nextTimestamp })
-            .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
-          if (writeError) throw writeError;
-          if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
-        } else {
-          const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
-            user_id: owner, year: Number(year), budget_data: normalizedLocal, updated_at: nextTimestamp
-          });
-          if (insertError) throw insertError;
-          insertedNewYear = true;
-        }
+        const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');
+        const write = await writeBudgetRevision(supabaseClient, {
+          owner, year, document: normalizedLocal, knownRevision: cloud?.updated_at ?? null,
+          requestedAt: new Date().toISOString()
+        });
+        const nextTimestamp = write.updatedAt;
+        insertedNewYear = write.inserted;
         // A cloud commit may have succeeded, but never overwrite edits made while awaiting it.
         assertUnchanged();
         localStorage.setItem(budgetKey, JSON.stringify({ data: normalizedLocal, updatedAt: nextTimestamp }));
@@ -1707,25 +1700,14 @@ async function saveDB({ backfillNewYear = true } = {}) {
       if (cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year)) === '1') {
         throw new Error('Budget has unsynced changes; reconcile before saving');
       }
-      const version = cloudBudgetVersions.get(key);
-      const nextTimestamp = new Date(Math.max(Date.parse(updatedAt), version ? Date.parse(version) + 1 : 0)).toISOString();
-      if (version) {
-        const { data, error } = await client.from("budget_ui_years")
-          .update({ budget_data: snapshot, updated_at: nextTimestamp })
-          .eq("user_id", userId).eq("year", Number(year))
-          .eq("updated_at", version).select("year");
-        if (error) throw error;
-        if (!Array.isArray(data) || data.length !== 1) {
-          throw new Error("Budget changed on another device; reload before saving");
-        }
-      } else {
-        // Unique (user_id, year) prevents a concurrent first save from replacing a row.
-        const { error } = await client.from("budget_ui_years").insert({
-          user_id: userId, year: Number(year), budget_data: snapshot, updated_at: nextTimestamp
-        });
-        if (error) throw error;
-        insertedNewYear = true;
-      }
+      if (currentUser?.id !== userId) throw new Error('Account changed while saving budget');
+      const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');
+      const write = await writeBudgetRevision(client, {
+        owner: userId, year, document: snapshot,
+        knownRevision: cloudBudgetVersions.get(key) ?? null, requestedAt: updatedAt
+      });
+      const nextTimestamp = write.updatedAt;
+      insertedNewYear = write.inserted;
       cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) {
