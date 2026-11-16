@@ -606,7 +606,7 @@ test('mobile recurring form only shows start and optional end dates', async ({ p
 
 test('mobile copy action confirms and shares saved plan across viewport changes', async ({ page }) => {
   const year=String(new Date().getFullYear()),next=String(Number(year)+1);
-  await page.evaluate(y => db[y].months[0].variable.push({name:'Groceries plan',amount:250,due:'5th'}),year);
+  await page.evaluate(async y => { db[y].months[0].variable.push({name:'Groceries plan',amount:250,dueDay:5}); await saveDB(); },year);
   await page.locator('#mobileActiveYearSelect').selectOption(next);
   await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
   await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
@@ -622,10 +622,26 @@ test('mobile copy action confirms and shares saved plan across viewport changes'
 });
 
 
+
+test('mobile blocks both planning actions when the previous year is unsynced', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].income.push({ name: 'Protected income', amount: 250 });
+    await saveDB();
+  }, year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  await page.evaluate(y => { markCloudConflict(currentUser.id + ':' + y, y); render(); }, year);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeHidden();
+  await expect(page.locator('#mobileProjectJanuary')).toBeHidden();
+});
+
 test('mobile January rollover is opt-in and shares state with desktop', async ({ page }) => {
   const year=String(new Date().getFullYear()),next=String(Number(year)+1);
-  await page.evaluate(y => {
+  await page.evaluate(async y => {
     db[y].months[11].fixed.push({name:'December cost',amount:50});
+    await saveDB();
     render();
   },year);
   await page.locator('#mobileActiveYearSelect').selectOption(next);
@@ -642,9 +658,10 @@ test('mobile January rollover is opt-in and shares state with desktop', async ({
 
 test('mobile planning actions cannot overlap while a first-year save is pending', async ({ page }) => {
   const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
-  await page.evaluate(y => {
+  await page.evaluate(async y => {
     db[y].months[0].fixed.push({ name: 'Manual January', amount: 20 });
     db[y].months[11].income.push({ name: 'December pay', amount: 150 });
+    await saveDB();
     render();
   }, year);
   await page.locator('#mobileActiveYearSelect').selectOption(next);
@@ -673,7 +690,7 @@ test('mobile planning actions cannot overlap while a first-year save is pending'
 
 test('mobile January projection restores its prior value when browser storage fails', async ({ page }) => {
   const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
-  await page.evaluate(y => { db[y].months[11].income.push({ name: 'December pay', amount: 180 }); render(); }, year);
+  await page.evaluate(async y => { db[y].months[11].income.push({ name: 'December pay', amount: 180 }); await saveDB(); render(); }, year);
   await page.locator('#mobileActiveYearSelect').selectOption(next);
   await page.evaluate(() => {
     window.__storageSetItem = Storage.prototype.setItem;

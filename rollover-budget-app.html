@@ -1650,6 +1650,49 @@ async function saveDB({ backfillNewYear = true } = {}) {
     return 'local-saved';
   }
 }
+function yearPlanSourceAvailable(owner, year) {
+  const key = owner + ':' + year;
+  return Boolean(owner && supabaseClient && db[year] && cloudBudgetVersions.has(key) &&
+    !cloudBudgetConflicts.has(key) && localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    !cloudSaveQueues.has(key));
+}
+async function verifiedYearPlanSource(owner, year) {
+  if (!yearPlanSourceAvailable(owner, year) || currentUser?.id !== owner) {
+    throw new Error('Previous year must be cloud-saved and reconciled before planning');
+  }
+  const key = owner + ':' + year;
+  const snapshot = structuredClone(db[year]);
+  const revision = cloudBudgetVersions.get(key);
+  const { data: rows, error } = await supabaseClient.from('budget_ui_years')
+    .select('year,budget_data,updated_at').eq('user_id', owner).eq('year', Number(year));
+  if (error) throw new Error('Could not verify the previous year against cloud storage');
+  if (!yearPlanSourceAvailable(owner, year) || currentUser?.id !== owner ||
+      cloudBudgetVersions.get(key) !== revision) {
+    throw new Error('Previous year changed while planning; retry after synchronization');
+  }
+  const cloud = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
+  const raw = localStorage.getItem(storageKey(year));
+  const cached = parseLocalBudgetRecord(raw);
+  const { sameBudgetDocument } = await import('./scripts/year-discovery.mjs');
+  if (!sameBudgetDocument(snapshot, db[year])) {
+    throw new Error('Previous year changed while planning; retry');
+  }
+  try {
+    const service = recurringAppService || await import('./scripts/recurring-app-service.mjs');
+    service.requireRecurringCloudSnapshot({
+      owner, activeOwner: currentUser?.id, cloudRow: cloud, knownRevision: revision,
+      inMemoryBudget: db[year], cachedBudget: cached?.data,
+      hasLocalCache: raw !== null, conflicted: !yearPlanSourceAvailable(owner, year)
+    });
+  } catch (error) {
+    if (currentUser?.id === owner) {
+      try { markCloudConflict(key, year); }
+      catch (storageError) { console.warn('Could not retain previous-year conflict marker:', storageError); }
+    }
+    throw new Error('Previous year differs from its cloud version. Reconcile it before planning', { cause: error });
+  }
+  return snapshot;
+}
 // The two year-planning actions share a lock: neither may snapshot the same
 // target while the other is awaiting a cloud save or recurring backfill.
 let yearPlanActionBusy = false;
@@ -1674,7 +1717,7 @@ async function persistYearPlanChange(owner, year, updated, localOnlyMessage) {
 async function applyProjectedJanuaryOpening() {
   if (yearPlanActionBusy || !currentUser) return;
   const year = activeYear, previous = String(Number(year) - 1), owner = currentUser.id;
-  if (!db[previous] || !db[year] || !accountBudgetModule ||
+  if (!yearPlanSourceAvailable(owner, previous) || !db[year] || !accountBudgetModule ||
       cloudBudgetConflicts.has(owner + ':' + year) ||
       localStorage.getItem(conflictStorageKey(year)) === '1') return;
   yearPlanActionBusy = true;
@@ -1683,21 +1726,26 @@ async function applyProjectedJanuaryOpening() {
   try {
     const { projectedJanuaryOpening, canApplyJanuaryOpening } = await import('./scripts/year-plan.mjs');
     if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
-    const projection = projectedJanuaryOpening(db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
+    const source = await verifiedYearPlanSource(owner, previous);
+    const projection = projectedJanuaryOpening(source, budgetAccounts, accountBudgetModule.computeAccountBudget);
     if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
         ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
     if (activeYear !== year || currentUser?.id !== owner ||
         cloudBudgetConflicts.has(owner + ':' + year) ||
         localStorage.getItem(conflictStorageKey(year)) === '1' ||
         !canApplyJanuaryOpening(db[year])) return;
+    const confirmedSource = await verifiedYearPlanSource(owner, previous);
     const updated = structuredClone(db[year]);
     updated.months[0].recordedLeftover = projectedJanuaryOpening(
-      db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
+      confirmedSource, budgetAccounts, accountBudgetModule.computeAccountBudget);
     await persistYearPlanChange(owner, year, updated,
       'January projection saved in this browser only. Cloud synchronization is pending; reconcile before using another device.');
   } catch (error) {
     console.error('Could not apply January projection:', error);
-    if (currentUser?.id === owner) alert('January projection could not be applied. Check your budget and retry.');
+    if (currentUser?.id === owner) {
+      showCloudSaveStatus('January projection blocked: verify and reconcile the previous budget year before retrying.');
+      alert('January projection could not be applied. Check the previous year and retry.');
+    }
   } finally {
     yearPlanActionBusy = false;
     if (currentUser?.id === owner) {
@@ -1710,6 +1758,7 @@ function syncJanuaryProjectionControls() {
   const year = activeYear, previous = String(Number(year) - 1);
   const source = db[previous];
   const eligible = Boolean(currentUser && accountBudgetModule && source && db[year] &&
+    yearPlanSourceAvailable(currentUser.id, previous) &&
     !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
     localStorage.getItem(conflictStorageKey(year)) !== '1' &&
     Number(db[year].months?.[0]?.recordedLeftover) === 0 &&
@@ -1728,7 +1777,7 @@ async function copyPreviousYearPlan() {
   const year = activeYear;
   const previous = String(Number(year) - 1);
   const owner = currentUser.id;
-  if (!Object.hasOwn(db, previous) || !Object.hasOwn(db, year) ||
+  if (!yearPlanSourceAvailable(owner, previous) || !Object.hasOwn(db, year) ||
       cloudBudgetConflicts.has(owner + ':' + year) ||
       localStorage.getItem(conflictStorageKey(year)) === '1') return;
   yearPlanActionBusy = true;
@@ -1737,19 +1786,24 @@ async function copyPreviousYearPlan() {
   try {
     const { copyPreviousYearPlan: copyPlan } = await import('./scripts/year-plan.mjs');
     if (activeYear !== year || currentUser?.id !== owner) return;
-    // Validate before prompting, then revalidate after confirmation.
-    copyPlan(db[previous], db[year]);
+    // Validate the cloud-backed source before prompting, then revalidate after confirmation.
+    const source = await verifiedYearPlanSource(owner, previous);
+    copyPlan(source, db[year]);
     if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
         year + '? Existing opening balances and recurring entries will remain unchanged.')) return;
     if (activeYear !== year || currentUser?.id !== owner ||
         cloudBudgetConflicts.has(owner + ':' + year) ||
         localStorage.getItem(conflictStorageKey(year)) === '1') return;
-    const updated = copyPlan(db[previous], db[year]);
+    const confirmedSource = await verifiedYearPlanSource(owner, previous);
+    const updated = copyPlan(confirmedSource, db[year]);
     await persistYearPlanChange(owner, year, updated,
       'Plan copied in this browser only. Cloud synchronization is pending; reconcile before using another device.');
   } catch (error) {
     console.error('Could not copy previous year plan:', error);
-    if (currentUser?.id === owner) alert('The plan could not be copied. Check existing entries and retry.');
+    if (currentUser?.id === owner) {
+      showCloudSaveStatus('Plan copy blocked: verify and reconcile the previous budget year before retrying.');
+      alert('The plan could not be copied. Check the previous year and retry.');
+    }
   } finally {
     yearPlanActionBusy = false;
     if (currentUser?.id === owner) {
@@ -1762,6 +1816,7 @@ function syncCopyPreviousYearControls() {
   const year = activeYear;
   const previous = String(Number(year) - 1);
   const eligible = Boolean(currentUser && Object.hasOwn(db, previous) && Object.hasOwn(db, year) &&
+    yearPlanSourceAvailable(currentUser.id, previous) &&
     !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
     localStorage.getItem(conflictStorageKey(year)) !== '1' &&
     // Recurring-only years remain eligible; a manual entry blocks overwrites.

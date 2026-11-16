@@ -697,7 +697,7 @@ test('desktop recurring form only shows start and optional end dates', async ({ 
 
 test('desktop plan copy confirms, skips recurring entries, persists and prevents overwrites', async ({ page }) => {
   const year = String(new Date().getFullYear()), next = String(Number(year)+1);
-  await page.evaluate(y => { db[y].months[0].fixed.push({name:'Rent plan',amount:900,due:'1st'}); db[y].months[0].fixed.push({name:'Generated',amount:30,occurrenceId:'occ',recurringRuleId:'rule'}); }, year);
+  await page.evaluate(async y => { db[y].months[0].fixed.push({name:'Rent plan',amount:900,dueDay:1}); db[y].months[0].fixed.push({name:'Generated',amount:30,occurrenceId:'occ',recurringRuleId:'rule'}); await saveDB(); }, year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
   let confirmations = 0;
@@ -718,9 +718,43 @@ test('desktop plan copy confirms, skips recurring entries, persists and prevents
   expect(await page.evaluate(y => db[y].months[0].fixed[0].name, next)).toBe('Rent plan');
 });
 
+
+test('desktop blocks copying and January projection from a conflicted source year', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].fixed.push({ name: 'Protected source', amount: 45 });
+    await saveDB();
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  await page.evaluate(y => { markCloudConflict(currentUser.id + ':' + y, y); render(); }, year);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+  expect(await page.evaluate(y => db[y].months[0].fixed.length, next)).toBe(0);
+});
+
+test('desktop detects a stale source cloud revision before copying', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    db[y].months[0].fixed.push({ name: 'Protected plan', amount: 75 });
+    await saveDB();
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].updated_at = '2099-01-01T00:00:00.000Z';
+    rows[y].budget_data.months[0].fixed[0].amount = 99;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
+  expect(await page.evaluate(y => db[y].months[0].fixed, next)).toEqual([]);
+});
+
 test('copy action is hidden for conflicted target years', async ({ page }) => {
   const year=String(new Date().getFullYear());
-  await page.evaluate(y => db[y].months[0].income.push({name:'Salary',amount:1000}), year);
+  await page.evaluate(async y => { db[y].months[0].income.push({name:'Salary',amount:1000}); await saveDB(); }, year);
   await page.locator('#activeYearSelect').selectOption(String(Number(year)+1));
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
   await page.evaluate(() => { markCloudConflict(currentUser.id+':'+activeYear,activeYear);render(); });
@@ -730,9 +764,10 @@ test('copy action is hidden for conflicted target years', async ({ page }) => {
 
 test('desktop January rollover is opt-in and preserves manual opening balances', async ({ page }) => {
   const year=String(new Date().getFullYear()),next=String(Number(year)+1);
-  await page.evaluate(y => {
+  await page.evaluate(async y => {
     db[y].months[11].income.push({name:'December pay',amount:500,accountId:null});
     db[y].months[11].fixed.push({name:'December bill',amount:200});
+    await saveDB();
     render();
   },year);
   await page.locator('#activeYearSelect').selectOption(next);
@@ -757,7 +792,7 @@ test('desktop January rollover is opt-in and preserves manual opening balances',
 
 test('failed browser storage rolls back a plan copy without claiming it was saved', async ({ page }) => {
   const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
-  await page.evaluate(y => { db[y].months[0].fixed.push({ name: 'Rent plan', amount: 900 }); render(); }, year);
+  await page.evaluate(async y => { db[y].months[0].fixed.push({ name: 'Rent plan', amount: 900 }); await saveDB(); render(); }, year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
   await page.evaluate(() => {
