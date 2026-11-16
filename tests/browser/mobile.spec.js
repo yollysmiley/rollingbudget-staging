@@ -315,6 +315,53 @@ test('mobile automatic backfill preserves existing manual transactions', async (
   expect(entries).toHaveLength(1);
   expect(entries[0].amount).toBe(500);
 });
+
+test('mobile reconciliation aborts when the signed-in owner changes during cloud loading', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const year = activeYear, owner = currentUser;
+    db[year].months[0].fixed.push({ name: 'Owner-protected', amount: 33 });
+    await saveDB();
+    markCloudConflict(owner.id + ':' + year, year);
+    const originalFrom = supabaseClient.from.bind(supabaseClient);
+    let releaseRead;
+    supabaseClient.from = table => {
+      const query = originalFrom(table);
+      if (table !== 'budget_ui_years') return query;
+      const originalSelect = query.select.bind(query);
+      query.select = (...args) => {
+        const selected = originalSelect(...args);
+        const originalEq = selected.eq.bind(selected);
+        selected.eq = (field, value) => {
+          const scoped = originalEq(field, value);
+          const originalYearEq = scoped.eq.bind(scoped);
+          scoped.eq = (yearField, number) => new Promise(resolve => {
+            releaseRead = () => Promise.resolve(originalYearEq(yearField, number)).then(resolve);
+          });
+          return scoped;
+        };
+        return selected;
+      };
+      return query;
+    };
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    const pending = reconcileCloudBudget(false);
+    for (let i = 0; i < 20 && !releaseRead; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    if (!releaseRead) throw new Error('Cloud read was not intercepted');
+    currentUser = { ...owner, id: 'different-test-owner' };
+    releaseRead();
+    await pending;
+    currentUser = owner;
+    supabaseClient.from = originalFrom;
+    window.confirm = originalConfirm;
+    return {
+      marker: localStorage.getItem(conflictStorageKey(year)),
+      names: db[year].months[0].fixed.map(item => item.name)
+    };
+  });
+  expect(result).toEqual({ marker: '1', names: ['Owner-protected'] });
+});
+
 test('mobile preserves an unresolved cloud conflict across reload and offers explicit recovery', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const year = activeYear, key = currentUser.id + ':' + year;

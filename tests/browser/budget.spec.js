@@ -405,6 +405,54 @@ test('desktop preserves an unresolved cloud conflict across reload and offers ex
   expect(await page.evaluate(() => Boolean(localStorage.getItem(storageKey(activeYear) + '_conflict_backup')))).toBe(true);
 });
 
+
+test('desktop rejects malformed cloud reconciliation without replacing local expenses', async ({ page }) => {
+  const year = await page.evaluate(async () => {
+    const y = activeYear;
+    db[y].months[0].fixed.push({ name: 'Preserve me', amount: 41 });
+    await saveDB();
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].budget_data = { months: [] };
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+    markCloudConflict(currentUser.id + ':' + y, y);
+    showCloudSaveStatus('Unsynced local budget changes require reconciliation.');
+    return y;
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Cloud budget is invalid');
+  const result = await page.evaluate(y => ({
+    names: db[y].months[0].fixed.map(item => item.name),
+    marker: localStorage.getItem(conflictStorageKey(y)),
+    cached: JSON.parse(localStorage.getItem(storageKey(y))).data.months[0].fixed.map(item => item.name)
+  }), year);
+  expect(result).toEqual({ names: ['Preserve me'], marker: '1', cached: ['Preserve me'] });
+});
+
+test('desktop refuses destructive reconciliation when the local backup cannot be written', async ({ page }) => {
+  await page.evaluate(async () => {
+    const y = activeYear;
+    db[y].months[0].fixed.push({ name: 'Protected backup', amount: 19 });
+    await saveDB();
+    markCloudConflict(currentUser.id + ':' + y, y);
+    showCloudSaveStatus('Unsynced local budget changes require reconciliation.');
+    window.__originalStorageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === storageKey(y) + '_conflict_backup') throw new DOMException('Storage full', 'QuotaExceededError');
+      return window.__originalStorageSetItem.call(this, key, value);
+    };
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation failed');
+  const result = await page.evaluate(() => ({
+    marker: localStorage.getItem(conflictStorageKey(activeYear)),
+    names: db[activeYear].months[0].fixed.map(item => item.name)
+  }));
+  expect(result).toEqual({ marker: '1', names: ['Protected backup'] });
+  await page.evaluate(() => { Storage.prototype.setItem = window.__originalStorageSetItem; });
+});
+
 test('browser cloud fixture rejects another owner\'s conditional budget update', async ({ page }) => {
   const outcome = await page.evaluate(async () => {
     const year = Number(activeYear);
