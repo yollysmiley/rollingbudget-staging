@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { availableBudgetYears, isBudgetYear, localBudgetYears, rollingBudgetYears, sameBudgetDocument } from '../scripts/year-discovery.mjs';
+import { availableBudgetYears, isBudgetYear, localBudgetYears, rollingBudgetYears, selectableBudgetYears, sameBudgetDocument } from '../scripts/year-discovery.mjs';
 
 test('three-year availability rolls forward automatically without creating documents', () => {
   assert.deepEqual(rollingBudgetYears(2026), ['2026', '2027', '2028']);
@@ -9,9 +9,10 @@ test('three-year availability rolls forward automatically without creating docum
   assert.throws(() => rollingBudgetYears(1899), /Invalid current budget year/);
 });
 
-test('saved older years and farther future years remain selectable', () => {
+test('historical and future storage records remain discoverable without expanding the selectable window', () => {
   assert.deepEqual(availableBudgetYears(2027, [2023, 2035, 2027], [], 'owner_budget_'),
     ['2023', '2027', '2028', '2029', '2035']);
+  assert.deepEqual(selectableBudgetYears(2027), ['2027', '2028', '2029']);
 });
 
 test('local-only years and unsynced conflict markers are discovered for the owner', () => {
@@ -24,6 +25,7 @@ test('local-only years and unsynced conflict markers are discovered for the owne
   assert.deepEqual(localBudgetYears(keys, 'stage_owner-a_budget_'), ['2028', '2028', '2035']);
   assert.deepEqual(availableBudgetYears(2026, [], keys, 'stage_owner-a_budget_'),
     ['2026', '2027', '2028', '2035']);
+  assert.deepEqual(selectableBudgetYears(2026), ['2026', '2027', '2028']);
 });
 
 test('invalid year identifiers are rejected', () => {
