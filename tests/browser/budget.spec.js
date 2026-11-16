@@ -754,3 +754,29 @@ test('desktop January rollover is opt-in and preserves manual opening balances',
   await expect(page.locator('#activeYearSelect')).toHaveValue(next);
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
 });
+
+test('failed browser storage rolls back a plan copy without claiming it was saved', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => { db[y].months[0].fixed.push({ name: 'Rent plan', amount: 900 }); render(); }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.evaluate(() => {
+    window.__storageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === storageKey(activeYear)) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return window.__storageSetItem.call(this, key, value);
+    };
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('was not saved');
+  const result = await page.evaluate(y => ({
+    entries: db[y].months[0].fixed,
+    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null
+  }), next);
+  expect(result).toEqual({ entries: [], cloud: null });
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Rent plan');
+});

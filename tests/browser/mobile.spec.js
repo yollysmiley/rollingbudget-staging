@@ -639,3 +639,34 @@ test('mobile January rollover is opt-in and shares state with desktop', async ({
   await expect(page.locator('#activeYearSelect')).toHaveValue(next);
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(-50);
 });
+
+test('mobile planning actions cannot overlap while a first-year save is pending', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(y => {
+    db[y].months[0].fixed.push({ name: 'Manual January', amount: 20 });
+    db[y].months[11].income.push({ name: 'December pay', amount: 150 });
+    render();
+  }, year);
+  await page.locator('#mobileActiveYearSelect').selectOption(next);
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
+  await page.evaluate(() => {
+    window.__originalSaveDB = saveDB;
+    window.saveDB = async (...args) => {
+      await new Promise(resolve => { window.__releasePlanSave = resolve; });
+      return window.__originalSaveDB(...args);
+    };
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#mobileCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePlanSave)).toBe('function');
+  await expect(page.locator('#mobileCopyPreviousYear')).toBeDisabled();
+  await expect(page.locator('#mobileProjectJanuary')).toBeDisabled();
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(0);
+  await page.evaluate(() => window.__releasePlanSave());
+  await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Manual January');
+  await expect(page.locator('#mobileProjectJanuary')).toBeEnabled();
+  await page.evaluate(() => { window.saveDB = window.__originalSaveDB; });
+  await page.locator('#mobileProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(130);
+});

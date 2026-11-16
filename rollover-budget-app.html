@@ -1498,6 +1498,7 @@ async function reconcileCloudBudget(useLocal) {
   const year = activeYear, owner = currentUser?.id;
   if (!owner || !supabaseClient || localStorage.getItem(conflictStorageKey(year)) !== '1') return;
   const key = owner + ':' + year;
+  let insertedNewYear = false;
   if (!confirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
   try {
     await queueCloudSave(key, async () => {
@@ -1522,6 +1523,7 @@ async function reconcileCloudBudget(useLocal) {
             user_id: owner, year: Number(year), budget_data: local.data, updated_at: nextTimestamp
           });
           if (insertError) throw insertError;
+          insertedNewYear = true;
         }
         cloudBudgetVersions.set(key, nextTimestamp);
         db[year] = local.data;
@@ -1535,6 +1537,11 @@ async function reconcileCloudBudget(useLocal) {
     });
     showCloudSaveStatus('');
     render();
+    if (insertedNewYear && currentUser?.id === owner) {
+      // A previously local-only virtual year becomes eligible for global rules
+      // only after its first confirmed cloud insertion.
+      await backfillSavedRecurringYears(owner, year + '-01-01', year + '-12-31');
+    }
   } catch (error) {
     console.error('Cloud reconciliation failed:', error);
     showCloudSaveStatus('Reconciliation failed; local changes are preserved. Retry when connected.');
@@ -1631,36 +1638,60 @@ async function saveDB({ backfillNewYear = true } = {}) {
     return 'local-saved';
   }
 }
-let januaryProjectionInProgress = false;
+// The two year-planning actions share a lock: neither may snapshot the same
+// target while the other is awaiting a cloud save or recurring backfill.
+let yearPlanActionBusy = false;
+async function persistYearPlanChange(owner, year, updated, localOnlyMessage) {
+  const original = db[year];
+  db[year] = updated;
+  const status = await saveDB();
+  if (status === 'not-saved' && currentUser?.id === owner && db[year] === updated) {
+    // No local or cloud write occurred. Restore the previous working document.
+    db[year] = original;
+  }
+  if (currentUser?.id === owner && activeYear === year) {
+    render();
+    if (status === 'not-saved') {
+      showCloudSaveStatus('Budget change was not saved. Free browser storage and retry.');
+    } else if (status === 'local-saved') {
+      showCloudSaveStatus(localOnlyMessage);
+    }
+  }
+  return status;
+}
 async function applyProjectedJanuaryOpening() {
-  if (januaryProjectionInProgress || !currentUser) return;
+  if (yearPlanActionBusy || !currentUser) return;
   const year = activeYear, previous = String(Number(year) - 1), owner = currentUser.id;
   if (!db[previous] || !db[year] || !accountBudgetModule ||
       cloudBudgetConflicts.has(owner + ':' + year) ||
       localStorage.getItem(conflictStorageKey(year)) === '1') return;
-  const { projectedJanuaryOpening, canApplyJanuaryOpening } = await import('./scripts/year-plan.mjs');
-  if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
-  const projection = projectedJanuaryOpening(db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
-  if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
-      ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
-  if (activeYear !== year || currentUser?.id !== owner ||
-      cloudBudgetConflicts.has(owner + ':' + year) ||
-      localStorage.getItem(conflictStorageKey(year)) === '1' ||
-      !canApplyJanuaryOpening(db[year])) return;
-  januaryProjectionInProgress = true;
+  yearPlanActionBusy = true;
+  syncJanuaryProjectionControls();
+  syncCopyPreviousYearControls();
   try {
-    db[year].months[0].recordedLeftover = projectedJanuaryOpening(
+    const { projectedJanuaryOpening, canApplyJanuaryOpening } = await import('./scripts/year-plan.mjs');
+    if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
+    const projection = projectedJanuaryOpening(db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
+    if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
+        ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
+    if (activeYear !== year || currentUser?.id !== owner ||
+        cloudBudgetConflicts.has(owner + ':' + year) ||
+        localStorage.getItem(conflictStorageKey(year)) === '1' ||
+        !canApplyJanuaryOpening(db[year])) return;
+    const updated = structuredClone(db[year]);
+    updated.months[0].recordedLeftover = projectedJanuaryOpening(
       db[previous], budgetAccounts, accountBudgetModule.computeAccountBudget);
-    const status = await saveDB();
-    if (activeYear === year && currentUser?.id === owner) {
-      render();
-      if (status !== 'cloud-saved') {
-        showCloudSaveStatus('January projection saved locally. Cloud synchronization is pending.');
-      }
-    }
+    await persistYearPlanChange(owner, year, updated,
+      'January projection saved in this browser only. Cloud synchronization is pending; reconcile before using another device.');
+  } catch (error) {
+    console.error('Could not apply January projection:', error);
+    if (currentUser?.id === owner) alert('January projection could not be applied. Check your budget and retry.');
   } finally {
-    januaryProjectionInProgress = false;
-    if (currentUser?.id === owner) syncJanuaryProjectionControls();
+    yearPlanActionBusy = false;
+    if (currentUser?.id === owner) {
+      syncJanuaryProjectionControls();
+      syncCopyPreviousYearControls();
+    }
   }
 }
 function syncJanuaryProjectionControls() {
@@ -1677,50 +1708,42 @@ function syncJanuaryProjectionControls() {
     const button = document.getElementById(id);
     if (!button) continue;
     button.hidden = !eligible;
-    button.disabled = januaryProjectionInProgress;
+    button.disabled = yearPlanActionBusy;
   }
 }
-let yearPlanCopyInProgress = false;
 async function copyPreviousYearPlan() {
-  if (yearPlanCopyInProgress || !currentUser) return;
+  if (yearPlanActionBusy || !currentUser) return;
   const year = activeYear;
   const previous = String(Number(year) - 1);
   const owner = currentUser.id;
   if (!Object.hasOwn(db, previous) || !Object.hasOwn(db, year) ||
       cloudBudgetConflicts.has(owner + ':' + year) ||
       localStorage.getItem(conflictStorageKey(year)) === '1') return;
-  const { copyPreviousYearPlan: copyPlan } = await import('./scripts/year-plan.mjs');
-  if (activeYear !== year || currentUser?.id !== owner) return;
-  let proposal;
-  try {
-    proposal = copyPlan(db[previous], db[year]);
-  } catch (error) {
-    alert(error.message);
-    return;
-  }
-  if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
-      year + '? Existing opening balances will remain unchanged. Recurring entries will be generated separately.')) return;
-  if (activeYear !== year || currentUser?.id !== owner ||
-      localStorage.getItem(conflictStorageKey(year)) === '1') return;
-  yearPlanCopyInProgress = true;
+  yearPlanActionBusy = true;
   syncCopyPreviousYearControls();
+  syncJanuaryProjectionControls();
   try {
-    // Revalidate after confirmation so a second click cannot overwrite newer edits.
+    const { copyPreviousYearPlan: copyPlan } = await import('./scripts/year-plan.mjs');
+    if (activeYear !== year || currentUser?.id !== owner) return;
+    // Validate before prompting, then revalidate after confirmation.
+    copyPlan(db[previous], db[year]);
+    if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
+        year + '? Existing opening balances and recurring entries will remain unchanged.')) return;
+    if (activeYear !== year || currentUser?.id !== owner ||
+        cloudBudgetConflicts.has(owner + ':' + year) ||
+        localStorage.getItem(conflictStorageKey(year)) === '1') return;
     const updated = copyPlan(db[previous], db[year]);
-    db[year] = updated;
-    const status = await saveDB();
-    if (currentUser?.id === owner && activeYear === year) {
-      render();
-      if (status !== 'cloud-saved') {
-        showCloudSaveStatus('Plan copied locally. Cloud synchronization is pending; reconcile before editing on another device.');
-      }
-    }
+    await persistYearPlanChange(owner, year, updated,
+      'Plan copied in this browser only. Cloud synchronization is pending; reconcile before using another device.');
   } catch (error) {
     console.error('Could not copy previous year plan:', error);
-    alert('The plan could not be copied. Existing budget entries were preserved.');
+    if (currentUser?.id === owner) alert('The plan could not be copied. Check existing entries and retry.');
   } finally {
-    yearPlanCopyInProgress = false;
-    if (currentUser?.id === owner) syncCopyPreviousYearControls();
+    yearPlanActionBusy = false;
+    if (currentUser?.id === owner) {
+      syncCopyPreviousYearControls();
+      syncJanuaryProjectionControls();
+    }
   }
 }
 function syncCopyPreviousYearControls() {
@@ -1729,8 +1752,10 @@ function syncCopyPreviousYearControls() {
   const eligible = Boolean(currentUser && Object.hasOwn(db, previous) && Object.hasOwn(db, year) &&
     !cloudBudgetConflicts.has(currentUser.id + ':' + year) &&
     localStorage.getItem(conflictStorageKey(year)) !== '1' &&
+    // Recurring-only years remain eligible; a manual entry blocks overwrites.
     db[year].months?.every(month => ['income','fixed','variable','creditCards','loans']
-      .every(type => Array.isArray(month[type]) && month[type].length === 0)) &&
+      .every(type => Array.isArray(month[type]) && month[type].every(entry =>
+        entry.occurrenceId || entry.recurringRuleId || entry.scheduledMonth))) &&
     db[previous].months?.some(month => ['income','fixed','variable','creditCards','loans']
       .some(type => Array.isArray(month[type]) && month[type].some(entry =>
         !entry.occurrenceId && !entry.recurringRuleId && !entry.scheduledMonth))));
@@ -1738,7 +1763,7 @@ function syncCopyPreviousYearControls() {
     const button = document.getElementById(id);
     if (!button) continue;
     button.hidden = !eligible;
-    button.disabled = yearPlanCopyInProgress;
+    button.disabled = yearPlanActionBusy;
   }
 }
 function switchYear(yr) {
