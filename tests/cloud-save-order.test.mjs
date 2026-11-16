@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { migrateYearDueDays } from '../scripts/due-day.mjs';
 
 const html = readFileSync(new URL('../rollover-budget-app.html', import.meta.url), 'utf8');
 const start = html.indexOf('const cloudSaveQueues = new Map();');
@@ -21,10 +22,14 @@ function harness() {
   };
   const context = {
     Map, Promise, JSON, Date, Number, console, document,
+    dueDayModule: { migrateYearDueDays },
     localStorage: { setItem: (key, value) => store.set(key, value),
       getItem: key => store.get(key) ?? null, removeItem: key => store.delete(key) },
     storageKey: year => 'owner_budget_' + year,
-    db: { '2026': { months: [{ income: [{ cpm: 100 }] }] } },
+    db: { '2026': { months: Array.from({ length: 12 }, (_, i) => ({
+      recordedLeftover: 0, income: i === 0 ? [{ name: 'Test pay', amount: 100 }] : [],
+      fixed: [], variable: [], creditCards: [], loans: []
+    })) } },
     activeYear: '2026',
     currentUser: { id: 'owner' },
     supabaseClient: { from: () => ({
@@ -50,15 +55,15 @@ async function flush() { await new Promise(resolve => setImmediate(resolve)); }
 test('consecutive edits save immutable snapshots in order', async () => {
   const { context, writes, backfills } = harness();
   const first = vm.runInContext('saveDB()', context);
-  context.db['2026'].months[0].income[0].cpm = 4321.25;
+  context.db['2026'].months[0].income[0].amount = 4321.25;
   const second = vm.runInContext('saveDB()', context);
   await flush();
   assert.equal(writes.length, 1);
-  assert.equal(writes[0].row.budget_data.months[0].income[0].cpm, 100);
+  assert.equal(writes[0].row.budget_data.months[0].income[0].amount, 100);
   writes[0].resolve({ error: null });
   await flush();
   assert.equal(writes.length, 2);
-  assert.equal(writes[1].row.budget_data.months[0].income[0].cpm, 4321.25);
+  assert.equal(writes[1].row.budget_data.months[0].income[0].amount, 4321.25);
   assert.equal(writes[1].filters.updated_at, writes[0].row.updated_at);
   writes[1].resolve({ data: [{ year: 2026 }], error: null });
   await Promise.all([first, second]);
@@ -80,7 +85,7 @@ test('failed cloud save retains local snapshot and shows warning', async () => {
   await flush();
   writes[0].resolve({ error: { message: 'synthetic error' } });
   await saving;
-  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].cpm, 100);
+  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].amount, 100);
   assert.match(status.textContent, /Cloud save rejected or unavailable/);
   assert.equal(status.hidden, false);
   assert.equal(store.get('owner_budget_2026_cloud_conflict'), '1');
@@ -95,7 +100,7 @@ test('stale revision rejects cloud write without losing local snapshot', async (
   assert.equal(writes[0].filters.updated_at, '2026-01-01T00:00:00.000Z');
   writes[0].resolve({ data: [], error: null });
   assert.equal(await saving, 'local-saved');
-  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].cpm, 100);
+  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].amount, 100);
   assert.match(status.textContent, /Cloud save rejected/);
 });
 
@@ -106,9 +111,24 @@ test('unresolved conflict prevents another cloud write and retains the local cop
   await flush();
   writes[0].resolve({ data: [], error: null });
   await first;
-  context.db['2026'].months[0].income[0].cpm = 250;
+  context.db['2026'].months[0].income[0].amount = 250;
   assert.equal(await vm.runInContext('saveDB()', context), 'local-saved');
   assert.equal(writes.length, 1);
-  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].cpm, 250);
+  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].income[0].amount, 250);
   assert.equal(store.get('owner_budget_2026_cloud_conflict'), '1');
+});
+
+test('cloud snapshot migration converts due text without changing financial amounts', async () => {
+  const { context, writes, store } = harness();
+  context.db['2026'].months[0].fixed.push({ name: 'Rent', amount: 900, due: '1st' });
+  const saving = vm.runInContext('saveDB()', context);
+  await flush();
+  const saved = writes[0].row.budget_data.months[0].fixed[0];
+  assert.equal(saved.dueDay, 1);
+  assert.equal(saved.due, undefined);
+  assert.equal(saved.amount, 900);
+  assert.equal(JSON.parse(store.get('owner_budget_2026')).data.months[0].fixed[0].dueDay, 1);
+  writes[0].resolve({ error: null });
+  assert.equal(await saving, 'cloud-saved');
+  assert.equal(context.db['2026'].months[0].fixed[0].dueDay, 1);
 });
