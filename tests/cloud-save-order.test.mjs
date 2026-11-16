@@ -43,7 +43,10 @@ function harness() {
         return query;
       }
     }) },
-    backfillSavedRecurringYears: async (owner, from, through) => { backfills.push({ owner, from, through }); },
+    backfillSavedRecurringYears: async (owner, from, through) => {
+      backfills.push({ owner, from, through });
+      return { years: [], deferred: [], discoveryFailed: false };
+    },
     alert: () => { throw new Error('unexpected local storage failure'); }
   };
   vm.createContext(context);
@@ -131,4 +134,18 @@ test('cloud snapshot migration converts due text without changing financial amou
   writes[0].resolve({ error: null });
   assert.equal(await saving, 'cloud-saved');
   assert.equal(context.db['2026'].months[0].fixed[0].dueDay, 1);
+});
+
+test('successful cloud insert with deferred recurring backfill reports partial completion without a cloud conflict', async () => {
+  const { context, writes, store, status } = harness();
+  context.backfillSavedRecurringYears = async () => ({
+    years: [], deferred: [{ year: '2026', reason: 'offline' }], discoveryFailed: false
+  });
+  const saving = vm.runInContext('saveDB()', context);
+  await flush();
+  writes[0].resolve({ error: null });
+  assert.equal(await saving, 'cloud-saved-recurring-pending');
+  assert.equal(store.get('owner_budget_2026_cloud_conflict'), undefined);
+  assert.match(status.textContent, /Budget saved to cloud.*Recurring entries are still pending/);
+  assert.equal(status.hidden, false);
 });
