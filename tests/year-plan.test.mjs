@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { copyPreviousYearPlan, isEmptyYearPlan } from '../scripts/year-plan.mjs';
+import { copyPreviousYearPlan, isEmptyYearPlan, projectedJanuaryOpening, canApplyJanuaryOpening } from '../scripts/year-plan.mjs';
 
 const blank = () => ({
   autoCascade: true,
@@ -53,4 +53,25 @@ test('rejects malformed source and target documents', () => {
   const target = blank();
   delete target.months[3].fixed;
   assert.throws(() => copyPreviousYearPlan(blank(), target), /invalid month entries/);
+});
+
+test('projects December into January without mutating either year', async () => {
+  const { computeAccountBudget } = await import('../scripts/account-budget.mjs');
+  const previous = blank(), target = blank();
+  previous.months[11].income.push({ name: 'December pay', amount: 500, accountId: null });
+  previous.months[11].fixed.push({ name: 'December bill', amount: 200 });
+  assert.equal(projectedJanuaryOpening(previous, [], computeAccountBudget), 420);
+  assert.equal(canApplyJanuaryOpening(target), false); // target starts with a manual 120
+  target.months[0].recordedLeftover = 0;
+  assert.equal(canApplyJanuaryOpening(target), true);
+  assert.equal(target.months[0].recordedLeftover, 0);
+  previous.months[11].fixed[0].amount = 700;
+  assert.equal(projectedJanuaryOpening(previous, [], computeAccountBudget), -80);
+});
+
+test('rejects non-finite December projections and preserves manual opening', () => {
+  const year = blank();
+  assert.throws(() => projectedJanuaryOpening(year, [], () => Array(12).fill({ endingRollover: NaN })), /could not be calculated/);
+  year.months[0].recordedLeftover = -25;
+  assert.equal(canApplyJanuaryOpening(year), false);
 });
