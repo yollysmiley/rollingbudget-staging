@@ -1,4 +1,4 @@
-## Unreleased
+- Phase A1 (staging, pending validation): restrict desktop/mobile year selection and session restoration to current calendar year plus two future years, while retaining historical/cloud conflict records for recovery; align unit and browser regressions.\n## Unreleased
 
 - Phase A2 correction review (staging PR #45): require a cloud-verified, conflict-free source year for manual plan copying and January projection; protect cloud reconciliation against invalid snapshots, missing backups, account switches and concurrent edits; persist owner-scoped recurring retry ranges across browser sessions, auto-retry on sign-in, and distinguish a confirmed cloud budget save from deferred recurring backfill. Expand desktop/mobile recovery regressions. No production changes.
 
