@@ -23,8 +23,10 @@ test('copies manual plans into an empty year without changing either input', () 
   assert.deepEqual(source, before);
   assert.equal(isEmptyYearPlan(target), true);
   assert.deepEqual(copied.months[0].income, [{ name: 'Salary', amount: 3000, accountId: 'checking' }]);
-  assert.deepEqual(copied.months[0].fixed, [{ name: 'Rent', due: '1st', amount: 1200, accountId: 'checking' }]);
+  assert.deepEqual(copied.months[0].fixed, [{ name: 'Rent', dueDay: 1, amount: 1200, accountId: 'checking' }]);
   assert.equal(copied.months[0].loans[0].balance, 0);
+  assert.equal(copied.months[0].loans[0].dueDay, 15);
+  assert.equal(copied.months[0].creditCards[0].dueDay, 20);
   assert.equal(copied.months[0].creditCards[0].statement, 0);
   assert.equal(copied.months[0].recordedLeftover, 120);
   copied.months[0].fixed[0].amount = 5;
@@ -37,7 +39,7 @@ test('excludes scheduled recurring occurrences and does not copy recurring rule 
   source.months[1].fixed.push({ name: 'Recurring', amount: 100, occurrenceId: 'occ-1', recurringRuleId: 'rule1' });
   source.months[1].fixed.push({ name: 'Manual', amount: 75, due: '3rd' });
   const copied = copyPreviousYearPlan(source, blank());
-  assert.deepEqual(copied.months[1].fixed, [{ name: 'Manual', amount: 75, due: '3rd' }]);
+  assert.deepEqual(copied.months[1].fixed, [{ name: 'Manual', amount: 75, dueDay: 3 }]);
   assert.deepEqual(copied.recurringRules, []);
 });
 
@@ -81,7 +83,7 @@ test('copies into a generated-only year without changing or duplicating schedule
   source.months[0].fixed.push({ name: 'Rent', due: '1st', amount: 900, accountId: 'checking' });
   source.months[0].fixed.push({ name: 'Utilities', due: '5th', amount: 70 });
   target.months[0].fixed.push({
-    name: 'Rent', due: '1st', amount: 900, accountId: 'checking',
+    name: 'Rent', dueDay: 1, amount: 900, accountId: 'checking',
     recurringRuleId: 'rent-rule', occurrenceId: 'rent-2027-01'
   });
   target.months[1].income.push({
@@ -93,6 +95,7 @@ test('copies into a generated-only year without changing or duplicating schedule
   assert.deepEqual(target, before);
   assert.deepEqual(copied.months[0].fixed.map(entry => entry.name), ['Rent', 'Utilities']);
   assert.equal(copied.months[0].fixed[0].occurrenceId, 'rent-2027-01');
+  assert.equal(copied.months[0].fixed[1].dueDay, 5);
   assert.deepEqual(copied.months[1].income, target.months[1].income);
   assert.equal(isEmptyYearPlan(copied), false);
   assert.throws(() => copyPreviousYearPlan(source, copied), /already contains manual entries/);

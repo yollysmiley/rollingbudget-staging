@@ -1,10 +1,12 @@
+import { dueDayOf } from './due-day.mjs';
+
 // Pure plan-copying rules. No UI, cloud writes, or recurring scheduling.
 const ENTRY_FIELDS = {
   income: ['name', 'amount', 'accountId'],
-  fixed: ['name', 'due', 'amount', 'accountId'],
-  variable: ['name', 'due', 'amount', 'accountId'],
-  creditCards: ['name', 'due', 'payment', 'apr', 'accountId'],
-  loans: ['name', 'due', 'payment', 'apr', 'accountId']
+  fixed: ['name', 'dueDay', 'amount', 'accountId'],
+  variable: ['name', 'dueDay', 'amount', 'accountId'],
+  creditCards: ['name', 'dueDay', 'payment', 'apr', 'accountId'],
+  loans: ['name', 'dueDay', 'payment', 'apr', 'accountId']
 };
 const ENTRY_TYPES = Object.keys(ENTRY_FIELDS);
 
@@ -24,7 +26,8 @@ function plannedEntry(entry, type) {
       entry.scheduledMonth) return null;
   const result = {};
   for (const field of ENTRY_FIELDS[type]) {
-    if (Object.hasOwn(entry, field)) result[field] = structuredClone(entry[field]);
+    if (field === 'dueDay') result.dueDay = dueDayOf(entry);
+    else if (Object.hasOwn(entry, field)) result[field] = structuredClone(entry[field]);
   }
   // A previous year's debt position and statement are historical, not a new plan.
   if (type === 'loans') result.balance = 0;
@@ -51,7 +54,8 @@ function sameGeneratedPlan(entry, generated, type) {
   return ENTRY_FIELDS[type].every(field => {
     const left = entry[field], right = generated[field];
     if (['amount', 'payment', 'apr'].includes(field)) return Number(left ?? 0) === Number(right ?? 0);
-    if (field === 'name' || field === 'due') {
+    if (field === 'dueDay') return dueDayOf(entry) === dueDayOf(generated);
+    if (field === 'name') {
       return String(left ?? '').trim().toLocaleLowerCase() ===
         String(right ?? '').trim().toLocaleLowerCase();
     }
