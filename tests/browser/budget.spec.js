@@ -726,3 +726,25 @@ test('copy action is hidden for conflicted target years', async ({ page }) => {
   await page.evaluate(() => { markCloudConflict(currentUser.id+':'+activeYear,activeYear);render(); });
   await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
 });
+
+
+test('desktop January rollover is opt-in and preserves manual opening balances', async ({ page }) => {
+  const year=String(new Date().getFullYear()),next=String(Number(year)+1);
+  await page.evaluate(y => {
+    db[y].months[11].income.push({name:'December pay',amount:500,accountId:null});
+    db[y].months[11].fixed.push({name:'December bill',amount:200});
+    render();
+  },year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  page.once('dialog',dialog => dialog.dismiss());
+  await page.locator('#desktopProjectJanuary').click();
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(0);
+  page.once('dialog',dialog => dialog.accept());
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#activeYearSelect')).toHaveValue(next);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
+});
