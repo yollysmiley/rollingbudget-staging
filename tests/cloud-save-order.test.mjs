@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { migrateYearDueDays } from '../scripts/due-day.mjs';
+import { writeBudgetRevision } from '../scripts/budget-revision.mjs';
 
 const html = readFileSync(new URL('../rollover-budget-app.html', import.meta.url), 'utf8');
 const start = html.indexOf('const cloudSaveQueues = new Map();');
@@ -23,6 +24,7 @@ function harness() {
   const context = {
     Map, Promise, JSON, Date, Number, console, document,
     dueDayModule: { migrateYearDueDays },
+    writeBudgetRevision,
     localStorage: { setItem: (key, value) => store.set(key, value),
       getItem: key => store.get(key) ?? null, removeItem: key => store.delete(key) },
     storageKey: year => 'owner_budget_' + year,
@@ -50,7 +52,10 @@ function harness() {
     alert: () => { throw new Error('unexpected local storage failure'); }
   };
   vm.createContext(context);
-  vm.runInContext(html.slice(start, end), context);
+  // VM snippets cannot use dynamic import; inject the real revision implementation.
+  const source = html.slice(start, end).replaceAll(
+    "const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');", '');
+  vm.runInContext(source, context);
   return { context, writes, backfills, store, status };
 }
 async function flush() { await new Promise(resolve => setImmediate(resolve)); }
