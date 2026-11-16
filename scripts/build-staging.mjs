@@ -48,7 +48,10 @@ assert.ok(html.includes('id="desktopCopyPreviousYear"') && html.includes('id="mo
 assert.ok(!html.includes('data-settings-section="years"') &&
   !html.includes('data-mobile-settings-section="years"'), 'Year submenu must be removed from both Settings views');
 assert.ok(!html.includes('onclick="createNewYear()"'), 'Manual year creation must not return');
-assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year))"), 'Conflict marker cleanup must remain scoped');
+assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year, owner))") &&
+  html.includes("localStorage.setItem(conflictStorageKey(year, owner), '1')") &&
+  html.includes("key !== owner + ':' + year"),
+  'Conflict marker creation and cleanup must remain scoped to the original owner and year');
 assert.ok(html.includes('function esc(str)') && html.includes('&lt;'), 'HTML text escaping is missing');
 
 let confirmationHtml = readFileSync(new URL('../auth-confirmation.html', import.meta.url), 'utf8');
