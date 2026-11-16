@@ -1521,13 +1521,19 @@ const reconcilingBudgetYears = new Set();
 const cloudBudgetVersions = new Map();
 let cloudYearLoadSucceeded = false;
 const cloudBudgetConflicts = new Set();
-function conflictStorageKey(year) { return storageKey(year) + '_cloud_conflict'; }
+function conflictStorageKey(year, owner = currentUser?.id || 'guest') {
+  return STAGING_STORAGE_PREFIX + '_' + owner + '_budget_' + year + '_cloud_conflict';
+}
 function markCloudConflict(key, year) {
+  const owner = key.slice(0, key.lastIndexOf(':'));
+  if (!owner || key !== owner + ':' + year) throw new Error('Invalid conflict owner scope');
   cloudBudgetConflicts.add(key);
-  localStorage.setItem(conflictStorageKey(year), '1');
+  localStorage.setItem(conflictStorageKey(year, owner), '1');
 }
 function clearCloudConflict(key, year) {
-  localStorage.removeItem(conflictStorageKey(year));
+  const owner = key.slice(0, key.lastIndexOf(':'));
+  if (!owner || key !== owner + ':' + year) throw new Error('Invalid conflict owner scope');
+  localStorage.removeItem(conflictStorageKey(year, owner));
   cloudBudgetConflicts.delete(key);
 }
 async function reconcileCloudBudget(useLocal) {
@@ -1724,7 +1730,7 @@ async function saveDB({ backfillNewYear = true } = {}) {
           recurringPending = true;
         }
       }
-      const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
+      const pending = localStorage.getItem(conflictStorageKey(year, userId)) === '1';
       showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' :
         recurringPending ? 'Budget saved to cloud. Recurring entries are still pending; retry in Recurring Rules.' : dueWarning);
       return recurringPending ? 'cloud-saved-recurring-pending' : 'cloud-saved';
