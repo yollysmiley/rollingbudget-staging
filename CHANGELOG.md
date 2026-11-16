@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Phase A2 numeric due-day update (staging only): replace free-text due inputs for fixed/variable expenses, loans and credit cards with 1–31 selectors; persist nullable integer `dueDay`, normalize recognized legacy ordinals without changing financial values, preserve unrecognized dates for review, and use nominal due days with calendar month-end clamping for recurring schedules and year copying. Add an additive staging `budget_recurring_rules.due_day` migration, backfill existing rule versions, and remove incompatible first-of-month constraints for Start/End dates while retaining legacy text columns for backward compatibility. Update desktop/mobile, unit, and schema regression coverage. Production remains unchanged.
+
 - Phase A2 step 4 (staging): preserve generated recurring entries when copying manual plans into future years, avoid exact scheduled duplicates, serialize year-planning actions, roll back unsaved browser-storage failures, and backfill global rules when a local-only year is first inserted through cloud reconciliation. Correct the isolated Supabase browser fixture to avoid silently seeding cloud rows; extend unit and desktop/mobile tests for first-save, recovery, idempotency and failure paths. No schema or production changes.
 
 - Phase A2 step 3: opt-in December-to-January projected opening balance with confirmation, nonzero manual opening protection, and desktop/mobile and unit regression tests. No schema changes.

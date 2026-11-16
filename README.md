@@ -38,6 +38,12 @@ Keep the required `build` and `validate` status checks stable when changing CI. 
 
 The shared brand stylesheet is `styles/brand.css`; the staging build publishes it under both public and authenticated routes. Desktop and mobile navigation remain separate while using the same budget state. See [brand standards](docs/BRAND_GUIDELINES.md) and [staging configuration](STAGING.md).
 
+## Expense due days (staging)
+
+Fixed expenses, variable expenses, loans and credit cards use an optional **day of month** (`dueDay`: integer 1–31, or `null` for no due day). Desktop and mobile budget cards offer day selectors instead of free-text fields. Recurring rules derive their nominal due day from the selected Start date; for shorter months, the scheduled occurrence uses the last calendar day (February 28/29, April 30) while retaining the original nominal `dueDay` (for example, 31).
+
+Previously saved text dates such as `1st`, `22nd` and `23th` are displayed through a compatibility reader and converted to integers on the next successful, revision-checked budget save or explicit local/cloud reconciliation. Unrecognized dates are preserved for manual correction, never silently deleted. The staging recurring-rule database migration adds a checked `due_day` column and permits full calendar Start/End dates. The legacy `due` column remains temporarily for compatibility with already deployed clients; new code writes `due_day`. **Production data and schema are not changed by this staging PR.**
+
 ## Recurring rules (staging)
 
 The authenticated **Recurring Rules Manager** is available from the main desktop navigation or the mobile sidebar. Rules are shared across budget years. Each rule has a required Start date, an optional End date, and a frequency. Missing occurrences are added automatically to saved, eligible cloud budget years. New budget years receive applicable rules after their first successful cloud save.

@@ -23,6 +23,11 @@ test('staging build ships recurring service and every browser import dependency'
     assert.match(scheduler, /\.\/recurring-foundation\.mjs/);
   }
   const app = readFileSync('dist/app/index.html', 'utf8');
+  assert.match(app, /import\('\.\/scripts\/due-day\.mjs'\)/);
+  for (const id of ['newFixDue', 'newVarDue', 'newLoanDue', 'newCcDue']) {
+    assert.match(app, new RegExp('<select id="' + id + '"'));
+    assert.doesNotMatch(app, new RegExp('<input[^>]*id="' + id + '"'));
+  }
   assert.match(app, /import\('\.\/scripts\/recurring-app-service\.mjs'\)/);
 });
 
