@@ -1594,6 +1594,9 @@ async function reconcileCloudBudget(useLocal) {
         });
         const nextTimestamp = write.updatedAt;
         insertedNewYear = write.inserted;
+        // Retain the committed revision even if local state changes during the write.
+        // The conflict marker stays set until the user explicitly reconciles.
+        cloudBudgetVersions.set(key, nextTimestamp);
         // A cloud commit may have succeeded, but never overwrite edits made while awaiting it.
         assertUnchanged();
         localStorage.setItem(budgetKey, JSON.stringify({ data: normalizedLocal, updatedAt: nextTimestamp }));
@@ -2561,7 +2564,20 @@ async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
             );
             cloudCommitted = Boolean(result.saved);
             if (currentUser?.id !== owner) return;
-            verifyLocalSnapshot();
+            if (result.saved) cloudBudgetVersions.set(key, result.updatedAt);
+            // Recheck local state after commit; a mismatch remains a conflict.
+            // Never replace newer in-memory edits with the recurring snapshot.
+            if (result.saved) {
+              const raw = localStorage.getItem(storageKey(year));
+              const cached = raw === null ? null : parseLocalBudgetRecord(raw);
+              if (!cached || !recurringAppService.requireRecurringCloudSnapshot({
+                owner, activeOwner: currentUser?.id,
+                cloudRow: { budget_data: source.budget_data, updated_at: source.updated_at },
+                knownRevision: source.updated_at, inMemoryBudget: db[year],
+                cachedBudget: cached.data, hasLocalCache: true,
+                conflicted: cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year)) === '1'
+              })) throw new Error('Local budget changed after recurring cloud commit; reconcile');
+            } else verifyLocalSnapshot();
             if (result.saved) {
               localStorage.setItem(storageKey(year), JSON.stringify({
                 data: result.document, updatedAt: result.updatedAt
