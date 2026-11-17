@@ -1206,6 +1206,7 @@ let accountsBusy = false;
 let accountsMessage = '';
 let accountCreateOpen = false;
 let accountCreateIncluded = true;
+let accountEditingId = null;
 function accountStatus(message) {
   accountsMessage = message;
   for (const id of ['desktopAccountsStatus', 'mobileAccountsStatus']) {
@@ -1216,10 +1217,10 @@ function accountStatus(message) {
 function renderAccounts() {
   const markup = budgetAccounts.map(account => `
     <div class="account-manager-row" data-account-id="${esc(account.id)}">
-      <strong>${esc(account.name)}</strong>
+      ${accountEditingId === account.id ? `<form data-account-rename-form data-account-id="${esc(account.id)}" class="account-manager-form"><input name="accountName" maxlength="120" required aria-label="Edit account name" value="${esc(account.name)}"><button type="submit" class="primary">Save</button><button type="button" data-account-action="cancel-rename">Cancel</button></form>` : `<strong>${esc(account.name)}</strong>`}
       <div class="account-manager-actions">
         <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
-        <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" aria-label="Edit ${esc(account.name)} account name" title="Edit account name" ${accountsBusy ? 'disabled' : ''}>&#9998;</button>
+        ${accountEditingId === account.id ? '' : `<button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" aria-label="Edit ${esc(account.name)} account name" title="Edit account name" ${accountsBusy ? 'disabled' : ''}>&#9998;</button>`}
         <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
       </div>
     </div>`).join('');
@@ -1343,6 +1344,7 @@ async function runAccountAction(action, id, value) {
     if (currentUser?.id !== owner) return;
     budgetAccounts = latest;
     accountCreateOpen = false;
+    accountEditingId = null;
     accountStatus('Account changes saved.');
     render();
   } catch (error) {
@@ -1356,6 +1358,12 @@ async function runAccountAction(action, id, value) {
   }
 }
 document.addEventListener('submit', event => {
+  const renameForm = event.target.closest('[data-account-rename-form]');
+  if (renameForm) {
+    event.preventDefault();
+    void runAccountAction('rename', renameForm.dataset.accountId, renameForm.elements.accountName.value.trim());
+    return;
+  }
   const form = event.target.closest('[data-account-form]');
   if (!form) return;
   event.preventDefault();
@@ -1366,6 +1374,11 @@ document.addEventListener('submit', event => {
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-account-action]');
   if (!button || accountsBusy) return;
+  if (button.dataset.accountAction === 'cancel-rename') {
+    accountEditingId = null;
+    renderAccounts();
+    return;
+  }
   if (button.dataset.accountAction === 'start-create') {
     accountCreateOpen = true;
     accountCreateIncluded = true;
@@ -1381,8 +1394,8 @@ document.addEventListener('click', event => {
   const account = budgetAccounts.find(item => item.id === id);
   if (!account) return;
   if (button.dataset.accountAction === 'rename') {
-    const name = prompt('Account name:', account.name);
-    if (name !== null) void runAccountAction('rename', id, name.trim());
+    accountEditingId = id;
+    renderAccounts();
   } else if (button.dataset.accountAction === 'remove') {
     if (confirm('Remove ' + account.name + '? This cannot be undone.')) void runAccountAction('remove', id);
   }
