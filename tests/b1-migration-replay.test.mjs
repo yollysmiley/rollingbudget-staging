@@ -15,12 +15,12 @@ test('B1 replay uses only an isolated localhost database and fails on SQL errors
 });
 
 test('B1 replay enumerates all committed SQL migrations in order', () => {
-  assert.equal(migrationFiles.length, 7);
+  assert.equal(migrationFiles.length, 8);
   assert.match(replay, /find supabase\/migrations/);
   assert.match(replay, /LC_ALL=C sort/);
   assert.match(replay, /migrations\[@\]/);
-  assert.match(replay, /policy_count <> 16/);
-  assert.match(replay, /index_count <> 7/);
+  assert.match(replay, /policy_count <> 20/);
+  assert.match(replay, /index_count <> 9/);
 });
 
 test('B1 workflow is secret-free and does not change existing required CI', () => {
@@ -49,7 +49,8 @@ test('committed account and recurring migration versions match the applied stagi
     '20261114221703_create_budget_accounts.sql',
     '20261115043822_create_budget_recurring_rules.sql',
     '20261116172229_add_recurring_due_day_and_full_dates.sql',
-    '20261117024033_protect_global_recurring_account_refs.sql'
+    '20261117024033_protect_global_recurring_account_refs.sql',
+    '20261117050000_create_budget_expense_categories.sql'
   ];
   assert.deepEqual(migrationFiles, expected);
 });
