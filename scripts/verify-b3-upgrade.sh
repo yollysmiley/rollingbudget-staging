@@ -82,6 +82,7 @@ SQL
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[6]}" >/dev/null
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[7]}" >/dev/null
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[8]}" >/dev/null
+psql -X -v ON_ERROR_STOP=1 -f "${migrations[9]}" >/dev/null
 # Re-applying a forward-only migration must not overwrite existing records.
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[6]}" >/dev/null
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
