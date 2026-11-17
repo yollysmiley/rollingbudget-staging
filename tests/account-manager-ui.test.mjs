@@ -25,7 +25,15 @@ test('browser service modules are published to both staging app routes', () => {
   assert.match(html, /import\('\.\/scripts\/account-storage\.mjs'\)/);
 });
 test('account-aware budget totals are calculated only after accounts load', () => {
-  assert.match(html, /accountBudgetModule = await import\('\.\/scripts\/account-budget\.mjs'\)/);
+  assert.match(html, /const budgetModule = await import\('\.\/scripts\/account-budget\.mjs'\)/);
+  assert.match(html, /accountBudgetModule = budgetModule;/);
+  const start = html.indexOf('async function initializeAccounts() {');
+  const end = html.indexOf('async function runAccountAction(', start);
+  const code = html.slice(start, end);
+  assert.ok(code.indexOf('const accounts = await service.loadOrSeedAccounts') <
+    code.indexOf('accountBudgetModule = budgetModule;'));
+  assert.ok(code.indexOf('accountBudgetModule = budgetModule;') <
+    code.indexOf('accountReadyOwner = owner;'));
   assert.match(html, /accountBudgetModule\.computeAccountBudget\(db\[yrKey\], budgetAccounts\)/);
   assert.match(html, /accountStatus\('Account changes saved\.'\);\s*render\(\)/);
 });
