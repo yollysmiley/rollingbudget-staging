@@ -1029,3 +1029,36 @@ test('desktop save migrates known legacy ordinals without altering expense amoun
   await page.reload();
   await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
 });
+
+test('desktop account rename refuses stale other-device changes and reloads authoritative catalog', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify([{
+      user_id: currentUser.id, id: 'checking', name: 'Checking', included: true,
+      updated_at: '2026-11-01T00:00:00.000Z'
+    }]));
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.id))).toEqual(['checking']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager [data-account-id="checking"]')).toContainText('Checking');
+
+  // Simulate another authorized browser committing between our catalog read and edit.
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_account_rows'));
+    rows[0].name = 'Changed on another device';
+    rows[0].updated_at = '2026-11-02T00:00:00.000Z';
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
+  });
+  page.once('dialog', dialog => dialog.accept('Unsafe local rename'));
+  await page.locator('#desktopAccountsManager [data-account-action="rename"][data-account-id="checking"]').click();
+  await expect(page.locator('#desktopAccountsStatus')).toContainText('Account changed on another device');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows'))[0].name))
+    .toBe('Changed on another device');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
+    .toEqual(['Changed on another device']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager [data-account-id="checking"]')).toContainText('Changed on another device');
+});
