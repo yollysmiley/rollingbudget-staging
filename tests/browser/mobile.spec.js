@@ -935,3 +935,30 @@ test('mobile requires confirmation then blocks deletion referenced by future glo
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
 });
+
+
+test('mobile account deletion cancellation preserves settings and route on refresh', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => {
+    budgetAccounts = [{ id: 'cancel-checking', name: 'Cancel Checking', included: true }];
+    renderAccounts();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  const row = page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="cancel-checking"]');
+  await expect(row).toBeVisible();
+  let prompt;
+  page.once('dialog', async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await row.locator('[data-account-action="remove"]').click();
+  expect(prompt).toContain('Remove Cancel Checking?');
+  expect(prompt).toContain('This cannot be undone');
+  await expect(row).toContainText('Cancel Checking');
+  await expect(page.locator('#mobileAccountsStatus')).not.toContainText('Account changes saved');
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
