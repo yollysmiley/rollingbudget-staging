@@ -1,8 +1,8 @@
 // Expense category definitions are owner-global; budget entries remain year/month scoped.
 // Stable IDs allow renaming without rewriting historical transactions.
 export const BUILTIN_EXPENSE_CATEGORIES = Object.freeze([
-  Object.freeze({ id: 'fixed', name: 'Fixed Expenses', kind: 'fixed', builtin: true }),
-  Object.freeze({ id: 'variable', name: 'Variable & One-Time Expenses', kind: 'variable', builtin: true })
+  Object.freeze({ id: 'fixed', name: 'Fixed Expenses', builtin: true }),
+  Object.freeze({ id: 'variable', name: 'Variable & One-Time Expenses', builtin: true })
 ]);
 
 export function normalizeExpenseCategories(rows = []) {
@@ -12,19 +12,15 @@ export function normalizeExpenseCategories(rows = []) {
   return rows.map(row => {
     const id = typeof row?.id === 'string' ? row.id.trim() : '';
     const name = typeof row?.name === 'string' ? row.name.trim() : '';
-    const kind = row?.kind;
     if (!id || !/^[a-zA-Z0-9_-]{1,80}$/.test(id) || seenIds.has(id)) {
       throw new Error('Expense category IDs must be unique and valid');
     }
     if (!name || name.length > 80 || seenNames.has(name.toLocaleLowerCase())) {
       throw new Error('Expense category names must be nonblank and unique');
     }
-    if (kind !== 'fixed' && kind !== 'variable') {
-      throw new Error('Expense category must be fixed or variable');
-    }
     seenIds.add(id);
     seenNames.add(name.toLocaleLowerCase());
-    return { id, name, kind, builtin: false };
+    return { id, name, builtin: false };
   });
 }
 
