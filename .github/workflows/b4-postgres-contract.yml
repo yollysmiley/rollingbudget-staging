@@ -37,3 +37,5 @@ jobs:
         run: bash scripts/verify-clean-migration-replay.sh
       - name: Test owner isolation and recurring constraints as authenticated
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/verification/verify-b4-postgres-contract.sql
+      - name: Test concurrent recurring reference and account deletion
+        run: bash scripts/verify-b3-account-races.sh
