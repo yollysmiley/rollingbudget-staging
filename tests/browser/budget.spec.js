@@ -229,6 +229,8 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
     await saveDB();
   });
   await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => db[activeYear]?.months?.[0]?.income?.length)).toBe(2);
   await page.evaluate(() => selectMonth(0));
   // The rollover summary row has its own numeric input; target income entry rows only.
   const migratedNames = page.locator('#incomeBody tr:not(.roll-row) input.inline-input:not([type])');
@@ -243,7 +245,8 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
     { name: 'Legacy Pay', accountId: 'usaa', amount: 300, recurringRuleId: 'legacy-rule' }
   ]);
   await page.reload();
-  expect(await read()).toEqual(entries);
+  await expectAuthenticatedBudget(page);
+  await expect.poll(read).toEqual(entries);
   await expect(page.locator('#incomeBody button', { hasText: 'Split income' })).toHaveCount(0);
 });
 
