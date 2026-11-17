@@ -175,3 +175,40 @@ test('date-driven backfill respects start/end dates and never rewrites previousl
   assert.equal(previewRecurringYear(result.document, 2027, [dated]).added, 0);
   assert.deepEqual(source, before);
 });
+
+test('migrated default expense cards receive recurring entries only in unified collection', () => {
+  const source = budget();
+  for (const month of source.months) {
+    month.expenseSchemaVersion = 2;
+    month.expenses = [];
+  }
+  const first = previewRecurringYear(source, 2027, [rule('fixed'), { ...rule('variable'), id: 'food',
+    name: 'Food', versions: rule('variable').versions.map(v => ({ ...v, name: 'Food' })) }]);
+  assert.equal(first.added, 24);
+  assert.equal(first.document.months[0].fixed.length, 0);
+  assert.equal(first.document.months[0].variable.length, 0);
+  assert.deepEqual(first.document.months[0].expenses.map(entry => entry.categoryId), ['fixed', 'variable']);
+  assert.equal(source.months[0].expenses.length, 0);
+  assert.equal(previewRecurringYear(first.document, 2027, [rule('fixed')]).added, 0);
+});
+
+test('recurring duplicate detection checks migrated expense collection', () => {
+  const source = budget();
+  for (const month of source.months) {
+    month.expenseSchemaVersion = 2;
+    month.expenses = [];
+  }
+  source.months[0].expenses.push({ categoryId: 'fixed', name: 'Rent',
+    amount: 500, recurringRuleId: 'rent' });
+  const result = previewRecurringYear(source, 2027, [rule()]);
+  assert.equal(result.added, 11);
+  assert.equal(result.document.months[0].expenses.length, 1);
+});
+
+test('corrupt migrated recurring target fails closed', () => {
+  const source = budget();
+  source.months[0].expenseSchemaVersion = 2;
+  source.months[0].expenses = [];
+  source.months[0].fixed.push({ name: 'Rent', amount: 500 });
+  assert.throws(() => previewRecurringYear(source, 2027, [rule()]), /Invalid migrated/);
+});
