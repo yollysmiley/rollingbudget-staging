@@ -1041,7 +1041,7 @@ test('desktop account rename refuses stale other-device changes and reloads auth
   await expectAuthenticatedBudget(page);
   await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.id))).toEqual(['checking']);
   await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopAccountsManager [data-account-id="checking"]')).toContainText('Checking');
+  await expect(page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]')).toContainText('Checking');
 
   // Simulate another authorized browser committing between our catalog read and edit.
   await page.evaluate(() => {
@@ -1060,7 +1060,7 @@ test('desktop account rename refuses stale other-device changes and reloads auth
   await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
     .toEqual(['Changed on another device']);
   await page.locator('#desktopSettingsButton').click();
-  await expect(page.locator('#desktopAccountsManager [data-account-id="checking"]')).toContainText('Changed on another device');
+  await expect(page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]')).toContainText('Changed on another device');
 });
 
 test('desktop account write never publishes the previous owner catalog after session switch', async ({ page }) => {
