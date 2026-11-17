@@ -5,9 +5,14 @@ export async function mockSignedInBudget(page) {
   await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', route => route.fulfill({
     status: 200, contentType: 'application/javascript', body: `
       window.supabase = { createClient() {
-        const user = { id: 'browser-test-owner', email: 'browser-test@example.invalid' };
+        let user = { id: 'browser-test-owner', email: 'browser-test@example.invalid' };
         let listener;
         const activeUser = () => sessionStorage.getItem('__mock_signed_out') === '1' ? null : user;
+        // Exercise the same authenticated switch callback as the real Supabase SDK.
+        window.__mockSwitchAuthUser = next => {
+          user = { ...next };
+          if (listener) listener('SIGNED_IN', { user });
+        };
         return {
           auth: {
             async getUser() { return { data: { user: activeUser() }, error: null }; },
