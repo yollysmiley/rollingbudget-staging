@@ -86,9 +86,80 @@ test('account removal blocks referenced entries and recurring rules', async () =
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [], recurringRules: [{ acct: 'cpm' }] } }), /Reassign/);
 });
 
-test('last unreferenced account is eligible for removal', async () => {
+function versionedAccountClient(initial, beforeMutation = null) {
+  const rows = structuredClone(initial);
+  const operations = [];
+  const table = {
+    select() {
+      const filters = {};
+      const query = {
+        eq(key, value) { filters[key] = value; return query; },
+        then(resolve, reject) {
+          return Promise.resolve({ data: rows.filter(row => Object.entries(filters).every(([key, value]) =>
+            row[key] === value)).map(row => ({ ...row })), error: null }).then(resolve, reject);
+        }
+      };
+      return query;
+    },
+    update(payload) { return mutation('update', payload); },
+    delete() { return mutation('delete'); }
+  };
+  function mutation(kind, payload) {
+    const filters = {};
+    const query = {
+      eq(key, value) { filters[key] = value; return query; },
+      async select() {
+        if (beforeMutation) beforeMutation({ rows, filters, kind });
+        const found = rows.filter(row => Object.entries(filters).every(([key, value]) => row[key] === value));
+        operations.push({ kind, filters: { ...filters }, affected: found.length });
+        for (const row of found) {
+          if (kind === 'update') Object.assign(row, payload);
+          else rows.splice(rows.indexOf(row), 1);
+        }
+        return { data: found.map(row => ({ id: row.id })), error: null };
+      }
+    };
+    return query;
+  }
+  return { client: { from(tableName) { assert.equal(tableName, 'budget_accounts'); return table; } }, rows, operations };
+}
+
+const priorAccount = () => ({ id: 'custom', name: 'Custom', included: true });
+const savedAccount = () => ({ ...priorAccount(), user_id: 'user-1', updated_at: '2026-11-01T00:00:00.000Z' });
+
+test('account updates use owner and timestamp CAS, and stale catalogs cannot overwrite them', async () => {
+  const { updateAccount } = await import('../scripts/account-storage.mjs');
+  const fixture = versionedAccountClient([savedAccount()]);
+  const before = [priorAccount()];
+  const result = await updateAccount(fixture.client, 'user-1', before, 'custom', { name: 'Renamed' });
+  assert.deepEqual(result, { id: 'custom', name: 'Renamed', included: true });
+  assert.equal(fixture.rows[0].name, 'Renamed');
+  assert.ok(Date.parse(fixture.rows[0].updated_at) > Date.parse('2026-11-01T00:00:00.000Z'));
+  assert.deepEqual(Object.keys(fixture.operations[0].filters), ['user_id', 'id', 'updated_at']);
+  await assert.rejects(updateAccount(fixture.client, 'user-1', before, 'custom', { name: 'Stale' }), /another device/);
+  await assert.rejects(updateAccount(fixture.client, 'other-user', before, 'custom', { name: 'Forbidden' }), /another device/);
+  assert.equal(fixture.rows[0].name, 'Renamed');
+  assert.equal(fixture.operations.length, 1);
+});
+
+test('account edit detects a concurrent update between read and write', async () => {
+  const { updateAccount } = await import('../scripts/account-storage.mjs');
+  const fixture = versionedAccountClient([savedAccount()], ({ rows }) => {
+    rows[0].updated_at = '2026-11-02T00:00:00.000Z';
+  });
+  await assert.rejects(updateAccount(fixture.client, 'user-1', [priorAccount()], 'custom',
+    { included: false }), /another device/);
+  assert.equal(fixture.rows[0].included, true);
+  assert.deepEqual(fixture.operations[0].affected, 0);
+});
+
+test('last unreferenced account is removable only at the expected owner revision', async () => {
   const { deleteAccount } = await import('../scripts/account-storage.mjs');
-  const rows = [{ id: 'custom', name: 'Custom', included: true, user_id: 'user-1' }];
-  const client = { from() { return { delete() { return { eq() { return this; }, select: async () => ({ data: [{ id: 'custom' }], error: null }) }; } }; } };
-  await assert.doesNotReject(() => deleteAccount(client, 'user-1', rows, 'custom', {}));
+  const fixture = versionedAccountClient([savedAccount()]);
+  await assert.doesNotReject(() => deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {}));
+  assert.equal(fixture.rows.length, 0);
+  assert.deepEqual(Object.keys(fixture.operations[0].filters), ['user_id', 'id', 'updated_at']);
+  const stale = versionedAccountClient([{ ...savedAccount(), name: 'Already changed' }]);
+  await assert.rejects(deleteAccount(stale.client, 'user-1', [priorAccount()], 'custom', {}), /another device/);
+  assert.equal(stale.rows.length, 1);
 });
