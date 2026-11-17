@@ -40,8 +40,8 @@ test('category inserts include authenticated owner scope', async () => {
     assert.equal(table, 'budget_expense_categories');
     return { async insert(row) { inserted = row; return { error: null }; } };
   } };
-  await saveExpenseCategory(client, 'owner-a', [], { id: 'groceries', name: 'Groceries', kind: 'variable' });
-  assert.deepEqual(inserted, { user_id: 'owner-a', id: 'groceries', name: 'Groceries', kind: 'variable' });
+  await saveExpenseCategory(client, 'owner-a', [], { id: 'groceries', name: 'Groceries', });
+  assert.deepEqual(inserted, { user_id: 'owner-a', id: 'groceries', name: 'Groceries', kind: null });
 });
 
 test('category deletion refuses unauthenticated access', async () => {
