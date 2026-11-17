@@ -36,8 +36,8 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
-if [[ "${#migrations[@]}" -ne 9 ]]; then
-  echo "Expected nine staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
+if [[ "${#migrations[@]}" -ne 10 ]]; then
+  echo "Expected ten staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
   exit 1
 fi
 for migration in "${migrations[@]}"; do
