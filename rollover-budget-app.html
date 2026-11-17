@@ -874,6 +874,8 @@
       </div>
     </div>
 
+    <div id="customExpenseCards" data-expense-cards="desktop"></div>
+
     <!-- LOANS -->
     <div class="card">
       <div class="card-header">
@@ -1375,7 +1377,7 @@ async function initializeExpenseCategories() {
   } catch (error) {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not load expense categories.';
   }
-  if (currentUser?.id === owner) renderExpenseCategories();
+  if (currentUser?.id === owner) { renderExpenseCategories(); render(); }
 }
 async function confirmDeleteExpenseCategory(id) {
   const owner = currentUser?.id;
@@ -1417,6 +1419,7 @@ async function saveExpenseCategoryAction(action, id, name) {
     expenseCategories = fresh;
     expenseCategoryEditingId = null;
     expenseCategoryMessage = 'Expense category saved.';
+    render();
   } catch (error) {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not save expense category.';
   } finally {
@@ -2367,6 +2370,75 @@ function refreshAccountSelectors() {
   document.querySelectorAll('[data-new-entry-account]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior); });
   document.querySelectorAll('[data-rec-field="account"]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior, false); });
 }
+
+// Custom cards use a single month-scoped expense collection. Legacy default cards
+// continue to read their existing arrays until the migration is independently verified.
+function renderCustomExpenseCards(month) {
+  const target = document.getElementById('customExpenseCards');
+  if (!target) return;
+  const entries = Array.isArray(month.expenses) ? month.expenses : [];
+  target.innerHTML = expenseCategories.map(category => {
+    const rows = entries.map((entry, index) => ({ entry, index }))
+      .filter(item => item.entry.categoryId === category.id);
+    const total = rows.reduce((sum, item) => sum + (budgetAccounts.some(account =>
+      account.id === item.entry.accountId && account.excluded) ? 0 : Number(item.entry.amount) || 0), 0);
+    return `<section class="card" data-custom-expense-card="${esc(category.id)}">
+      <div class="card-header"><h2>${esc(category.name)} <span class="badge">${fmt(total)}</span></h2>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
+      <table><thead><tr><th>Expense</th><th>Due</th><th class="num">Amount</th><th>Account</th><th></th></tr></thead>
+      <tbody>${rows.map(({entry,index}) => `<tr>
+        <td><input class="inline-input" aria-label="Expense name" value="${esc(entry.name)}" onchange="editCustomExpense(${index},'name',this.value)"></td>
+        <td><select aria-label="Due day" onchange="editCustomExpense(${index},'dueDay',this.value)">${dueDayOptions(entry.dueDay ?? null)}</select></td>
+        <td><input class="inline-input num" aria-label="Expense amount" type="number" step="0.01" value="${Number(entry.amount)||0}" onchange="editCustomExpense(${index},'amount',this.value)"></td>
+        <td><select aria-label="Expense account" onchange="editCustomExpense(${index},'accountId',this.value)">${accountOptions(entry.accountId)}</select></td>
+        <td><button type="button" class="del-btn" aria-label="Delete expense" onclick="deleteCustomExpense(${index})">×</button></td>
+      </tr>`).join('')}</tbody></table>
+      <form class="add-row" data-add-custom-expense="${esc(category.id)}">
+        <input name="name" aria-label="New expense name" required maxlength="120" placeholder="Expense name">
+        <select name="dueDay" aria-label="New expense due day">${dueDayOptions(null)}</select>
+        <input name="amount" aria-label="New expense amount" type="number" step="0.01" required placeholder="Amount">
+        <select name="accountId" aria-label="New expense account">${accountOptions(null)}</select>
+        <button type="submit" class="primary">Add</button>
+      </form></section>`;
+  }).join('');
+}
+async function editCustomExpense(index, field, value) {
+  if (!budgetEditAllowed()) return;
+  const entry = db[activeYear]?.months[selectedIdx]?.expenses?.[index];
+  if (!entry) return;
+  if (field === 'dueDay') setEntryDueDay(entry, value);
+  else if (field === 'amount') entry.amount = Number(value) || 0;
+  else if (field === 'accountId') {
+    if (value && !budgetAccounts.some(account => account.id === value)) return;
+    entry.accountId = value || null;
+  } else if (field === 'name') entry.name = value.trim();
+  await saveDB(); render();
+}
+async function deleteCustomExpense(index) {
+  if (!budgetEditAllowed()) return;
+  const entries = db[activeYear]?.months[selectedIdx]?.expenses;
+  if (!Array.isArray(entries) || !entries[index]) return;
+  entries.splice(index, 1);
+  await saveDB(); render();
+}
+document.addEventListener('submit', event => {
+  const form = event.target.closest('[data-add-custom-expense]');
+  if (!form) return;
+  event.preventDefault();
+  if (!budgetEditAllowed()) return;
+  const id = form.dataset.addCustomExpense;
+  if (!expenseCategories.some(category => category.id === id)) return;
+  const name = form.elements.name.value.trim();
+  const amount = Number(form.elements.amount.value);
+  if (!name || !Number.isFinite(amount) || amount < 0) return;
+  const month = db[activeYear].months[selectedIdx];
+  if (!Array.isArray(month.expenses)) month.expenses = [];
+  month.expenses.push({ categoryId: id, name, amount,
+    dueDay: dueDayModule.parseDueDay(form.elements.dueDay.value),
+    accountId: form.elements.accountId.value || null });
+  void saveDB().then(() => render());
+});
+
 function render() {
   if (currentUser && accountReadyOwner !== currentUser.id) return;
   const yearData = db[activeYear];
@@ -2375,6 +2447,7 @@ function render() {
   const computed = computeRolling(activeYear);
   const m = yearData.months[selectedIdx];
   const c = computed[selectedIdx];
+  renderCustomExpenseCards(m);
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
