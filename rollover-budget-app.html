@@ -2353,6 +2353,25 @@ function populateNewDueDaySelectors() {
     if (select && select.options.length === 1) select.innerHTML = dueDayOptions(null);
   }
 }
+// A default card may read legacy arrays or migrated category entries.
+// Preserve source indices so edits always target the underlying saved record.
+function defaultExpenseRows(month, categoryId) {
+  if (month.expenseSchemaVersion === 2) {
+    if (!Array.isArray(month.expenses) || month.fixed.length || month.variable.length) {
+      throw new Error('Invalid migrated expense inventory');
+    }
+    return month.expenses.map((entry, index) => ({ entry, index }))
+      .filter(row => row.entry.categoryId === categoryId);
+  }
+  return month[categoryId].map((entry, index) => ({ entry, index }));
+}
+function defaultExpenseEntry(month, categoryId, index) {
+  if (categoryId !== 'fixed' && categoryId !== 'variable') return null;
+  const entries = month.expenseSchemaVersion === 2 ? month.expenses : month[categoryId];
+  const entry = entries?.[index];
+  if (!entry || (month.expenseSchemaVersion === 2 && entry.categoryId !== categoryId)) return null;
+  return entry;
+}
 function dueDayPicker(type, idx, item) {
   let selected = null, invalid = false;
   try { selected = dueDayModule.dueDayOf(item); }
@@ -2380,7 +2399,9 @@ function accountPicker(type, idx, accountId) {
 async function editEntryAccount(type, idx, accountId) {
   if (!budgetEditAllowed()) return;
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
-  const entry = db[activeYear].months[selectedIdx][type]?.[idx];
+  const month = db[activeYear].months[selectedIdx];
+  const entry = type === 'fixed' || type === 'variable'
+    ? defaultExpenseEntry(month, type, idx) : month[type]?.[idx];
   if (!entry) return;
   entry.accountId = accountId || null;
   await saveDB(); render();
@@ -2618,7 +2639,7 @@ function render() {
   document.getElementById("incomeBody").innerHTML = incHtml;
 
   document.getElementById("fixTotalBadge").textContent = fmt(c.fixedTotal);
-  document.getElementById("fixedBody").innerHTML = m.fixed.map((item, idx) => `
+  document.getElementById("fixedBody").innerHTML = defaultExpenseRows(m, 'fixed').map(({ entry: item, index: idx }) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
       <td>${dueDayPicker("fixed", idx, item)}</td>
@@ -2629,7 +2650,7 @@ function render() {
   `).join("");
 
   document.getElementById("varTotalBadge").textContent = fmt(c.varTotal);
-  document.getElementById("variableBody").innerHTML = m.variable.map((item, idx) => `
+  document.getElementById("variableBody").innerHTML = defaultExpenseRows(m, 'variable').map(({ entry: item, index: idx }) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
       <td>${dueDayPicker("variable", idx, item)}</td>
@@ -2700,7 +2721,8 @@ async function addIncome() {
 }
 async function editExp(type, idx, f, v) {
   if (!budgetEditAllowed()) return;
-  const entry = db[activeYear].months[selectedIdx][type][idx];
+  const entry = defaultExpenseEntry(db[activeYear].months[selectedIdx], type, idx);
+  if (!entry) return;
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'amount' ? parseFloat(v) || 0 : v;
   await saveDB(); render();
@@ -2712,7 +2734,12 @@ async function addExpense(type) {
   const dueDay = dueDayModule.parseDueDay(document.getElementById(p + 'Due').value);
   const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx][type].push({ name, dueDay, amount, accountId: document.getElementById(p + 'Account').value || null });
+  const month = db[activeYear].months[selectedIdx];
+  const entry = { name, dueDay, amount, accountId: document.getElementById(p + 'Account').value || null };
+  if (month.expenseSchemaVersion === 2) {
+    if (!Array.isArray(month.expenses)) return;
+    month.expenses.push({ ...entry, categoryId: type });
+  } else month[type].push(entry);
   document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
   await saveDB(); render();
 }
@@ -2753,7 +2780,16 @@ async function addCC() {
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
-async function delItem(list, idx) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
+async function delItem(list, idx) {
+  if (!budgetEditAllowed()) return;
+  const month = db[activeYear].months[selectedIdx];
+  if ((list === 'fixed' || list === 'variable') && !defaultExpenseEntry(month, list, idx)) return;
+  const entries = (list === 'fixed' || list === 'variable') && month.expenseSchemaVersion === 2
+    ? month.expenses : month[list];
+  if (!Array.isArray(entries) || !entries[idx]) return;
+  entries.splice(idx, 1);
+  await saveDB(); render();
+}
 
 /* Auth Modal & Handlers */
 async function handleAuthClick() {
