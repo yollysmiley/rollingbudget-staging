@@ -1,6 +1,7 @@
 import test from 'node:test';
+import { computeAccountBudget } from '../scripts/account-budget.mjs';
 import assert from 'node:assert/strict';
-import { migrateExpenseMonth, migrateExpenseYear, categoryEntries } from '../scripts/expense-entry-migration.mjs';
+import { migrateExpenseMonth, migrateExpenseYear, categoryEntries, verifyExpenseMigration } from '../scripts/expense-entry-migration.mjs';
 
 test('legacy expenses migrate to stable default category IDs without changing original data', () => {
   const month = { name: 'Jan', fixed: [{ name: 'Rent', amount: 900, accountId: 'a', dueDay: 1 }],
@@ -38,4 +39,31 @@ test('corrupt and ambiguous migrated inventories fail closed', () => {
   assert.throws(() => migrateExpenseMonth({ fixed: null, variable: [] }), /Invalid/);
   assert.throws(() => migrateExpenseMonth({ fixed: [], variable: [], expenses: null }), /Invalid/);
   assert.throws(() => migrateExpenseMonth({ fixed: [{ amount: 2 }], variable: [], expenses: [], expenseSchemaVersion: 2 }), /duplicates/);
+});
+
+test('migration parity gate accepts unchanged financial outcomes', () => {
+  const source = { autoCascade: true, months: [{
+    recordedLeftover: 100, income: [], fixed: [{ amount: 20, dueDay: 5 }],
+    variable: [{ amount: 10, dueDay: 20 }], creditCards: [], loans: []
+  }] };
+  const migrated = migrateExpenseYear(source);
+  assert.equal(verifyExpenseMigration(source, migrated, [], computeAccountBudget), true);
+});
+
+test('migration parity gate rejects changed amounts or missing months', () => {
+  const source = { autoCascade: true, months: [{
+    recordedLeftover: 100, income: [], fixed: [{ amount: 20, dueDay: 5 }],
+    variable: [], creditCards: [], loans: []
+  }] };
+  const migrated = migrateExpenseYear(source);
+  migrated.months[0].expenses[0].amount = 19;
+  assert.throws(() => verifyExpenseMigration(source, migrated, [], computeAccountBudget), /changed budget calculations/);
+  assert.throws(() => verifyExpenseMigration(source, { months: [] }, [], computeAccountBudget), /inventory changed/);
+});
+
+test('mixed default-category data and unknown schema versions are rejected', () => {
+  assert.throws(() => migrateExpenseMonth({ fixed: [], variable: [],
+    expenses: [{ categoryId: 'fixed', amount: 5 }] }), /already exist/);
+  assert.throws(() => migrateExpenseMonth({ fixed: [], variable: [],
+    expenseSchemaVersion: 3 }), /Unsupported/);
 });
