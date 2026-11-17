@@ -77,7 +77,7 @@ BEGIN
 
   SELECT count(*) INTO index_count FROM pg_indexes
   WHERE schemaname = 'public'
-    AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules');
+    AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules','budget_expense_categories');
   IF index_count <> 9 THEN
     RAISE EXCEPTION 'Expected nine budget indexes, found %', index_count;
   END IF;
