@@ -1035,7 +1035,8 @@ function rbDialog(type, message, options = {}) {
         backdrop.removeEventListener('keydown', onKeydown);
         accept.removeEventListener('click', onAccept);
         cancel.removeEventListener('click', onCancel);
-        priorFocus?.isConnected && priorFocus.focus?.();
+        input.oninput = null;
+        if (priorFocus?.isConnected) priorFocus.focus?.();
         release();
         resolve(result);
       };
@@ -1056,7 +1057,8 @@ function rbDialog(type, message, options = {}) {
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       };
-      input.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+      input.setCustomValidity('');
+      input.oninput = () => input.setCustomValidity('');
       accept.addEventListener('click', onAccept);
       cancel.addEventListener('click', onCancel);
       backdrop.addEventListener('keydown', onKeydown);
