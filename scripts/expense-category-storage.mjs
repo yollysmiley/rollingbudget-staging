@@ -26,7 +26,7 @@ export async function saveExpenseCategory(client, userId, categories, input) {
   const validated = createExpenseCategory(categories, input);
   const category = validated.at(-1);
   const { error } = await client.from(tableName).insert({
-    user_id: userId, id: category.id, name: category.name, kind: category.kind
+    user_id: userId, id: category.id, name: category.name, kind: null
   });
   if (error) throw error;
   return category;
@@ -40,7 +40,7 @@ async function currentRevision(client, userId, categories, id) {
   if (error) throw error;
   if (!Array.isArray(data) || data.length !== 1 ||
       data[0].updated_at !== expected.updatedAt ||
-      data[0].name !== expected.name || data[0].kind !== expected.kind) {
+      data[0].name !== expected.name) {
     throw new Error('Category changed on another device; reload');
   }
   return expected.updatedAt;
