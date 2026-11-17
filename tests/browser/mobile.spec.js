@@ -798,8 +798,14 @@ test('mobile plan day selectors use integers and persist after reload', async ({
     return { dueDay: entry.dueDay, hasLegacyDue: Object.hasOwn(entry, 'due') };
   })).toEqual({ dueDay: 22, hasLegacyDue: false });
   await page.reload();
-  await page.locator('#mobileMenuButton').click();
-  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page).toHaveURL(/\\?page=budget(?:&|$)/);
+  await expect(page.locator('body')).toHaveClass(/mobile-tab-plan/);
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('22');
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page.locator('#mobileSidebar')).not.toHaveClass(/open/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
