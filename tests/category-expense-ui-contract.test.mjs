@@ -23,8 +23,8 @@ test('custom cards provide editable names, due dates, amounts and account associ
 test('legacy default expense tables remain intact during incremental rollout', () => {
   assert.match(app, /id="fixedBody"/);
   assert.match(app, /id="variableBody"/);
-  assert.match(app, /m\.fixed\.map/);
-  assert.match(app, /m\.variable\.map/);
+  assert.match(app, /defaultExpenseRows\(m, 'fixed'\)/);
+  assert.match(app, /defaultExpenseRows\(m, 'variable'\)/);
 });
 
 test('default cards preserve migrated source indices for edits, account changes and deletion', () => {
