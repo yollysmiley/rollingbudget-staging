@@ -51,7 +51,8 @@ test('committed account and recurring migration versions match the applied stagi
     '20261116172229_add_recurring_due_day_and_full_dates.sql',
     '20261117024033_protect_global_recurring_account_refs.sql',
     '20261117050000_create_budget_expense_categories.sql',
-    '20261117060000_remove_expense_category_kind.sql'
+    '20261117060000_remove_expense_category_kind.sql',
+    '20261117070000_allow_custom_recurring_categories.sql'
   ];
   assert.deepEqual(migrationFiles, expected);
 });
