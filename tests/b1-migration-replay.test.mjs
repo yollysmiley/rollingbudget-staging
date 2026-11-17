@@ -31,7 +31,7 @@ test('B1 workflow is secret-free and does not change existing required CI', () =
 });
 
 test('B3 migration rejects orphaned references and enforces a validated tenant-safe RESTRICT FK', () => {
-  const migration = readFileSync('supabase/migrations/20261117015000_protect_global_recurring_account_refs.sql', 'utf8');
+  const migration = readFileSync('supabase/migrations/20261117024033_protect_global_recurring_account_refs.sql', 'utf8');
   assert.match(migration, /BEGIN;/);
   assert.match(migration, /account_id IS NOT NULL AND a\.id IS NULL/);
   assert.match(migration, /FOREIGN KEY \(user_id, account_id\)/);
@@ -39,4 +39,17 @@ test('B3 migration rejects orphaned references and enforces a validated tenant-s
   assert.match(migration, /ON DELETE RESTRICT/);
   assert.match(migration, /VALIDATE CONSTRAINT budget_recurring_account_owner_fk/);
   assert.doesNotMatch(migration, /ON DELETE CASCADE|SET NULL/);
+});
+
+test('committed account and recurring migration versions match the applied staging manifest', () => {
+  const expected = [
+    '20261029194718_create_staging_budget_data.sql',
+    '20261114184318_create_budget_ui_years.sql',
+    '20261114192802_harden_public_default_privileges.sql',
+    '20261114221703_create_budget_accounts.sql',
+    '20261115043822_create_budget_recurring_rules.sql',
+    '20261116172229_add_recurring_due_day_and_full_dates.sql',
+    '20261117024033_protect_global_recurring_account_refs.sql'
+  ];
+  assert.deepEqual(migrationFiles, expected);
 });
