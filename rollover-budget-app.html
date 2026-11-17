@@ -1052,6 +1052,8 @@ function selectedYearSessionKey(user = currentUser) {
 let selectedIdx = defaultMonthIndex(activeYear);
 let db = {};
 let budgetAccounts = [];
+// A cloud year must never render before its owner's account catalog is ready.
+let accountReadyOwner = null;
 let accountService = null;
 let accountBudgetModule = null;
 let recurringAppService = null;
@@ -1278,22 +1280,39 @@ async function migrateLoadedIncome() {
   }
 }
 async function initializeAccounts() {
+  const owner = currentUser?.id;
+  if (!owner) return false;
+  accountReadyOwner = null;
+  budgetAccounts = [];
   try {
-    accountService = await import('./scripts/account-storage.mjs');
-    accountBudgetModule = await import('./scripts/account-budget.mjs');
-    accountMigrationModule = await import('./scripts/account-model.mjs');
-    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id, db);
+    const service = await import('./scripts/account-storage.mjs');
+    const budgetModule = await import('./scripts/account-budget.mjs');
+    const migrationModule = await import('./scripts/account-model.mjs');
+    const accounts = await service.loadOrSeedAccounts(supabaseClient, owner, db);
+    if (currentUser?.id !== owner) return false;
+    accountService = service;
+    accountBudgetModule = budgetModule;
+    accountMigrationModule = migrationModule;
+    budgetAccounts = accounts;
     await migrateLoadedIncome();
+    if (currentUser?.id !== owner) return false;
+    accountReadyOwner = owner;
     accountsMessage = '';
     renderAccounts();
+    return true;
   } catch (error) {
     console.error('Accounts could not be loaded or income migrated:', error);
-    renderAccounts();
-    accountStatus('Could not load accounts. Please retry by refreshing the page.');
+    if (currentUser?.id === owner) {
+      accountReadyOwner = null;
+      budgetAccounts = [];
+      renderAccounts();
+      accountStatus('Could not load accounts. Please retry by refreshing the page.');
+    }
+    return false;
   }
 }
 async function runAccountAction(action, id, value) {
-  if (accountsBusy || !accountService || !currentUser) return;
+  if (accountsBusy || !accountService || !currentUser || accountReadyOwner !== currentUser.id) return;
   const owner = currentUser.id;
   accountsBusy = true;
   accountsMessage = '';
@@ -1697,6 +1716,10 @@ function queueCloudSave(key, operation) {
 }
 function budgetEditAllowed() {
   const owner = currentUser?.id;
+  if (owner && accountReadyOwner !== owner) {
+    showCloudSaveStatus('Account data is still loading. Changes are temporarily blocked.');
+    return false;
+  }
   if (owner && reconcilingBudgetYears.has(owner + ':' + activeYear)) {
     showCloudSaveStatus('Reconciliation in progress. Budget changes are blocked; retry when it finishes.');
     return false;
@@ -2080,6 +2103,7 @@ function refreshAccountSelectors() {
   document.querySelectorAll('[data-rec-field="account"]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior, false); });
 }
 function render() {
+  if (currentUser && accountReadyOwner !== currentUser.id) return;
   const yearData = db[activeYear];
   if (!yearData) return;
   // Compute the selected month before rendering either desktop or mobile views.
@@ -2287,6 +2311,7 @@ function render() {
 
 function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
 function selectMonth(idx) {
+  if (currentUser && accountReadyOwner !== currentUser.id) return;
   if (!Number.isInteger(idx) || idx < 0 || idx > 11) return;
   selectedIdx = idx;
   rememberSelectedMonth(activeYear, idx);
