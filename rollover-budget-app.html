@@ -1491,8 +1491,9 @@ async function loadAllYears() {
     const key = selectedYearSessionKey();
     preference = key ? sessionStorage.getItem(key) : null;
   } catch (error) { console.warn('Could not restore budget year preference:', error); }
-  activeYear = preference && Object.hasOwn(db, preference) ? preference :
-    (Object.hasOwn(db, calendarYear) ? calendarYear : Object.keys(db).sort()[0]);
+  const { selectableBudgetYears } = await import('./scripts/year-discovery.mjs');
+  const selectable = selectableBudgetYears(Number(calendarYear));
+  activeYear = preference && selectable.includes(preference) && Object.hasOwn(db, preference) ? preference : calendarYear;
   selectedIdx = restoreSelectedMonth(activeYear);
   if (localStorage.getItem(conflictStorageKey(activeYear)) === '1') {
     showCloudSaveStatus('Unsynced local budget changes require reconciliation before cloud saving.');
@@ -1520,13 +1521,19 @@ const reconcilingBudgetYears = new Set();
 const cloudBudgetVersions = new Map();
 let cloudYearLoadSucceeded = false;
 const cloudBudgetConflicts = new Set();
-function conflictStorageKey(year) { return storageKey(year) + '_cloud_conflict'; }
+function conflictStorageKey(year, owner = currentUser?.id || 'guest') {
+  return STAGING_STORAGE_PREFIX + '_' + owner + '_budget_' + year + '_cloud_conflict';
+}
 function markCloudConflict(key, year) {
+  const owner = key.slice(0, key.lastIndexOf(':'));
+  if (!owner || key !== owner + ':' + year) throw new Error('Invalid conflict owner scope');
   cloudBudgetConflicts.add(key);
-  localStorage.setItem(conflictStorageKey(year), '1');
+  localStorage.setItem(conflictStorageKey(year, owner), '1');
 }
 function clearCloudConflict(key, year) {
-  localStorage.removeItem(conflictStorageKey(year));
+  const owner = key.slice(0, key.lastIndexOf(':'));
+  if (!owner || key !== owner + ':' + year) throw new Error('Invalid conflict owner scope');
+  localStorage.removeItem(conflictStorageKey(year, owner));
   cloudBudgetConflicts.delete(key);
 }
 async function reconcileCloudBudget(useLocal) {
@@ -1580,20 +1587,16 @@ async function reconcileCloudBudget(useLocal) {
       assertUnchanged();
       if (useLocal) {
         const normalizedLocal = dueDayModule.migrateYearDueDays(local.data).year;
-        const nextTimestamp = new Date(Math.max(Date.now(), cloud ? Date.parse(cloud.updated_at) + 1 : 0)).toISOString();
-        if (cloud) {
-          const { data: written, error: writeError } = await supabaseClient.from('budget_ui_years')
-            .update({ budget_data: normalizedLocal, updated_at: nextTimestamp })
-            .eq('user_id', owner).eq('year', Number(year)).eq('updated_at', cloud.updated_at).select('year');
-          if (writeError) throw writeError;
-          if (!Array.isArray(written) || written.length !== 1) throw new Error('Cloud changed again; retry reconciliation');
-        } else {
-          const { error: insertError } = await supabaseClient.from('budget_ui_years').insert({
-            user_id: owner, year: Number(year), budget_data: normalizedLocal, updated_at: nextTimestamp
-          });
-          if (insertError) throw insertError;
-          insertedNewYear = true;
-        }
+        const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');
+        const write = await writeBudgetRevision(supabaseClient, {
+          owner, year, document: normalizedLocal, knownRevision: cloud?.updated_at ?? null,
+          requestedAt: new Date().toISOString()
+        });
+        const nextTimestamp = write.updatedAt;
+        insertedNewYear = write.inserted;
+        // Retain the committed revision even if local state changes during the write.
+        // The conflict marker stays set until the user explicitly reconciles.
+        cloudBudgetVersions.set(key, nextTimestamp);
         // A cloud commit may have succeeded, but never overwrite edits made while awaiting it.
         assertUnchanged();
         localStorage.setItem(budgetKey, JSON.stringify({ data: normalizedLocal, updatedAt: nextTimestamp }));
@@ -1706,25 +1709,14 @@ async function saveDB({ backfillNewYear = true } = {}) {
       if (cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year)) === '1') {
         throw new Error('Budget has unsynced changes; reconcile before saving');
       }
-      const version = cloudBudgetVersions.get(key);
-      const nextTimestamp = new Date(Math.max(Date.parse(updatedAt), version ? Date.parse(version) + 1 : 0)).toISOString();
-      if (version) {
-        const { data, error } = await client.from("budget_ui_years")
-          .update({ budget_data: snapshot, updated_at: nextTimestamp })
-          .eq("user_id", userId).eq("year", Number(year))
-          .eq("updated_at", version).select("year");
-        if (error) throw error;
-        if (!Array.isArray(data) || data.length !== 1) {
-          throw new Error("Budget changed on another device; reload before saving");
-        }
-      } else {
-        // Unique (user_id, year) prevents a concurrent first save from replacing a row.
-        const { error } = await client.from("budget_ui_years").insert({
-          user_id: userId, year: Number(year), budget_data: snapshot, updated_at: nextTimestamp
-        });
-        if (error) throw error;
-        insertedNewYear = true;
-      }
+      if (currentUser?.id !== userId) throw new Error('Account changed while saving budget');
+      const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');
+      const write = await writeBudgetRevision(client, {
+        owner: userId, year, document: snapshot,
+        knownRevision: cloudBudgetVersions.get(key) ?? null, requestedAt: updatedAt
+      });
+      const nextTimestamp = write.updatedAt;
+      insertedNewYear = write.inserted;
       cloudBudgetVersions.set(key, nextTimestamp);
     });
     if (currentUser?.id === userId) {
@@ -1741,7 +1733,7 @@ async function saveDB({ backfillNewYear = true } = {}) {
           recurringPending = true;
         }
       }
-      const pending = localStorage.getItem(conflictStorageKey(year)) === '1';
+      const pending = localStorage.getItem(conflictStorageKey(year, userId)) === '1';
       showCloudSaveStatus(pending ? 'Unsynced local changes require reconciliation before cloud saving.' :
         recurringPending ? 'Budget saved to cloud. Recurring entries are still pending; retry in Recurring Rules.' : dueWarning);
       return recurringPending ? 'cloud-saved-recurring-pending' : 'cloud-saved';
@@ -1942,6 +1934,8 @@ function syncCopyPreviousYearControls() {
 function switchYear(yr) {
   const next = String(yr);
   if (!/^\d{4}$/.test(next) || !Object.hasOwn(db, next)) return;
+  const calendarYear = new Date().getFullYear();
+  if (Number(next) < calendarYear || Number(next) > calendarYear + 2) return;
   activeYear = next;
   selectedIdx = restoreSelectedMonth(activeYear);
   try {
@@ -2570,7 +2564,20 @@ async function backfillSavedRecurringYears(owner, startDate, endDate = null) {
             );
             cloudCommitted = Boolean(result.saved);
             if (currentUser?.id !== owner) return;
-            verifyLocalSnapshot();
+            if (result.saved) cloudBudgetVersions.set(key, result.updatedAt);
+            // Recheck local state after commit; a mismatch remains a conflict.
+            // Never replace newer in-memory edits with the recurring snapshot.
+            if (result.saved) {
+              const raw = localStorage.getItem(storageKey(year));
+              const cached = raw === null ? null : parseLocalBudgetRecord(raw);
+              if (!cached || !recurringAppService.requireRecurringCloudSnapshot({
+                owner, activeOwner: currentUser?.id,
+                cloudRow: { budget_data: source.budget_data, updated_at: source.updated_at },
+                knownRevision: source.updated_at, inMemoryBudget: db[year],
+                cachedBudget: cached.data, hasLocalCache: true,
+                conflicted: cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year)) === '1'
+              })) throw new Error('Local budget changed after recurring cloud commit; reconcile');
+            } else verifyLocalSnapshot();
             if (result.saved) {
               localStorage.setItem(storageKey(year), JSON.stringify({
                 data: result.document, updatedAt: result.updatedAt
@@ -2818,9 +2825,9 @@ function setDesktopSettings(open) {
   if (settings) settings.setAttribute("aria-expanded", String(enabled));
 }
 function syncMobileSettingsControls() {
-  const years = Object.keys(db).filter(year =>
-    /^\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200
-  ).sort((a, b) => Number(a) - Number(b));
+  const currentYear = new Date().getFullYear();
+  const years = [0, 1, 2].map(offset => String(currentYear + offset))
+    .filter(year => Object.hasOwn(db, year));
   for (const id of ['activeYearSelect', 'mobileActiveYearSelect']) {
     const select = document.getElementById(id);
     if (!select) continue;

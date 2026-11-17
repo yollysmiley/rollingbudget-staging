@@ -3,14 +3,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const app = readFileSync(new URL('../../rollover-budget-app.html', import.meta.url), 'utf8');
+const revisions = readFileSync(new URL('../../scripts/budget-revision.mjs', import.meta.url), 'utf8');
 const authenticated = readFileSync(new URL('./authenticated.spec.js', import.meta.url), 'utf8');
 const apiTests = readFileSync(new URL('../../scripts/live-staging-tests.mjs', import.meta.url), 'utf8');
 const workflow = readFileSync(new URL('../../.github/workflows/live-staging-tests.yml', import.meta.url), 'utf8');
 
 test('authenticated tests target the active staging table and dashboard contract', () => {
   assert.match(app, /from\("budget_ui_years"\)\.select\("year,budget_data,updated_at"\)/);
-  assert.match(app, /from\("budget_ui_years"\)\.insert\(/);
-  assert.match(app, /\.eq\("updated_at", version\)\.select\("year"\)/);
+  assert.match(app, /import\('\.\/scripts\/budget-revision\.mjs'\)/);
+  assert.match(app, /writeBudgetRevision\(/);
+  assert.match(revisions, /\.insert\(\{/);
+  assert.match(revisions, /\.eq\('user_id', owner\)\.eq\('year', Number\(year\)\)/);
+  assert.match(revisions, /\.eq\('updated_at', knownRevision\)\.select\('year'\)/);
+  assert.doesNotMatch(revisions, /\.upsert\(/);
   assert.doesNotMatch(app, /from\("budget_ui_years"\)\.upsert\(/);
   assert.match(authenticated, /#incomeBody/);
   assert.match(authenticated, /currentUser\?\.id/);

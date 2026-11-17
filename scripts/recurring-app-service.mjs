@@ -1,5 +1,6 @@
 import { previewRecurringYear } from './recurring-budget-preview.mjs';
 import { normalizeRecurringRule } from './recurring-foundation.mjs';
+import { writeBudgetRevision } from './budget-revision.mjs';
 
 // Load owner-scoped rules; legacy imports are excluded from active scheduling.
 export async function loadRecurringPreviewRules(client, userId) {
@@ -201,15 +202,11 @@ export async function commitRecurringYear(client, userId, year, buildPreview, op
   if (options.canCommit && options.canCommit() !== true) {
     throw new Error('Recurring synchronization was cancelled because local state changed');
   }
-  const updatedAt = new Date(Math.max(Date.now(), Date.parse(source.updated_at) + 1)).toISOString();
-  const { data: written, error: writeError } = await client.from('budget_ui_years')
-    .update({ budget_data: preview.document, updated_at: updatedAt })
-    .eq('user_id', userId).eq('year', Number(year)).eq('updated_at', source.updated_at)
-    .select('year');
-  if (writeError) throw writeError;
-  if (!Array.isArray(written) || written.length !== 1) {
-    throw new Error('Budget changed on another device; reload before applying recurring entries');
-  }
+  const write = await writeBudgetRevision(client, {
+    owner: userId, year, document: preview.document,
+    knownRevision: source.updated_at, requestedAt: new Date().toISOString()
+  });
+  const updatedAt = write.updatedAt;
   return { ...preview, saved: true, updatedAt };
 }
 

@@ -99,6 +99,8 @@ test('mobile sidebar keeps core routes and year selection is outside Settings', 
   await expect(page.locator('.mobile-bottom-nav')).toBeHidden();
   await expect(page.locator('#mobileActiveYearSelect')).toBeVisible();
   await expect(page.locator('#activeYearSelect')).toBeHidden();
+  expect(await page.locator('#mobileActiveYearSelect option').evaluateAll(options => options.map(option => option.value)))
+    .toEqual([0, 1, 2].map(offset => String(new Date().getFullYear() + offset)));
   await page.locator('#mobileMenuButton').click();
   await expect(page.locator('#mobileSidebar')).toBeVisible();
   await expect(page.locator('.mobile-sidebar-nav button')).toHaveText(['Overview', 'Plan', 'Recurring Rules', 'Settings']);

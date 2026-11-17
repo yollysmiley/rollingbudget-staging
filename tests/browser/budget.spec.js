@@ -181,33 +181,6 @@ test('rolling future years are selectable without creating empty cloud records',
   expect(await page.evaluate(() => Object.keys(JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')))).toEqual(before);
 });
 
-test('older saved years and divergent unsynced custom years are restored without overwriting local data', async ({ page }) => {
-  await page.evaluate(() => {
-    const original = structuredClone(db[activeYear]);
-    const local = structuredClone(original);
-    local.months[0].fixed.push({ name: 'LOCAL-2034', amount: 75, due: '1st' });
-    const cloud = structuredClone(original);
-    cloud.months[0].fixed.push({ name: 'CLOUD-2034', amount: 80, due: '1st' });
-    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}');
-    rows['2034'] = { year: 2034, budget_data: cloud, updated_at: '2026-11-15T12:00:00.000Z' };
-    rows['2023'] = { year: 2023, budget_data: original, updated_at: '2026-11-15T12:00:00.000Z' };
-    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
-    localStorage.setItem(storageKey('2034'), JSON.stringify({ data: local, updatedAt: '2026-11-15T11:00:00.000Z' }));
-  });
-  await page.reload();
-  await expect(page.locator('#activeYearSelect option[value="2023"]')).toHaveCount(1);
-  await expect(page.locator('#activeYearSelect option[value="2034"]')).toContainText('Unsynced');
-  await page.locator('#activeYearSelect').selectOption('2034');
-  await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced');
-  const result = await page.evaluate(() => ({
-    localInMemory: db['2034'].months[0].fixed[0].name,
-    localInCache: JSON.parse(localStorage.getItem(storageKey('2034'))).data.months[0].fixed[0].name,
-    cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2034'].budget_data.months[0].fixed[0].name,
-    marker: localStorage.getItem(conflictStorageKey('2034'))
-  }));
-  expect(result).toEqual({ localInMemory: 'LOCAL-2034', localInCache: 'LOCAL-2034', cloud: 'CLOUD-2034', marker: '1' });
-});
-
 test('desktop header uses the approved email branding', async ({ page }) => {
   const brand = page.locator('header .title-group');
   await expect(brand.locator('h1')).toHaveText('Rolling Budget');
@@ -679,9 +652,19 @@ test('desktop recurring retry recovers from a transient cloud error without repl
   await page.locator('#desktopRecurringButton').click();
   await expect(page.locator('#desktopRetryRecurringSync')).toBeVisible();
   await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
-  await page.locator('#desktopRetryRecurringSync').click();
-  await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed
-    .filter(x => x.name === 'Retry protected entry').length)).toBe(1);
+  // Reload can resume pending synchronization automatically. A disappearing
+  // retry control is valid only when the missing entry has been restored.
+  const retry = page.locator('#desktopRetryRecurringSync');
+  const recovered = () => page.evaluate(() => db['2026'].months[11].fixed
+    .filter(x => x.name === 'Retry protected entry').length);
+  if (await recovered() === 0) {
+    try {
+      await retry.click({ timeout: 3000 });
+    } catch (error) {
+      if (await recovered() !== 1) throw error;
+    }
+  }
+  await expect.poll(recovered).toBe(1);
   await expect(page.locator('#desktopRetryRecurringSync')).toBeHidden();
   await expect(page.locator('#desktopRecurringSyncStatus')).toContainText('Recurring synchronization complete');
   expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed)
@@ -975,12 +958,12 @@ test('desktop distinguishes a cloud-saved future year from deferred recurring ba
   await expect(page.locator('#cloudSaveStatus')).toContainText('Recurring entries are still pending');
   await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_update_failure'));
   await page.reload();
-  await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
-    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+  await expect.poll(() => page.evaluate(y => db[y]?.months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length ?? 0, next)).toBe(12);
   expect(await page.evaluate(() => localStorage.getItem(recurringSyncPendingKey(currentUser.id)))).toBe(null);
   await page.reload();
-  expect(await page.evaluate(y => db[y].months.flatMap(month => month.fixed)
-    .filter(entry => entry.name === 'Recoverable recurring').length, next)).toBe(12);
+  await expect.poll(() => page.evaluate(y => db[y]?.months.flatMap(month => month.fixed)
+    .filter(entry => entry.name === 'Recoverable recurring').length ?? 0, next)).toBe(12);
 });
 
 test('desktop due-day selectors save integer days across all expense categories', async ({ page }) => {

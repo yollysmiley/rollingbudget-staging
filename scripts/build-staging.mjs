@@ -21,9 +21,13 @@ replaceOnce('<body>', '<body>\n  <aside role="note" style="padding:10px;text-ali
 
 assert.ok(html.includes('function storageKey(year)'), 'Account-scoped storage is missing');
 assert.ok(html.includes('from("budget_ui_years").select("year,budget_data,updated_at")'), 'Cloud data loading is missing');
-assert.ok(html.includes('from("budget_ui_years").insert('), 'New cloud year insert is missing');
-assert.ok(html.includes('from("budget_ui_years")') && html.includes('.eq("updated_at", version).select("year")'),
-  'Conditional cloud revision saving is missing');
+// Cloud writes are centralized in the shared revision module, not embedded in HTML.
+const revisionSource = readFileSync(new URL('./budget-revision.mjs', import.meta.url), 'utf8');
+assert.ok(html.includes("import('./scripts/budget-revision.mjs')"), 'Shared revision module must be loaded by the app');
+assert.ok(html.includes('writeBudgetRevision('), 'Budget saves must use the shared revision guard');
+assert.match(revisionSource, /\.insert\(\{/, 'New cloud year insert is missing from revision module');
+assert.match(revisionSource, /\.eq\('updated_at', knownRevision\)\.select\('year'\)/,
+  'Conditional cloud revision saving is missing from revision module');
 // Guard both distinct recurring-manager forms in the deployed HTML, not only source tests.
 for (const view of ['desktop', 'mobile']) {
   const form = html.match(new RegExp('data-recurring-form="' + view + '"[^>]*>([\\s\\S]*?)(?:</div>\\s*<div class="recurring-form-actions"|</div>\\s*<button class="primary recurring-mobile-add-button")'));
@@ -44,7 +48,10 @@ assert.ok(html.includes('id="desktopCopyPreviousYear"') && html.includes('id="mo
 assert.ok(!html.includes('data-settings-section="years"') &&
   !html.includes('data-mobile-settings-section="years"'), 'Year submenu must be removed from both Settings views');
 assert.ok(!html.includes('onclick="createNewYear()"'), 'Manual year creation must not return');
-assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year))"), 'Conflict marker cleanup must remain scoped');
+assert.ok(html.includes("localStorage.removeItem(conflictStorageKey(year, owner))") &&
+  html.includes("localStorage.setItem(conflictStorageKey(year, owner), '1')") &&
+  html.includes("key !== owner + ':' + year"),
+  'Conflict marker creation and cleanup must remain scoped to the original owner and year');
 assert.ok(html.includes('function esc(str)') && html.includes('&lt;'), 'HTML text escaping is missing');
 
 let confirmationHtml = readFileSync(new URL('../auth-confirmation.html', import.meta.url), 'utf8');
@@ -94,7 +101,7 @@ writeFileSync('dist/app/styles/settings.css', readFileSync(new URL('../styles/se
 writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
 for (const path of [
-  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs', 'year-discovery.mjs', 'year-plan.mjs', 'due-day.mjs',
+  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs', 'year-discovery.mjs', 'year-plan.mjs', 'due-day.mjs', 'budget-revision.mjs',
   'recurring-foundation.mjs', 'recurring-scheduler.mjs',
   'recurring-budget-preview.mjs', 'recurring-app-service.mjs'
 ]) {

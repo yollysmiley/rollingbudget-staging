@@ -21,9 +21,14 @@ export function localBudgetYears(keys, ownedPrefix) {
   });
 }
 
+// Storage discovery includes historical records for retention and recovery, not navigation.
 export function availableBudgetYears(currentYear, cloudYears, keys, ownedPrefix) {
   const years = [...rollingBudgetYears(currentYear), ...cloudYears.map(String), ...localBudgetYears(keys, ownedPrefix)];
   return [...new Set(years.filter(isBudgetYear))].sort((a, b) => Number(a) - Number(b));
+}
+
+export function selectableBudgetYears(currentYear) {
+  return rollingBudgetYears(currentYear);
 }
 
 // Supabase jsonb may reorder object keys without changing financial content.
