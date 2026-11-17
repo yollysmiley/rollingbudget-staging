@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
@@ -575,8 +576,10 @@ test('desktop edit only fills missing future entries and preserves existing amou
   expect(state.version.amount).toBe(150);
   await expect(page.locator('#desktopRulesList')).toContainText('Scheduled from 2026-12-01');
   await page.reload();
-  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
-    x => x.name === 'Future price edit').map(x => x.amount))).toEqual([150]);
+  await expectAuthenticatedBudget(page);
+  // Cloud year restoration is asynchronous; assert the persisted result after load completes.
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[11]?.fixed.filter(
+    x => x.name === 'Future price edit').map(x => x.amount) ?? [])).toEqual([150]);
 });
 
 test('first edit in a virtual future year saves it and safely applies global recurring rules', async ({ page }) => {
@@ -1028,4 +1031,109 @@ test('desktop save migrates known legacy ordinals without altering expense amoun
   expect(saved.local[1].due).toBeUndefined();
   await page.reload();
   await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
+});
+
+test('desktop rejects budget edits while cloud reconciliation is in flight and survives reload', async ({ page }) => {
+  await holdCloudReconciliation(page);
+  await page.locator('#newVarName').fill('Blocked addition');
+  await page.locator('#newVarDue').selectOption('15');
+  await page.locator('#newVarAmt').fill('800');
+  await page.locator(`button[onclick="addExpense('variable')"]`).click();
+  await page.evaluate(async () => {
+    await editExp('variable', 0, 'amount', '999');
+    await delItem('variable', 0);
+    await updateStartLeftover('400');
+    await setAutoCascade(false);
+  });
+  const during = await page.evaluate(() => {
+    const year = db[activeYear];
+    const cached = JSON.parse(localStorage.getItem(storageKey(activeYear)));
+    return {
+      rows: year.months[0].variable.map(item => [item.name, item.amount]),
+      cachedRows: cached.data.months[0].variable.map(item => [item.name, item.amount]),
+      opening: year.months[0].recordedLeftover,
+      autoCascade: year.autoCascade,
+      locked: reconcilingBudgetYears.has(currentUser.id + ':' + activeYear)
+    };
+  });
+  expect(during).toEqual({
+    rows: [['Protected expense', 25]], cachedRows: [['Protected expense', 25]],
+    opening: 0, autoCascade: true, locked: true
+  });
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation in progress');
+  await finishHeldReconciliation(page);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(() => db[activeYear].months[0].variable.map(item => [item.name, item.amount])))
+    .toEqual([['Protected expense', 25]]);
+  expect(await page.evaluate(() => db[activeYear].months[0].recordedLeftover)).toBe(0);
+});
+
+test('legacy income migration refreshes the source cloud revision for year copy and January projection', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
+    db[y].months[0].income.push({ name: 'Legacy January', cpm: 40, usaa: 60 });
+    db[y].months[11].income.push({ name: 'Legacy December', cpm: 80, usaa: 120 });
+    await saveDB();
+  }, year);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  // Authentication can complete before account migration; wait for committed converted rows.
+  await expect.poll(() => page.evaluate(y =>
+    db[y].months[0].income.map(item => [item.accountId, item.amount]), year))
+    .toEqual([['cpm', 40], ['usaa', 60]]);
+  const migrated = await page.evaluate(y => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[y];
+    return {
+      known: cloudBudgetVersions.get(currentUser.id + ':' + y),
+      remote: row.updated_at,
+      entries: db[y].months[0].income.map(item => [item.accountId, item.amount])
+    };
+  }, year);
+  expect(migrated.known).toBe(migrated.remote);
+  expect(migrated.entries).toEqual([['cpm', 40], ['usaa', 60]]);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].income.length, next)).toBe(2);
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(y => db[y].months[0].income.map(item => item.amount), next)).toEqual([40, 60]);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
+});
+
+test('year planning blocks stale remote revisions even after legacy migration', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
+    db[y].months[11].income.push({ name: 'Legacy December', cpm: 125, usaa: 0 });
+    await saveDB();
+  }, year);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(y => {
+    const row = db[y].months[11].income[0];
+    const remote = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y];
+    return row?.accountId === 'cpm' && row?.amount === 125 &&
+      Boolean(remote && cloudBudgetVersions.get(currentUser.id + ':' + y) === remote.updated_at);
+  }, year)).toBe(true);
+  await page.evaluate(y => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].updated_at = '2099-01-01T00:00:00.000Z';
+    rows[y].budget_data.months[11].income[0].amount = 999;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
+  expect(await page.evaluate(y => db[y].months[0].income, next)).toEqual([]);
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
 });
