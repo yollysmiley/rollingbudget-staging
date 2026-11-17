@@ -1345,7 +1345,7 @@ function renderExpenseCategories() {
   const builtins = [{ id: 'fixed', name: 'Fixed Expenses' }, { id: 'variable', name: 'Variable & One-Time Expenses' }];
   const rows = [...builtins.map(category => `<div class="account-manager-row"><strong>${esc(category.name)}</strong><span>Built-in</span></div>`),
     ...expenseCategories.map(category => `<div class="account-manager-row" data-expense-category-id="${esc(category.id)}">
-      ${expenseCategoryEditingId === category.id ? `<form data-expense-category-rename="${esc(category.id)}" class="account-manager-form"><label>Category name <input name="categoryName" maxlength="80" required value="${esc(category.name)}"></label><button type="submit" class="primary">Save</button><button type="button" data-expense-category-action="cancel">Cancel</button></form>` : `<strong>${esc(category.name)}</strong><span>${esc(category.kind)}</span><button type="button" data-expense-category-action="rename" data-id="${esc(category.id)}" ${expenseCategoryBusy ? 'disabled' : ''}>Rename</button>`}
+      ${expenseCategoryEditingId === category.id ? `<form data-expense-category-rename="${esc(category.id)}" class="account-manager-form"><label>Category name <input name="categoryName" maxlength="80" required value="${esc(category.name)}"></label><button type="submit" class="primary">Save</button><button type="button" data-expense-category-action="cancel">Cancel</button></form>` : `<strong>${esc(category.name)}</strong><span>${esc(category.kind)}</span><button type="button" data-expense-category-action="rename" data-id="${esc(category.id)}" ${expenseCategoryBusy ? 'disabled' : ''}>Rename</button><button type="button" data-expense-category-action="delete" data-id="${esc(category.id)}" ${expenseCategoryBusy ? 'disabled' : ''}>Delete</button>`}
     </div>`)].join('');
   for (const id of ['desktopExpenseCategoriesManager', 'mobileExpenseCategoriesManager']) {
     const el = document.getElementById(id);
@@ -1377,6 +1377,28 @@ async function initializeExpenseCategories() {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not load expense categories.';
   }
   if (currentUser?.id === owner) renderExpenseCategories();
+}
+async function confirmDeleteExpenseCategory(id) {
+  const owner = currentUser?.id;
+  const category = expenseCategories.find(item => item.id === id);
+  if (!category || !owner || expenseCategoryOwner !== owner || expenseCategoryBusy) return;
+  const confirmed = await rbConfirm('Delete expense category "' + category.name + '"? This cannot be undone.', { confirmLabel: 'Delete category', destructive: true });
+  if (!confirmed || currentUser?.id !== owner || expenseCategoryOwner !== owner) return;
+  expenseCategoryBusy = true;
+  expenseCategoryMessage = '';
+  renderExpenseCategories();
+  try {
+    await expenseCategoryService.deleteExpenseCategory(supabaseClient, owner, expenseCategories, id);
+    const fresh = await expenseCategoryService.loadExpenseCategories(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    expenseCategories = fresh;
+    expenseCategoryMessage = 'Expense category deleted.';
+  } catch (error) {
+    if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Category could not be deleted.';
+  } finally {
+    expenseCategoryBusy = false;
+    if (currentUser?.id === owner) renderExpenseCategories();
+  }
 }
 async function saveExpenseCategoryAction(action, id, name, kind) {
   const owner = currentUser?.id;
@@ -1414,6 +1436,7 @@ document.addEventListener('submit', event => {
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-expense-category-action]');
   if (!button || expenseCategoryBusy) return;
+  if (button.dataset.expenseCategoryAction === 'delete') { void confirmDeleteExpenseCategory(button.dataset.id); return; }
   expenseCategoryEditingId = button.dataset.expenseCategoryAction === 'rename' ? button.dataset.id : null;
   renderExpenseCategories();
 });
