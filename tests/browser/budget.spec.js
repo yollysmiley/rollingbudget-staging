@@ -968,6 +968,7 @@ test('failed first cloud save reconciles local plan and backfills recurring rule
   await expect(page.locator('#activeYearSelect')).toHaveValue(next);
   await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
   await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
   await expect.poll(() => page.evaluate(y => db[y].months.flatMap(m => m.fixed)
     .filter(e => e.name === 'Auto rent').length, next)).toBe(12);
