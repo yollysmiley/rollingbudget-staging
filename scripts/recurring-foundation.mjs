@@ -15,7 +15,7 @@ function validMonthDate(value) {
     day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-export function normalizeRecurringRule(rule) {
+export function normalizeRecurringRule(rule, { expenseCategoryIds = [] } = {}) {
   if (!rule || typeof rule !== 'object') throw new TypeError('Rule required');
   const id = typeof rule.id === 'string' ? rule.id.trim() : '';
   if (!id || id.length > 256) throw new Error('Stable rule identifier required');
@@ -26,7 +26,13 @@ export function normalizeRecurringRule(rule) {
   const frequency = rule.frequency ?? 'monthly';
   if (!Object.hasOwn(FREQUENCY_MONTHS, frequency)) throw new Error('Unsupported recurring frequency');
   const category = rule.category;
-  if (!CATEGORIES.has(category)) throw new Error('Unsupported recurring category');
+  if (!Array.isArray(expenseCategoryIds) || expenseCategoryIds.some(id =>
+    typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(id))) {
+    throw new Error('Invalid recurring expense category catalog');
+  }
+  if (!CATEGORIES.has(category) && !expenseCategoryIds.includes(category)) {
+    throw new Error('Unsupported recurring category');
+  }
   const amount = rule.amount;
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) throw new Error('Invalid recurring amount');
   const name = typeof rule.name === 'string' ? rule.name.trim() : '';
