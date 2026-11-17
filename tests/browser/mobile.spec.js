@@ -265,6 +265,25 @@ test('Settings stays coherent when switching between mobile and desktop breakpoi
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
+test('mobile account rename opens inline editor and cancel preserves original name', async ({ page }) => {
+  await page.evaluate(() => {
+    budgetAccounts = [{ id: 'checking', name: 'Checking', included: true }];
+    renderAccounts();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  const manager = page.locator('#mobileSettingsAccounts');
+  await manager.locator('[data-account-action="rename"][data-account-id="checking"]').click();
+  const form = manager.locator('[data-account-rename-form][data-account-id="checking"]');
+  await expect(form).toBeVisible();
+  await form.locator('input[name="accountName"]').fill('Checking updated');
+  await form.locator('[data-account-action="cancel-rename"]').click();
+  await expect(manager.locator('[data-account-rename-form]')).toHaveCount(0);
+  await expect(manager.locator('.account-manager-row[data-account-id="checking"]')).toContainText('Checking');
+  await expect(manager.locator('.account-manager-row[data-account-id="checking"]')).not.toContainText('Checking updated');
+});
+
 test('mobile account creation is gated behind Add account and supports exclusion', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#mobileMenuButton').click();
