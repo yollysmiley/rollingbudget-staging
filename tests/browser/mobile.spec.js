@@ -803,3 +803,41 @@ test('mobile plan day selectors use integers and persist after reload', async ({
   await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('22');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
+
+test('mobile account deletion refuses stale remote revisions without dropping account on reload', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify([{
+      user_id: currentUser.id, id: 'checking', name: 'Checking', included: true,
+      updated_at: '2026-11-01T00:00:00.000Z'
+    }]));
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.id))).toEqual(['checking']);
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsAccounts [data-account-id="checking"]')).toContainText('Checking');
+
+  // Simulate another browser updating this same account since the catalog was loaded.
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_account_rows'));
+    rows[0].updated_at = '2026-11-02T00:00:00.000Z';
+    rows[0].included = false;
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#mobileSettingsAccounts [data-account-action="remove"][data-account-id="checking"]').click();
+  await expect(page.locator('#mobileAccountsStatus')).toContainText('Account changed on another device');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows')).length)).toBe(1);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => [account.id, account.included])))
+    .toEqual([['checking', false]]);
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsAccounts [data-account-id="checking"]')).toBeVisible();
+});
