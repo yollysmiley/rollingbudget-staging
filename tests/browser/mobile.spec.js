@@ -813,3 +813,31 @@ test('mobile plan day selectors use integers and persist after reload', async ({
   await expect(page.locator('#mobileSidebar')).not.toHaveClass(/open/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
+
+
+test('mobile requires confirmation then blocks deletion referenced by future global rules', async ({ page }) => {
+  await page.evaluate(() => {
+    budgetAccounts = [{ id: 'checking', name: 'Checking', included: true }];
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      user_id: currentUser.id, id: 'future-reference', account_id: 'checking',
+      active: true, start_date: '2029-12-15'
+    }]));
+    renderAccounts();
+  });
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  const accountRow = page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]');
+  const remove = accountRow.locator('[data-account-action="remove"]');
+  await expect(accountRow).toContainText('Checking');
+  page.once('dialog', dialog => dialog.dismiss());
+  await remove.click();
+  await expect(accountRow).toBeVisible();
+  await expect(page.locator('#mobileAccountsStatus')).not.toContainText('Account changes saved');
+  page.once('dialog', dialog => dialog.accept());
+  await remove.click();
+  await expect(page.locator('#mobileAccountsStatus')).toContainText('Reassign or remove global recurring rules');
+  await expect(accountRow).toContainText('Checking');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
+});
