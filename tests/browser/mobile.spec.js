@@ -285,7 +285,9 @@ test('mobile automatic recurring backfill persists across desktop layout and rel
   await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.reload();
-  expect(await page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() =>
+    db['2026']?.months?.[0]?.fixed.filter(x => x.name === 'Verified expense').length ?? 0)).toBe(1);
 });
 test('mobile recurring cloud failure does not add unsaved occurrences', async ({ page }) => {
   await page.evaluate(() => sessionStorage.setItem('__mock_budget_cloud_failure', '1'));
@@ -818,7 +820,7 @@ test('mobile account deletion refuses stale remote revisions without dropping ac
   await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
   await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
-  await expect(page.locator('#mobileSettingsAccounts [data-account-id="checking"]')).toContainText('Checking');
+  await expect(page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]')).toContainText('Checking');
 
   // Simulate another browser updating this same account since the catalog was loaded.
   await page.evaluate(() => {
@@ -839,5 +841,5 @@ test('mobile account deletion refuses stale remote revisions without dropping ac
   await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
   await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
-  await expect(page.locator('#mobileSettingsAccounts [data-account-id="checking"]')).toBeVisible();
+  await expect(page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]')).toBeVisible();
 });
