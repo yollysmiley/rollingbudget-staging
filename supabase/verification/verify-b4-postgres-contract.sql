@@ -15,7 +15,8 @@ VALUES ('00000000-0000-4000-8000-000000000101', 2028, '{}'::jsonb),
        ('00000000-0000-4000-8000-000000000202', 2028, '{}'::jsonb);
 INSERT INTO public.budget_accounts (user_id, id, name)
 VALUES ('00000000-0000-4000-8000-000000000101', 'test-checking', 'Test Checking A'),
-       ('00000000-0000-4000-8000-000000000202', 'test-checking', 'Test Checking B');
+       ('00000000-0000-4000-8000-000000000202', 'test-checking', 'Test Checking B'),
+       ('00000000-0000-4000-8000-000000000202', 'other-only', 'Foreign Owner Only');
 INSERT INTO public.budget_recurring_rules
   (user_id, id, name, category, amount, frequency, start_date, end_date, due_day, versions)
 VALUES
@@ -144,6 +145,50 @@ BEGIN
 END
 $dates$;
 
+-- B3 contract: cross-owner account IDs and deletion races must be denied
+-- by PostgreSQL even when an application-side preflight has become stale.
+DO $account_refs$
+DECLARE
+  rejected boolean;
+  count_int integer;
+BEGIN
+  rejected := false;
+  BEGIN
+    INSERT INTO public.budget_recurring_rules
+      (user_id,id,name,category,amount,frequency,start_date,versions,account_id)
+    VALUES
+      ('00000000-0000-4000-8000-000000000101','cross-owner-reference','Cross-owner reference',
+       'fixed',25,'monthly','2028-01-15','[]'::jsonb,'other-only');
+  EXCEPTION WHEN foreign_key_violation THEN rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'Composite FK permitted another owner account'; END IF;
+
+  rejected := false;
+  BEGIN
+    DELETE FROM public.budget_accounts
+    WHERE user_id='00000000-0000-4000-8000-000000000101'
+      AND id='test-checking';
+  EXCEPTION WHEN foreign_key_violation THEN rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'Referenced account was deleted'; END IF;
+
+  SELECT count(*) INTO count_int FROM public.budget_accounts
+  WHERE user_id='00000000-0000-4000-8000-000000000101' AND id='test-checking';
+  IF count_int <> 1 THEN RAISE EXCEPTION 'Failed deletion changed referenced account'; END IF;
+  SELECT count(*) INTO count_int FROM public.budget_recurring_rules
+  WHERE user_id='00000000-0000-4000-8000-000000000101'
+    AND id='month-end-rule' AND account_id='test-checking';
+  IF count_int <> 1 THEN RAISE EXCEPTION 'Failed deletion changed the recurring rule'; END IF;
+
+  INSERT INTO public.budget_accounts(user_id,id,name)
+  VALUES ('00000000-0000-4000-8000-000000000101','no-rules','Unreferenced A');
+  DELETE FROM public.budget_accounts
+  WHERE user_id='00000000-0000-4000-8000-000000000101' AND id='no-rules';
+  GET DIAGNOSTICS count_int = ROW_COUNT;
+  IF count_int <> 1 THEN RAISE EXCEPTION 'Unreferenced account cannot be deleted'; END IF;
+END
+$account_refs$;
+
 RESET ROLE;
 ROLLBACK;
-SELECT 'B4 PostgreSQL RLS and recurring date contract passed' AS result;
+SELECT 'B4 PostgreSQL RLS, date, and B3 account FK contracts passed' AS result;

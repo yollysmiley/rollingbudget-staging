@@ -86,7 +86,7 @@ test('account removal blocks referenced entries and recurring rules', async () =
   await assert.rejects(() => deleteAccount(mockClient().client, 'user-1', accounts, 'cpm', { 2026: { months: [], recurringRules: [{ acct: 'cpm' }] } }), /Reassign/);
 });
 
-function versionedAccountClient(initial, beforeMutation = null) {
+function versionedAccountClient(initial, beforeMutation = null, options = {}) {
   const rows = structuredClone(initial);
   const operations = [];
   const table = {
@@ -110,6 +110,10 @@ function versionedAccountClient(initial, beforeMutation = null) {
       eq(key, value) { filters[key] = value; return query; },
       async select() {
         if (beforeMutation) beforeMutation({ rows, filters, kind });
+        if (kind === 'delete' && options.deletionError) {
+          operations.push({ kind, filters: { ...filters }, affected: 0 });
+          return { data: [], error: options.deletionError };
+        }
         const found = rows.filter(row => Object.entries(filters).every(([key, value]) => row[key] === value));
         operations.push({ kind, filters: { ...filters }, affected: found.length });
         for (const row of found) {
@@ -121,7 +125,27 @@ function versionedAccountClient(initial, beforeMutation = null) {
     };
     return query;
   }
-  return { client: { from(tableName) { assert.equal(tableName, 'budget_accounts'); return table; } }, rows, operations };
+  const recurringTable = {
+    select(fields) {
+      assert.equal(fields, 'id');
+      const filters = {};
+      const query = {
+        eq(key, value) { filters[key] = value; return query; },
+        then(resolve, reject) {
+          const data = (options.rules || []).filter(rule =>
+            Object.entries(filters).every(([key, value]) => rule[key] === value))
+            .map(rule => ({ id: rule.id }));
+          return Promise.resolve({ data, error: options.rulesError || null }).then(resolve, reject);
+        }
+      };
+      return query;
+    }
+  };
+  return { client: { from(tableName) {
+    if (tableName === 'budget_recurring_rules') return recurringTable;
+    assert.equal(tableName, 'budget_accounts');
+    return table;
+  } }, rows, operations };
 }
 
 const priorAccount = () => ({ id: 'custom', name: 'Custom', included: true, updatedAt: '2026-11-01T00:00:00.000Z' });
@@ -173,4 +197,57 @@ test('account edits reject a stale revision even when a remote change restores i
     'custom', { included: false }), /another device/);
   assert.equal(fixture.rows[0].included, true);
   assert.equal(fixture.operations.length, 0);
+});
+
+test('global recurring dependencies block account removal regardless of disabled, future or historical status', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const cases = [
+    { id: 'disabled-rule', active: false, start_date: '2026-01-15' },
+    { id: 'future-rule', active: true, start_date: '2029-12-31' },
+    { id: 'historical-rule', active: false, source_year: 2024 }
+  ];
+  for (const rule of cases) {
+    const fixture = versionedAccountClient([savedAccount()], null, {
+      rules: [{ ...rule, user_id: 'user-1', account_id: 'custom' }]
+    });
+    await assert.rejects(
+      deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {}),
+      /Reassign or remove global recurring rules/
+    );
+    assert.equal(fixture.operations.length, 0);
+    assert.equal(fixture.rows.length, 1);
+  }
+});
+
+test('global rule preflight is owner scoped and preserves unreferenced account deletion', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const fixture = versionedAccountClient([savedAccount()], null, {
+    rules: [{ user_id: 'other-owner', account_id: 'custom', id: 'foreign-rule' }]
+  });
+  await deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {});
+  assert.equal(fixture.rows.length, 0);
+  assert.deepEqual(Object.keys(fixture.operations[0].filters), ['user_id', 'id', 'updated_at']);
+});
+
+test('failed global rule lookup fails closed without deleting account', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const fixture = versionedAccountClient([savedAccount()], null, {
+    rulesError: new Error('recurring catalog unavailable')
+  });
+  await assert.rejects(deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {}),
+    /recurring catalog unavailable/);
+  assert.equal(fixture.operations.length, 0);
+  assert.equal(fixture.rows.length, 1);
+});
+
+test('concurrent recurring reference FK violation aborts account delete without partial changes', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const fixture = versionedAccountClient([savedAccount()], null, {
+    deletionError: Object.assign(new Error('foreign key violation'), { code: '23503' })
+  });
+  await assert.rejects(deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {}),
+    /Reassign or remove global recurring rules/);
+  assert.equal(fixture.operations.length, 1);
+  assert.equal(fixture.rows.length, 1);
+  assert.equal(fixture.rows[0].id, 'custom');
 });

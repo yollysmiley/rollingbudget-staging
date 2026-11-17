@@ -36,8 +36,8 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
-if [[ "${#migrations[@]}" -ne 6 ]]; then
-  echo "Expected six staging migrations; found ${#migrations[@]}. Review the replay manifest." >&2
+if [[ "${#migrations[@]}" -ne 7 ]]; then
+  echo "Expected seven staging migrations including B3; found ${#migrations[@]}. Review the replay manifest." >&2
   exit 1
 fi
 for migration in "${migrations[@]}"; do
@@ -96,6 +96,15 @@ BEGIN
     WHERE conrelid = 'public.budget_recurring_rules'::regclass
       AND conname = 'recurring_dates_valid') THEN
     RAISE EXCEPTION 'Missing recurring date ordering constraint';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.budget_recurring_rules'::regclass
+      AND conname = 'budget_recurring_account_owner_fk'
+      AND contype = 'f'
+      AND convalidated
+      AND confdeltype = 'r'
+      AND confrelid = 'public.budget_accounts'::regclass) THEN
+    RAISE EXCEPTION 'Missing validated tenant-safe recurring-account FK';
   END IF;
 END $$;
 SQL
