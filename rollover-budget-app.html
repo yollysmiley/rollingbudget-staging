@@ -2377,11 +2377,12 @@ function renderCustomExpenseCards(month) {
   const target = document.getElementById('customExpenseCards');
   if (!target) return;
   const entries = Array.isArray(month.expenses) ? month.expenses : [];
+  if (currentUser && expenseCategoryOwner !== currentUser.id) { target.innerHTML = ''; return; }
   target.innerHTML = expenseCategories.map(category => {
     const rows = entries.map((entry, index) => ({ entry, index }))
       .filter(item => item.entry.categoryId === category.id);
     const total = rows.reduce((sum, item) => sum + (budgetAccounts.some(account =>
-      account.id === item.entry.accountId && account.excluded) ? 0 : Number(item.entry.amount) || 0), 0);
+      account.id === item.entry.accountId && account.included === false) ? 0 : Number(item.entry.amount) || 0), 0);
     return `<section class="card" data-custom-expense-card="${esc(category.id)}">
       <div class="card-header"><h2>${esc(category.name)} <span class="badge">${fmt(total)}</span></h2>
       <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
