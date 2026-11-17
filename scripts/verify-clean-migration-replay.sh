@@ -36,8 +36,8 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
-if [[ "${#migrations[@]}" -ne 7 ]]; then
-  echo "Expected seven staging migrations including B3; found ${#migrations[@]}. Review the replay manifest." >&2
+if [[ "${#migrations[@]}" -ne 8 ]]; then
+  echo "Expected eight staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
   exit 1
 fi
 for migration in "${migrations[@]}"; do
@@ -55,18 +55,18 @@ BEGIN
   SELECT count(*) INTO table_count FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND c.relkind = 'r'
-    AND c.relname IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules')
+    AND c.relname IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules','budget_expense_categories')
     AND c.relrowsecurity;
-  IF table_count <> 4 THEN
-    RAISE EXCEPTION 'Expected four RLS-enabled budget tables, found %', table_count;
+  IF table_count <> 5 THEN
+    RAISE EXCEPTION 'Expected five RLS-enabled budget tables, found %', table_count;
   END IF;
 
   SELECT count(*) INTO policy_count FROM pg_policies
   WHERE schemaname = 'public'
     AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules')
     AND roles = ARRAY['authenticated']::name[];
-  IF policy_count <> 16 THEN
-    RAISE EXCEPTION 'Expected 16 authenticated owner policies, found %', policy_count;
+  IF policy_count <> 20 THEN
+    RAISE EXCEPTION 'Expected 20 authenticated owner policies, found %', policy_count;
   END IF;
 
   IF EXISTS (SELECT 1 FROM pg_policies
@@ -78,8 +78,8 @@ BEGIN
   SELECT count(*) INTO index_count FROM pg_indexes
   WHERE schemaname = 'public'
     AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules');
-  IF index_count <> 7 THEN
-    RAISE EXCEPTION 'Expected seven budget indexes, found %', index_count;
+  IF index_count <> 9 THEN
+    RAISE EXCEPTION 'Expected nine budget indexes, found %', index_count;
   END IF;
 
   IF EXISTS (SELECT 1 FROM pg_constraint
