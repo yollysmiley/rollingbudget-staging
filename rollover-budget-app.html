@@ -1366,6 +1366,7 @@ async function initializeExpenseCategories() {
   expenseCategories = [];
   expenseCategoryMessage = '';
   renderExpenseCategories();
+  renderRecurringCategoryOptions();
   if (!owner) return;
   try {
     const service = await import('./scripts/expense-category-storage.mjs');
@@ -1377,7 +1378,7 @@ async function initializeExpenseCategories() {
   } catch (error) {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not load expense categories.';
   }
-  if (currentUser?.id === owner) { renderExpenseCategories(); render(); }
+  if (currentUser?.id === owner) { renderExpenseCategories(); renderRecurringCategoryOptions(); render(); }
 }
 async function confirmDeleteExpenseCategory(id) {
   const owner = currentUser?.id;
@@ -1398,7 +1399,7 @@ async function confirmDeleteExpenseCategory(id) {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Category could not be deleted.';
   } finally {
     expenseCategoryBusy = false;
-    if (currentUser?.id === owner) renderExpenseCategories();
+    if (currentUser?.id === owner) { renderExpenseCategories(); renderRecurringCategoryOptions(); }
   }
 }
 async function saveExpenseCategoryAction(action, id, name) {
@@ -2904,6 +2905,23 @@ function openRecurringModal(){
   toggleRecFields();renderRulesList();renderRecurringSyncStatus();document.body.classList.add("recurring-manager-open");
 }
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
+function renderRecurringCategoryOptions() {
+  const ownerReady = currentUser && expenseCategoryOwner === currentUser.id;
+  for (const select of document.querySelectorAll('[data-recurring-form] [data-rec-field="category"]')) {
+    const selected = select.value;
+    select.querySelectorAll('option[data-custom-category]').forEach(option => option.remove());
+    if (ownerReady) {
+      for (const category of expenseCategories) {
+        const option = document.createElement('option');
+        option.value = category.id;
+        option.textContent = category.name;
+        option.dataset.customCategory = 'true';
+        select.appendChild(option);
+      }
+    }
+    if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  }
+}
 function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
 function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.displayFrequency || rule.frequency]?.label||"Monthly (legacy)";}
 function nextRecurringEffectiveMonth(rule) {
