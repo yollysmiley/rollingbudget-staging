@@ -1329,3 +1329,13 @@ test('desktop account deletion cancellation preserves the account and settings r
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
 });
+
+
+test('desktop expense category settings section has its own navigation state', async ({ page }) => {
+  await page.goto('rollover-budget-app.html?page=settings');
+  await page.locator('[data-settings-section="categories"]').click();
+  await expect(page.locator('#settingsCategories')).toBeVisible();
+  await expect(page.locator('#settingsAccounts')).toBeHidden();
+  await expect(page.locator('[data-settings-section="categories"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#mobileSettingsPanel')).toBeHidden();
+});
