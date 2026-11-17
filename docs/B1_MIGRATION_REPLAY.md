@@ -13,7 +13,33 @@ This PR adds a **secret-free, disposable PostgreSQL 17** GitHub Actions check. I
 | 20261115043000_create_budget_recurring_rules.sql | **20261115043822** |
 | 20261116172229_add_recurring_due_day_and_full_dates.sql | 20261116172229 |
 
-The two version discrepancies are **not** corrected by renaming previously applied files. The applied account and recurring-rule SQL statements were inspected and match the repository statements apart from formatting/comment differences. Exact historical checksums cannot be reconstructed from the migration-history API alone; preserve the recorded staging history.
+The two version discrepancies are **not** corrected by renaming previously applied files. The applied account and recurring-rule SQL statements were inspected and match the repository statements apart from formatting/comment differences. These are the applied statement-array digests exposed by the staging migration-history table (read-only query); they are **not** hashes of the original migration files or a substitute for comparing SQL semantics. Preserve the recorded staging history.
+
+
+## Applied staging statement fingerprints
+
+Read-only snapshot of `supabase_migrations.schema_migrations` (2026-11-16 UTC). Each applied migration has one recorded statement. The digest is `md5(array_to_string(statements, E'\\n'))`, which is reproducible from the *stored statement array* but is not a checksum of the repository file bytes.
+
+| Staging version | Applied-statement MD5 |
+| --- | --- |
+| 20261029194718 | `1c6abf6438d2bcdbd491e5834e6d2ded` |
+| 20261114184318 | `7170a14d1024a0af6cf73dafe166e097` |
+| 20261114192802 | `69acd09ce8bc8d1d83ec0e61857a45c9` |
+| 20261114221703 | `b2eab2f8e2907c8024b067876d9e856d` |
+| 20261115043822 | `3fadc29eb5281d7cea83626e6c07a640` |
+| 20261116172229 | `29bc9155f2b372256ad34d93c44cd3b6` |
+
+Re-run the same read-only inventory before any history reconciliation. Never assume a mismatched version identifies missing schema changes: verify the actual applied statements and schema contract.
+
+## Non-destructive repair and rollback procedure
+
+1. **Freeze and inventory:** record staging migration versions, statement fingerprints, live schema objects, constraints, indexes, and RLS policies before changes. Keep a database backup/recovery plan that preserves user budget records.
+2. **Reproduce on a disposable database:** run the six committed migrations in order using this replay workflow. Compare the resulting schema contract and the semantically corresponding staging-applied SQL; investigate any difference before adding B2/B3 constraints.
+3. **Resolve history differences without rewriting applied records:** retain the existing staging `schema_migrations` versions `20261114221703` and `20261115043822`. Do not rename old applied migrations or delete/update staging history to force CLI alignment. If a structural difference is confirmed, introduce a separately reviewed **forward-only, idempotent** migration with a new version.
+4. **Rollback if a new migration fails:** stop deployment; preserve original data, diagnose the failing statement, and prefer a reviewed forward fix when possible. For unrecoverable destructive changes, use a verified database restore to a recovery point rather than attempting ad hoc history edits. Verify RLS/ownership after recovery.
+5. **B2/B3/B4 gate:** replay each proposed new migration in this empty database, validate populated-data migration cases in staging-safe tests, and independently verify real cross-user RLS and account references before applying constraints to staging.
+
+This procedure does not claim that the disposable PostgreSQL shim tests the full Supabase platform or restores user budget data.
 
 ## Scope and limitations
 
