@@ -1083,6 +1083,7 @@ const STAGING_STORAGE_PREFIX = "YOUR_STAGING_STORAGE_PREFIX";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 let supabaseClient = null;
 let currentUser = null;
+let uiSignOutInProgress = false;
 let isSignUpMode = false;
 let isPasswordResetMode = false;
 
@@ -1662,7 +1663,8 @@ async function initApp() {
       ensureRecurringSyncOwner(null);
       db = {};
       document.documentElement.classList.remove("budget-authenticated");
-      window.location.replace(home);
+      // UI logout redirects only after Supabase has cleared its session.
+      if (!uiSignOutInProgress) window.location.replace(home);
       return;
     }
     if (session.user.id !== currentUser?.id) {
@@ -2797,7 +2799,20 @@ async function delItem(list, idx) {
 async function handleAuthClick() {
   if (currentUser) {
     if (await rbConfirm('Sign out of your account?', { acceptLabel: 'Sign out' })) {
-      if (supabaseClient) supabaseClient.auth.signOut();
+      if (!supabaseClient || uiSignOutInProgress) return;
+      uiSignOutInProgress = true;
+      try {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) throw error;
+        const home = window.location.pathname.endsWith("/rollover-budget-app.html")
+          ? new URL("./", window.location.href).href
+          : new URL("../", window.location.href).href;
+        window.location.replace(home);
+      } catch (error) {
+        uiSignOutInProgress = false;
+        setAuthMessage("Sign out failed. Please try again.");
+        document.getElementById("authModal").classList.add("open");
+      }
     }
   } else {
     showSignInMode();
