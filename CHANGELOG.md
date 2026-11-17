@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Phase 1 release baseline corrections: reconcile three expense-category SQL filenames with applied staging migration versions (20261117071635, 20261117071637, 20261117071639) without changing SQL or deployed databases; update the exact migration-manifest regression and CI responsibility documentation. No production changes. CI execution and branch-protection verification remain pending.
+
 - Phase A2: share owner/year-scoped optimistic cloud revision writes between regular budget saves and explicit reconciliation; reject stale revisions, preserve insert-only first saves, and add revision contract unit tests. No schema or UI changes.\n- Phase A1 test correction: remove obsolete historical-year navigation scenario; retain rolling three-year desktop/mobile coverage and independent cloud-conflict preservation tests.\n- Phase A1 (staging, pending validation): restrict desktop/mobile year selection and session restoration to current calendar year plus two future years, while retaining historical/cloud conflict records for recovery; align unit and browser regressions.\n
 
 - PR #71 Phase 5 migration-history reconciliation: align three staging SQL filenames with already-applied Supabase migration versions (accounts 20261114221703, recurring rules 20261115043822, B3 account protection 20261117024033). SQL contents and live database/history remain unchanged; add exact manifest regression coverage. Verified staging columns, constraints and owner-scoped policies before repository-only rename. Live credentialed acceptance remains pending after a failed workflow run.
