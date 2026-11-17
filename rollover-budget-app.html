@@ -1688,6 +1688,14 @@ function queueCloudSave(key, operation) {
   }).catch(() => {});
   return pending;
 }
+function budgetEditAllowed() {
+  const owner = currentUser?.id;
+  if (owner && reconcilingBudgetYears.has(owner + ':' + activeYear)) {
+    showCloudSaveStatus('Reconciliation in progress. Budget changes are blocked; retry when it finishes.');
+    return false;
+  }
+  return true;
+}
 async function saveDB({ backfillNewYear = true } = {}) {
   const year = activeYear;
   const userId = currentUser?.id || null;
@@ -1805,6 +1813,7 @@ async function verifiedYearPlanSource(owner, year) {
 // target while the other is awaiting a cloud save or recurring backfill.
 let yearPlanActionBusy = false;
 async function persistYearPlanChange(owner, year, updated, localOnlyMessage) {
+  if (!budgetEditAllowed()) return 'not-saved';
   const original = db[year];
   db[year] = updated;
   const status = await saveDB();
@@ -2052,6 +2061,7 @@ function accountPicker(type, idx, accountId) {
   return '<select aria-label="Account for ' + esc(type) + ' entry" onchange="editEntryAccount(&quot;' + type + '&quot;,' + idx + ',this.value)">' + accountOptions(accountId) + '</select>';
 }
 async function editEntryAccount(type, idx, accountId) {
+  if (!budgetEditAllowed()) return;
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
   const entry = db[activeYear].months[selectedIdx][type]?.[idx];
   if (!entry) return;
@@ -2281,11 +2291,13 @@ document.getElementById("autoRollToggle").addEventListener("change", (e) => {
 });
 
 async function updateStartLeftover(val) {
+  if (!budgetEditAllowed()) return;
   db[activeYear].months[selectedIdx].recordedLeftover = parseFloat(val) || 0;
   await saveDB(); render();
 }
-async function editInc(idx, f, v) { db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
+async function editInc(idx, f, v) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
 async function addIncome() {
+  if (!budgetEditAllowed()) return;
   const name = document.getElementById("newIncName").value.trim();
 
   if (!name) return;
@@ -2297,12 +2309,14 @@ async function addIncome() {
   await saveDB(); render();
 }
 async function editExp(type, idx, f, v) {
+  if (!budgetEditAllowed()) return;
   const entry = db[activeYear].months[selectedIdx][type][idx];
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'amount' ? parseFloat(v) || 0 : v;
   await saveDB(); render();
 }
 async function addExpense(type) {
+  if (!budgetEditAllowed()) return;
   const p = type === 'fixed' ? 'newFix' : 'newVar';
   const name = document.getElementById(p + 'Name').value.trim();
   const dueDay = dueDayModule.parseDueDay(document.getElementById(p + 'Due').value);
@@ -2313,12 +2327,14 @@ async function addExpense(type) {
   await saveDB(); render();
 }
 async function editLoan(idx, f, v) {
+  if (!budgetEditAllowed()) return;
   const entry = db[activeYear].months[selectedIdx].loans[idx];
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
   await saveDB(); render();
 }
 async function addLoan() {
+  if (!budgetEditAllowed()) return;
   const name = document.getElementById("newLoanName").value.trim();
   const dueDay = dueDayModule.parseDueDay(document.getElementById("newLoanDue").value);
   const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
@@ -2329,12 +2345,14 @@ async function addLoan() {
   await saveDB(); render();
 }
 async function editCC(idx, f, v) {
+  if (!budgetEditAllowed()) return;
   const entry = db[activeYear].months[selectedIdx].creditCards[idx];
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
   await saveDB(); render();
 }
 async function addCC() {
+  if (!budgetEditAllowed()) return;
   const name = document.getElementById("newCcName").value.trim();
   const dueDay = dueDayModule.parseDueDay(document.getElementById("newCcDue").value);
   const statement = parseFloat(document.getElementById("newCcStmt").value) || 0;
@@ -2345,7 +2363,7 @@ async function addCC() {
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
-async function delItem(list, idx) { db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
+async function delItem(list, idx) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
 
 /* Auth Modal & Handlers */
 function handleAuthClick() {
@@ -2865,6 +2883,7 @@ function syncMobileSettingsControls() {
 }
 
 async function setAutoCascade(enabled) {
+  if (!budgetEditAllowed()) return;
   if (!db?.[activeYear]) return;
   db[activeYear].autoCascade = Boolean(enabled);
   document.getElementById("autoRollToggle").checked = Boolean(enabled);
