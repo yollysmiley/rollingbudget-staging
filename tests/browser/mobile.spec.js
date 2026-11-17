@@ -264,6 +264,27 @@ test('Settings stays coherent when switching between mobile and desktop breakpoi
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
+test('mobile account creation is gated behind Add account and supports exclusion', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  const manager = page.locator('#mobileSettingsAccounts');
+  await expect(manager.locator('[data-account-form]')).toHaveCount(0);
+  await manager.locator('[data-account-action="start-create"]').click();
+  const form = manager.locator('[data-account-form]');
+  await expect(form).toBeVisible();
+  await form.locator('input[name="accountName"]').fill('Draft account');
+  await form.locator('[data-account-action="cancel-create"]').click();
+  await expect(manager.locator('[data-account-form]')).toHaveCount(0);
+  await manager.locator('[data-account-action="start-create"]').click();
+  await manager.locator('input[name="accountName"]').fill('Excluded account');
+  await manager.locator('input[name="included"]').uncheck();
+  await manager.locator('[data-account-form] button[type="submit"]').click();
+  await expect(manager.locator('.account-manager-row').filter({ hasText: 'Excluded account' })).toBeVisible();
+  await expect(manager.locator('.account-manager-row').filter({ hasText: 'Excluded account' }).locator('[data-account-action="included"]')).not.toBeChecked();
+});
+
 test('mobile Settings returns to its menu when reopened after visiting another page', async ({ page }) => {
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
