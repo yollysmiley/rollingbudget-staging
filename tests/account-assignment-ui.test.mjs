@@ -39,8 +39,19 @@ test('account selection is shown for every recurring category', () => {
   assert.match(html, /function toggleRecFields\(\)\{document\.querySelectorAll/);
   assert.match(html, /group\.style\.display="grid"/);
 });
-test('secondary authenticated load initializes accounts before rendering', () => {
-  assert.match(html, /await loadAllYears\(\);\s*if \(currentUser\) await initializeAccounts\(\);\s*render\(\);/);
+test('secondary authenticated load gates the previous owner and waits for the incoming catalog before rendering', () => {
+  const start = html.indexOf('const switchingTo = session.user.id;');
+  const end = html.indexOf('document.getElementById("authBtn").textContent', start);
+  assert.ok(start >= 0 && end > start);
+  const code = html.slice(start, end);
+  const yearLoad = code.indexOf('await loadAllYears();');
+  const catalogLoad = code.indexOf('const ready = await initializeAccounts();');
+  const render = code.indexOf('render();', catalogLoad);
+  const reveal = code.indexOf('document.documentElement.classList.add("budget-authenticated");', render);
+  assert.ok(yearLoad >= 0 && yearLoad < catalogLoad && catalogLoad < render && render < reveal);
+  assert.match(code, /document\.documentElement\.classList\.remove\("budget-authenticated"\)/);
+  assert.match(code, /if \(currentUser\?\.id !== switchingTo\) return;/);
+  assert.match(code, /if \(!ready\) \{[\s\S]*?return;\s*\}/);
 });
 
 test('income form uses column-aligned labels and a distinct stacked mobile layout', () => {
