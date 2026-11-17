@@ -55,6 +55,17 @@ BEGIN
     IF affected <> 0 THEN
       RAISE EXCEPTION '% DELETE removed another owner row', table_name;
     END IF;
+    -- A visible own row may not be reassigned to another owner (UPDATE WITH CHECK).
+    denied := false;
+    BEGIN
+      EXECUTE format('UPDATE public.%I SET user_id=$1 WHERE user_id=$2', table_name)
+        USING '00000000-0000-4000-8000-000000000303'::uuid,
+              '00000000-0000-4000-8000-000000000101'::uuid;
+    EXCEPTION WHEN insufficient_privilege THEN denied := true;
+    END;
+    IF NOT denied THEN
+      RAISE EXCEPTION '% UPDATE allowed changing an owned row to another owner', table_name;
+    END IF;
     denied := false;
     BEGIN
       IF table_name = 'budget_data' THEN
