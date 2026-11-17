@@ -18,7 +18,9 @@ export async function loadRecurringPreviewRules(client, userId) {
     .select('id,name,category,amount,due,due_day,account_id,frequency,start_date,end_date,active,versions,source_year')
     .eq('user_id', userId);
   if (error) throw error;
-  const expenseCategoryIds = await ownerExpenseCategoryIds(client, userId);
+  const customCategoryPresent = (data ?? []).some(row =>
+    !['income', 'fixed', 'variable', 'loan', 'cc'].includes(row.category));
+  const expenseCategoryIds = customCategoryPresent ? await ownerExpenseCategoryIds(client, userId) : [];
   const rules = [];
   let held = 0;
   for (const row of data ?? []) {
@@ -65,7 +67,8 @@ export function previewLoadedRecurringYear(yearDocument, year, loaded, options =
 
 export async function createRecurringRule(client, userId, input) {
   if (!client || !userId) throw new Error('Authenticated recurring rule write requires a user');
-  const expenseCategoryIds = await ownerExpenseCategoryIds(client, userId);
+  const customCategory = !['income', 'fixed', 'variable', 'loan', 'cc'].includes(input?.category);
+  const expenseCategoryIds = customCategory ? await ownerExpenseCategoryIds(client, userId) : [];
   const rule = normalizeRecurringRule(input, { expenseCategoryIds });
   const row = {
     user_id: userId, id: rule.id, name: rule.name, category: rule.category,
@@ -99,7 +102,8 @@ export async function editRecurringRule(client, userId, id, changes, effectiveFr
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
   if (!current) throw new Error('No applicable recurring version');
   const next = { ...current, ...changes, effectiveFrom };
-  const expenseCategoryIds = await ownerExpenseCategoryIds(client, userId);
+  const customCategory = !['income', 'fixed', 'variable', 'loan', 'cc'].includes(row.category);
+  const expenseCategoryIds = customCategory ? await ownerExpenseCategoryIds(client, userId) : [];
   normalizeRecurringRule({
     id, name: next.name, category: row.category, amount: next.amount,
     dueDay: next.dueDay ?? next.due ?? row.due_day ?? row.due,
