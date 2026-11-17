@@ -189,6 +189,63 @@ BEGIN
 END
 $account_refs$;
 
+
+-- B3 lifecycle contract: inactive, future and expired references remain protected.
+-- Use dedicated synthetic accounts so existing RLS/date fixtures remain intact.
+DO $lifecycle$
+DECLARE
+  scenario text;
+  affected integer;
+  rejected boolean;
+  owner_id uuid := '00000000-0000-4000-8000-000000000101';
+BEGIN
+  FOREACH scenario IN ARRAY ARRAY['inactive','future','historical'] LOOP
+    INSERT INTO public.budget_accounts (user_id,id,name)
+    VALUES (owner_id, 'lifecycle-' || scenario, 'Lifecycle ' || scenario);
+    INSERT INTO public.budget_recurring_rules
+      (user_id,id,name,category,amount,frequency,start_date,end_date,active,account_id,versions)
+    VALUES
+      (owner_id,'lifecycle-' || scenario,'Lifecycle ' || scenario,'fixed',1,'monthly',
+       CASE WHEN scenario = 'future' THEN '2199-01-15'::date ELSE '2020-01-15'::date END,
+       CASE WHEN scenario = 'historical' THEN '2020-02-15'::date ELSE NULL END,
+       scenario <> 'inactive','lifecycle-' || scenario,'[]'::jsonb);
+
+    rejected := false;
+    BEGIN
+      DELETE FROM public.budget_accounts
+      WHERE user_id = owner_id AND id = 'lifecycle-' || scenario;
+    EXCEPTION WHEN foreign_key_violation THEN rejected := true;
+    END;
+    IF NOT rejected THEN
+      RAISE EXCEPTION 'Referenced % account was deleted', scenario;
+    END IF;
+    IF (SELECT count(*) FROM public.budget_accounts
+        WHERE user_id = owner_id AND id = 'lifecycle-' || scenario) <> 1 OR
+       (SELECT count(*) FROM public.budget_recurring_rules
+        WHERE user_id = owner_id AND id = 'lifecycle-' || scenario
+          AND account_id = 'lifecycle-' || scenario) <> 1 THEN
+      RAISE EXCEPTION 'Failed % deletion modified account or rule', scenario;
+    END IF;
+
+    -- Only an explicit owner-scoped dependency removal may unblock deletion.
+    DELETE FROM public.budget_recurring_rules
+    WHERE user_id = owner_id AND id = 'lifecycle-' || scenario;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    IF affected <> 1 THEN RAISE EXCEPTION 'Rule cleanup failed for %', scenario; END IF;
+    DELETE FROM public.budget_accounts
+    WHERE user_id = owner_id AND id = 'lifecycle-' || scenario;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    IF affected <> 1 THEN RAISE EXCEPTION 'Account deletion remained blocked for %', scenario; END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM public.budget_accounts
+      WHERE user_id = owner_id AND id LIKE 'lifecycle-%') OR
+     EXISTS (SELECT 1 FROM public.budget_recurring_rules
+      WHERE user_id = owner_id AND id LIKE 'lifecycle-%') THEN
+    RAISE EXCEPTION 'Lifecycle fixture cleanup incomplete';
+  END IF;
+END
+$lifecycle$;
+
 RESET ROLE;
 ROLLBACK;
 SELECT 'B4 PostgreSQL RLS, date, and B3 account FK contracts passed' AS result;
