@@ -1,4 +1,4 @@
-name: B4 PostgreSQL RLS and date contracts
+name: Staging PostgreSQL regression contracts
 on:
   pull_request:
   push:
@@ -6,10 +6,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: staging-postgres-${{ github.event.pull_request.number || github.ref }}
+  # Preserve main-branch checks; cancel only superseded PR revisions.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  postgres-contract:
+  postgres-contracts:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -33,9 +37,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Rebuild staging schema using B1 baseline
+      - name: B3 populated upgrade, orphan refusal, rollback and idempotence
+        run: bash scripts/verify-b3-upgrade.sh
+      - name: Reset disposable database before clean migration replay
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'DROP DATABASE migration_replay WITH (FORCE);'
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'CREATE DATABASE migration_replay;'
+      - name: B1 clean migration replay and schema assertions
         run: bash scripts/verify-clean-migration-replay.sh
-      - name: Test owner isolation and recurring constraints as authenticated
+      - name: B4 authenticated owner isolation and recurring constraints
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/verification/verify-b4-postgres-contract.sql
-      - name: Test concurrent recurring reference and account deletion
+      - name: B4 concurrent recurring reference and account deletion
         run: bash scripts/verify-b3-account-races.sh

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const replay = readFileSync('scripts/verify-clean-migration-replay.sh', 'utf8');
-const workflow = readFileSync('.github/workflows/b1-migration-replay.yml', 'utf8');
+const workflow = readFileSync('.github/workflows/staging-postgres-contracts.yml', 'utf8');
 const migrationFiles = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
 
 test('B1 replay uses only an isolated localhost database and fails on SQL errors', () => {
@@ -23,7 +23,7 @@ test('B1 replay enumerates all committed SQL migrations in order', () => {
   assert.match(replay, /index_count <> 9/);
 });
 
-test('B1 workflow is secret-free and does not change existing required CI', () => {
+test('Consolidated B1 workflow is secret-free and preserves migration replay', () => {
   assert.match(workflow, /image: postgres:17/);
   assert.match(workflow, /POSTGRES_DB: migration_replay/);
   assert.match(workflow, /bash scripts\/verify-clean-migration-replay\.sh/);
