@@ -1236,7 +1236,8 @@ async function migrateLoadedIncome() {
   const owner = currentUser.id;
   if (!cloudYearLoadSucceeded) return; // Never migrate without an authoritative cloud read.
   for (const [year, original] of Object.entries(db)) {
-    if (cloudBudgetConflicts.has(owner + ':' + year)) continue;
+    const key = owner + ':' + year;
+    if (cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year, owner)) === '1') continue;
     const migrated = accountMigrationModule.migrateLegacyYear(original, budgetAccounts);
     if (!migrated.changed) continue;
     const backupKey = storageKey(year) + '_pre_income_migration';
@@ -1246,19 +1247,30 @@ async function migrateLoadedIncome() {
     }
     const updatedAt = new Date().toISOString();
     const snapshot = migrated.year;
-    // Persist the account-based version before displaying it; keep the original in memory on failure.
+    // Migration is an ordinary owner-scoped revision write, not an unconditional upsert.
+    // A concurrent cloud edit must not be replaced by this one-time legacy conversion.
+    let committedAt = updatedAt;
     if (supabaseClient) {
-      await queueCloudSave(owner + ':' + year, async () => {
-        const { error } = await supabaseClient.from('budget_ui_years').upsert({
-          user_id: owner, year: Number(year), budget_data: snapshot, updated_at: updatedAt
-        }, { onConflict: 'user_id,year' });
-        if (error) throw error;
-      });
+      try {
+        await queueCloudSave(key, async () => {
+          if (currentUser?.id !== owner) throw new Error('Account changed during legacy income migration');
+          const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');
+          const write = await writeBudgetRevision(supabaseClient, {
+            owner, year: Number(year), document: snapshot,
+            knownRevision: cloudBudgetVersions.get(key) ?? null, requestedAt: updatedAt
+          });
+          committedAt = write.updatedAt;
+          cloudBudgetVersions.set(key, committedAt);
+        });
+      } catch (error) {
+        markCloudConflict(key, year);
+        throw error;
+      }
     }
     if (currentUser?.id !== owner) return;
     db[year] = snapshot;
     try {
-      localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+      localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt: committedAt }));
     } catch (storageError) {
       // Cloud is authoritative after a successful upsert; reload can recover it.
       console.warn('Migrated income saved to cloud but local cache could not be updated', storageError);
