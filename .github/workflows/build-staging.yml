@@ -24,6 +24,15 @@ jobs:
           cache: npm
       - name: Install pinned test runner
         run: npm ci --no-audit --no-fund
+      - name: Validate authenticated test JavaScript syntax
+        run: |
+          node --check playwright.live.config.js
+          node --check tests/live/authenticated.spec.js
+          node --check tests/live/safe-reporter.cjs
+          node --check tests/live/safety.mjs
+          node --check scripts/live-staging-tests.mjs
+      - name: Discover authenticated cases without credentials or live requests
+        run: npx playwright test --config=playwright.live.config.js --list
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Build redesigned UI with staging-only configuration
