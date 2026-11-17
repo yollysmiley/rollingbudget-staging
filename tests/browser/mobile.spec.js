@@ -1110,6 +1110,8 @@ test('mobile expense category settings section is reachable without desktop cont
   await page.goto('rollover-budget-app.html?page=settings');
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Expense Categories' }).click();
   await expect(page.locator('[data-mobile-settings-section="categories"]')).toBeVisible();
+  await expect(page.locator('#mobileExpenseCategoriesManager [data-expense-category-create]')).toHaveCount(1);
+  await expect(page.locator('#mobileExpenseCategoriesManager [name="categoryKind"] option')).toHaveCount(2);
   await expect(page.locator('#mobileExpenseCategoriesManager')).toHaveCount(1); // Empty manager shell has no visible box until category controls are implemented.
   await expect(page.locator('#settingsCategories')).toBeHidden();
 });
