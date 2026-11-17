@@ -212,3 +212,23 @@ test('corrupt migrated recurring target fails closed', () => {
   source.months[0].fixed.push({ name: 'Rent', amount: 500 });
   assert.throws(() => previewRecurringYear(source, 2027, [rule()]), /Invalid migrated/);
 });
+
+test('custom recurring category requires explicit catalog and writes categoryId', () => {
+  const source = budget();
+  for (const month of source.months) month.expenses = [];
+  const custom = { ...rule('pets'), id: 'vet', name: 'Vet',
+    versions: rule('pets').versions.map(v => ({ ...v, name: 'Vet' })) };
+  assert.throws(() => previewRecurringYear(source, 2027, [custom]), /Unsupported recurring category/);
+  const first = previewRecurringYear(source, 2027, [custom], { expenseCategoryIds: ['pets'] });
+  assert.equal(first.added, 12);
+  assert.equal(first.document.months[0].expenses[0].categoryId, 'pets');
+  assert.equal(first.document.months[0].fixed.length, 0);
+  assert.equal(previewRecurringYear(first.document, 2027, [custom], { expenseCategoryIds: ['pets'] }).added, 0);
+  assert.equal(source.months[0].expenses.length, 0);
+});
+
+test('custom recurring categories reject missing expense storage without writing legacy arrays', () => {
+  const custom = { ...rule('pets'), id: 'vet' };
+  assert.throws(() => previewRecurringYear(budget(), 2027, [custom],
+    { expenseCategoryIds: ['pets'] }), /requires category expense storage/);
+});
