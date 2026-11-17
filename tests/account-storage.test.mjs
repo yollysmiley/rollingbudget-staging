@@ -89,6 +89,114 @@ test('account removal blocks referenced entries and recurring rules', async () =
 test('last unreferenced account is eligible for removal', async () => {
   const { deleteAccount } = await import('../scripts/account-storage.mjs');
   const rows = [{ id: 'custom', name: 'Custom', included: true, user_id: 'user-1' }];
-  const client = { from() { return { delete() { return { eq() { return this; }, select: async () => ({ data: [{ id: 'custom' }], error: null }) }; } }; } };
+  const client = {
+    from(table) {
+      if (table === 'budget_recurring_rules') return {
+        select() { return { eq() { return this; }, then(resolve) {
+          return Promise.resolve({ data: [], error: null }).then(resolve);
+        } }; }
+      };
+      assert.equal(table, 'budget_accounts');
+      return { delete() { return { eq() { return this; }, select: async () => ({ data: [{ id: 'custom' }], error: null }) }; } };
+    }
+  };
   await assert.doesNotReject(() => deleteAccount(client, 'user-1', rows, 'custom', {}));
+});
+
+
+function accountRuleClient({ owner = 'user-1', rules = [], readError = null, deletionError = null } = {}) {
+  const state = { account: { id: 'checking', user_id: owner }, deleted: false, rulesRead: 0, deletes: 0 };
+  const client = { from(table) {
+    if (table === 'budget_recurring_rules') return {
+      select(fields) {
+        assert.equal(fields, 'id');
+        const filters = {};
+        const q = {
+          eq(field, value) { filters[field] = value; return q; },
+          then(resolve, reject) {
+            state.rulesRead++;
+            return Promise.resolve({
+              data: rules.filter(rule => rule.user_id === filters.user_id &&
+                rule.account_id === filters.account_id).map(rule => ({ id: rule.id })),
+              error: readError
+            }).then(resolve, reject);
+          }
+        };
+        return q;
+      }
+    };
+    assert.equal(table, 'budget_accounts');
+    return { delete() {
+      const filters = {};
+      const q = {
+        eq(field, value) { filters[field] = value; return q; },
+        async select() {
+          state.deletes++;
+          if (deletionError) return { data: [], error: deletionError };
+          if (state.account.user_id !== filters.user_id || state.account.id !== filters.id)
+            return { data: [], error: null };
+          state.deleted = true;
+          return { data: [{ id: filters.id }], error: null };
+        }
+      };
+      return q;
+    } };
+  } };
+  return { client, state };
+}
+
+test('global recurring references block deleting accounts even when rules are disabled or start in future', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const accounts = [{ id: 'checking', name: 'Checking', included: true }];
+  for (const rule of [
+    { id: 'disabled', active: false, start_date: '2025-01-01' },
+    { id: 'future', active: true, start_date: '2029-12-15' },
+    { id: 'historical', active: false, source_year: 2024 }
+  ]) {
+    const { client, state } = accountRuleClient({
+      rules: [{ ...rule, user_id: 'user-1', account_id: 'checking' }]
+    });
+    await assert.rejects(
+      deleteAccount(client, 'user-1', accounts, 'checking', {}),
+      /Reassign or remove global recurring rules/
+    );
+    assert.equal(state.rulesRead, 1);
+    assert.equal(state.deletes, 0);
+    assert.equal(state.deleted, false);
+  }
+});
+
+test('owner-only recurring lookup allows deleting an unreferenced account', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const { client, state } = accountRuleClient({
+    rules: [{ id: 'other-rule', user_id: 'other-user', account_id: 'checking' }]
+  });
+  await deleteAccount(client, 'user-1', [{ id: 'checking', name: 'Checking', included: true }], 'checking', {});
+  assert.equal(state.rulesRead, 1);
+  assert.equal(state.deletes, 1);
+  assert.equal(state.deleted, true);
+});
+
+test('global recurring read failures fail closed and preserve the account', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const { client, state } = accountRuleClient({ readError: new Error('read unavailable') });
+  await assert.rejects(
+    deleteAccount(client, 'user-1', [{ id: 'checking', name: 'Checking', included: true }], 'checking', {}),
+    /read unavailable/
+  );
+  assert.equal(state.deletes, 0);
+  assert.equal(state.deleted, false);
+});
+
+test('concurrent recurring rule creation protected by FK rejects account removal without partial delete', async () => {
+  const { deleteAccount } = await import('../scripts/account-storage.mjs');
+  const { client, state } = accountRuleClient({
+    deletionError: Object.assign(new Error('foreign key violation'), { code: '23503' })
+  });
+  await assert.rejects(
+    deleteAccount(client, 'user-1', [{ id: 'checking', name: 'Checking', included: true }], 'checking', {}),
+    /Reassign or remove global recurring rules/
+  );
+  assert.equal(state.deletes, 1);
+  assert.equal(state.deleted, false);
 });
