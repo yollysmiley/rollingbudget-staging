@@ -3,6 +3,24 @@ import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
 import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { test, expect } from '@playwright/test';
 
+// Respond to the actual branded UI rather than relying on browser-native dialogs.
+async function queueBrandedResponse(page, decision = 'accept', value = '') {
+  await page.evaluate(({ decision, value }) => {
+    const observer = new MutationObserver(() => {
+      const backdrop = document.getElementById('rbDialogBackdrop');
+      if (!backdrop || backdrop.hidden) return;
+      observer.disconnect();
+      const input = document.getElementById('rbDialogInput');
+      if (!input.hidden) {
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      document.getElementById(decision === 'cancel' ? 'rbDialogCancel' : 'rbDialogAccept').click();
+    });
+    observer.observe(document.getElementById('rbDialogBackdrop'), { attributes: true, attributeFilter: ['hidden'] });
+  }, { decision, value });
+}
+
 test.beforeEach(async ({ page }) => {
   await mockSignedInBudget(page);
   await page.route('https://**/rest/v1/**', route => route.abort());
@@ -90,7 +108,7 @@ test('mobile sign-out returns to public homepage without exposing budget', async
   const signOut = page.locator('#mobileAuthBtn');
   await expect(signOut).toBeVisible();
   await expect(signOut).toHaveText('Sign Out');
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await signOut.click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
@@ -178,7 +196,7 @@ test('mobile header matches the approved email branding and preserves menu and s
 });
 
 test('cancelling mobile sign-out keeps the authenticated budget visible', async ({ page }) => {
-  page.once('dialog', dialog => dialog.dismiss());
+  await queueBrandedResponse(page, 'cancel');
   await page.locator('#mobileAuthBtn').click();
   await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
   await expect(page.locator('#mobileAuthBtn')).toHaveText('Sign Out');
@@ -383,7 +401,7 @@ test('mobile recurring cloud failure does not add unsaved occurrences', async ({
   await form.locator('[data-rec-field="name"]').fill('Cloud failure expense');
   await form.locator('[data-rec-field="amount"]').fill('20');
   await form.locator('[data-rec-field="startDate"]').fill('2026-01-01');
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.getByRole('button', { name: 'Add rule' }).last().click();
   await expect(page.locator('#mobileRulesList')).toContainText('Cloud failure expense');
   expect(await page.evaluate(() => db['2026'].months.flatMap(m => m.fixed).filter(x => x.name === 'Cloud failure expense').length)).toBe(0);
@@ -471,7 +489,7 @@ test('mobile preserves an unresolved cloud conflict across reload and offers exp
   await expect(page.locator('#cloudSaveStatus button')).toHaveCount(2);
   expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
     entry => entry.name === 'Local unsynced entry'))).toBe(true);
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
   expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
@@ -594,7 +612,7 @@ test('mobile recurring synchronization blocks an unsaved local cache instead of 
     localStorage.setItem(storageKey('2026'), JSON.stringify(stored));
     return JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'];
   });
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-01'));
   const after = await page.evaluate(() => ({
     row: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'],
@@ -753,7 +771,7 @@ test('mobile copy action confirms and shares saved plan across viewport changes'
   await page.locator('#mobileActiveYearSelect').selectOption(next);
   await expect(page.locator('#mobileCopyPreviousYear')).toBeVisible();
   await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#mobileCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].variable[0]?.name,next)).toBe('Groceries plan');
   await expect(page.locator('#mobileCopyPreviousYear')).toBeHidden();
@@ -817,7 +835,7 @@ test('mobile planning actions cannot overlap while a first-year save is pending'
       return window.__originalSaveDB(...args);
     };
   });
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#mobileCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(() => typeof window.__releasePlanSave)).toBe('function');
   await expect(page.locator('#mobileCopyPreviousYear')).toBeDisabled();
@@ -842,7 +860,7 @@ test('mobile January projection restores its prior value when browser storage fa
       return window.__storageSetItem.call(this, key, value);
     };
   });
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#mobileProjectJanuary').click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('was not saved');
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(0);
@@ -967,7 +985,7 @@ test('mobile account deletion refuses stale remote revisions without dropping ac
     rows[0].included = false;
     sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
   });
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#mobileSettingsAccounts [data-account-action="remove"][data-account-id="checking"]').click();
   await expect(page.locator('#mobileAccountsStatus')).toContainText('Account changed on another device');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows')).length)).toBe(1);
@@ -1009,11 +1027,11 @@ test('mobile requires confirmation then blocks deletion referenced by future glo
   const accountRow = page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]');
   const remove = accountRow.locator('[data-account-action="remove"]');
   await expect(accountRow).toContainText('Checking');
-  page.once('dialog', dialog => dialog.dismiss());
+  await queueBrandedResponse(page, 'cancel');
   await remove.click();
   await expect(accountRow).toBeVisible();
   await expect(page.locator('#mobileAccountsStatus')).not.toContainText('Account changes saved');
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await remove.click();
   await expect(page.locator('#mobileAccountsStatus')).toContainText('Reassign or remove global recurring rules');
   await expect(accountRow).toContainText('Checking');
