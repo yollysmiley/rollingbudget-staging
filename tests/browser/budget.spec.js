@@ -1,4 +1,6 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
+import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
@@ -575,8 +577,10 @@ test('desktop edit only fills missing future entries and preserves existing amou
   expect(state.version.amount).toBe(150);
   await expect(page.locator('#desktopRulesList')).toContainText('Scheduled from 2026-12-01');
   await page.reload();
-  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
-    x => x.name === 'Future price edit').map(x => x.amount))).toEqual([150]);
+  await expectAuthenticatedBudget(page);
+  // Cloud year restoration is asynchronous; assert the persisted result after load completes.
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[11]?.fixed.filter(
+    x => x.name === 'Future price edit').map(x => x.amount) ?? [])).toEqual([150]);
 });
 
 test('first edit in a virtual future year saves it and safely applies global recurring rules', async ({ page }) => {
@@ -1030,6 +1034,198 @@ test('desktop save migrates known legacy ordinals without altering expense amoun
   await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
 });
 
+test('desktop rejects budget edits while cloud reconciliation is in flight and survives reload', async ({ page }) => {
+  await holdCloudReconciliation(page);
+  await page.locator('#newVarName').fill('Blocked addition');
+  await page.locator('#newVarDue').selectOption('15');
+  await page.locator('#newVarAmt').fill('800');
+  await page.locator(`button[onclick="addExpense('variable')"]`).click();
+  await page.evaluate(async () => {
+    await editExp('variable', 0, 'amount', '999');
+    await delItem('variable', 0);
+    await updateStartLeftover('400');
+    await setAutoCascade(false);
+  });
+  const during = await page.evaluate(() => {
+    const year = db[activeYear];
+    const cached = JSON.parse(localStorage.getItem(storageKey(activeYear)));
+    return {
+      rows: year.months[0].variable.map(item => [item.name, item.amount]),
+      cachedRows: cached.data.months[0].variable.map(item => [item.name, item.amount]),
+      opening: year.months[0].recordedLeftover,
+      autoCascade: year.autoCascade,
+      locked: reconcilingBudgetYears.has(currentUser.id + ':' + activeYear)
+    };
+  });
+  expect(during).toEqual({
+    rows: [['Protected expense', 25]], cachedRows: [['Protected expense', 25]],
+    opening: 0, autoCascade: true, locked: true
+  });
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation in progress');
+  await finishHeldReconciliation(page);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(() => db[activeYear].months[0].variable.map(item => [item.name, item.amount])))
+    .toEqual([['Protected expense', 25]]);
+  expect(await page.evaluate(() => db[activeYear].months[0].recordedLeftover)).toBe(0);
+});
+
+test('legacy income migration refreshes the source cloud revision for year copy and January projection', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
+    db[y].months[0].income.push({ name: 'Legacy January', cpm: 40, usaa: 60 });
+    db[y].months[11].income.push({ name: 'Legacy December', cpm: 80, usaa: 120 });
+    await saveDB();
+  }, year);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  // Authentication can complete before account migration; wait for committed converted rows.
+  await expect.poll(() => page.evaluate(y =>
+    db[y].months[0].income.map(item => [item.accountId, item.amount]), year))
+    .toEqual([['cpm', 40], ['usaa', 60]]);
+  const migrated = await page.evaluate(y => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[y];
+    return {
+      known: cloudBudgetVersions.get(currentUser.id + ':' + y),
+      remote: row.updated_at,
+      entries: db[y].months[0].income.map(item => [item.accountId, item.amount])
+    };
+  }, year);
+  expect(migrated.known).toBe(migrated.remote);
+  expect(migrated.entries).toEqual([['cpm', 40], ['usaa', 60]]);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].income.length, next)).toBe(2);
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(y => db[y].months[0].income.map(item => item.amount), next)).toEqual([40, 60]);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
+});
+
+test('year planning blocks stale remote revisions even after legacy migration', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
+    db[y].months[11].income.push({ name: 'Legacy December', cpm: 125, usaa: 0 });
+    await saveDB();
+  }, year);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(y => {
+    const row = db[y].months[11].income[0];
+    const remote = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y];
+    return row?.accountId === 'cpm' && row?.amount === 125 &&
+      Boolean(remote && cloudBudgetVersions.get(currentUser.id + ':' + y) === remote.updated_at);
+  }, year)).toBe(true);
+  await page.evaluate(y => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].updated_at = '2099-01-01T00:00:00.000Z';
+    rows[y].budget_data.months[11].income[0].amount = 999;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
+  expect(await page.evaluate(y => db[y].months[0].income, next)).toEqual([]);
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+});
+
+test('desktop account rename refuses stale other-device changes and reloads authoritative catalog', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify([{
+      user_id: currentUser.id, id: 'checking', name: 'Checking', included: true,
+      updated_at: '2026-11-01T00:00:00.000Z'
+    }]));
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.id))).toEqual(['checking']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]')).toContainText('Checking');
+
+  // Simulate another authorized browser committing between our catalog read and edit.
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_account_rows'));
+    rows[0].name = 'Changed on another device';
+    rows[0].updated_at = '2026-11-02T00:00:00.000Z';
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
+  });
+  page.once('dialog', dialog => dialog.accept('Unsafe local rename'));
+  await page.locator('#desktopAccountsManager [data-account-action="rename"][data-account-id="checking"]').click();
+  await expect(page.locator('#desktopAccountsStatus')).toContainText('Account changed on another device');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows'))[0].name))
+    .toBe('Changed on another device');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
+    .toEqual(['Changed on another device']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]')).toContainText('Changed on another device');
+});
+
+test('desktop account write never publishes the previous owner catalog after session switch', async ({ page }) => {
+  const started = await page.evaluate(async () => {
+    const previousOwner = currentUser;
+    const originalFrom = supabaseClient.from.bind(supabaseClient);
+    window.__originalAccountOwner = previousOwner;
+    window.__originalAccountFrom = originalFrom;
+    supabaseClient.from = table => {
+      const query = originalFrom(table);
+      if (table === 'budget_accounts') {
+        const originalInsert = query.insert.bind(query);
+        query.insert = row => new Promise(resolve => {
+          window.__releaseAccountWrite = () => Promise.resolve(originalInsert(row)).then(resolve);
+        });
+      }
+      return query;
+    };
+    window.__accountWrite = runAccountAction('create', null, 'Original owner checking');
+    for (let i = 0; i < 50 && !window.__releaseAccountWrite; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    if (!window.__releaseAccountWrite) throw new Error('Account write not pending');
+    currentUser = { id: 'other-owner', email: 'other-owner@example.invalid' };
+    return { active: accountsBusy, accounts: budgetAccounts.map(account => account.name) };
+  });
+  expect(started).toEqual({ active: true, accounts: [] });
+  await page.evaluate(async () => {
+    window.__releaseAccountWrite();
+    await window.__accountWrite;
+  });
+  const protectedState = await page.evaluate(() => ({
+    activeOwner: currentUser.id,
+    accounts: budgetAccounts.map(account => account.name),
+    message: accountsMessage,
+    busy: accountsBusy
+  }));
+  expect(protectedState).toEqual({ activeOwner: 'other-owner', accounts: [], message: '', busy: false });
+  await page.evaluate(() => {
+    currentUser = window.__originalAccountOwner;
+    supabaseClient.from = window.__originalAccountFrom;
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
+    .toEqual(['Original owner checking']);
+});
+
+
+test('desktop account switching waits for the incoming owner catalog before rendering budget', async ({ page }) => {
+  await switchWhileAccountCatalogLoads(page);
+  await expect(page.locator('#incTotalBadge')).toHaveText('$250.00');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SECOND OWNER INCOME');
+  await expect(page.locator('#incomeBody')).not.toContainText('FIRST OWNER INCOME');
+  expect(await page.evaluate(() => window.__errors)).toEqual([]);
+});
 
 test('desktop confirms deletion and blocks accounts referenced by disabled global rules', async ({ page }) => {
   await page.evaluate(() => {

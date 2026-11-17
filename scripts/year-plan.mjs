@@ -73,10 +73,13 @@ export function copyPreviousYearPlan(source, target) {
     const from = source.months[index];
     const next = structuredClone(month);
     for (const type of ENTRY_TYPES) {
+      // A scheduled occurrence can account for only one identical manual source entry.
+      const matchedGenerated = new Set();
       for (const entry of from[type].map(item => plannedEntry(item, type)).filter(Boolean)) {
-        if (!next[type].some(existing => sameGeneratedPlan(entry, existing, type))) {
-          next[type].push(entry);
-        }
+        const matchIndex = next[type].findIndex((existing, index) =>
+          !matchedGenerated.has(index) && sameGeneratedPlan(entry, existing, type));
+        if (matchIndex >= 0) matchedGenerated.add(matchIndex);
+        else next[type].push(entry);
       }
     }
     return next;

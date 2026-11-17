@@ -1052,6 +1052,8 @@ function selectedYearSessionKey(user = currentUser) {
 let selectedIdx = defaultMonthIndex(activeYear);
 let db = {};
 let budgetAccounts = [];
+// A cloud year must never render before its owner's account catalog is ready.
+let accountReadyOwner = null;
 let accountService = null;
 let accountBudgetModule = null;
 let recurringAppService = null;
@@ -1236,7 +1238,8 @@ async function migrateLoadedIncome() {
   const owner = currentUser.id;
   if (!cloudYearLoadSucceeded) return; // Never migrate without an authoritative cloud read.
   for (const [year, original] of Object.entries(db)) {
-    if (cloudBudgetConflicts.has(owner + ':' + year)) continue;
+    const key = owner + ':' + year;
+    if (cloudBudgetConflicts.has(key) || localStorage.getItem(conflictStorageKey(year, owner)) === '1') continue;
     const migrated = accountMigrationModule.migrateLegacyYear(original, budgetAccounts);
     if (!migrated.changed) continue;
     const backupKey = storageKey(year) + '_pre_income_migration';
@@ -1246,19 +1249,30 @@ async function migrateLoadedIncome() {
     }
     const updatedAt = new Date().toISOString();
     const snapshot = migrated.year;
-    // Persist the account-based version before displaying it; keep the original in memory on failure.
+    // Migration is an ordinary owner-scoped revision write, not an unconditional upsert.
+    // A concurrent cloud edit must not be replaced by this one-time legacy conversion.
+    let committedAt = updatedAt;
     if (supabaseClient) {
-      await queueCloudSave(owner + ':' + year, async () => {
-        const { error } = await supabaseClient.from('budget_ui_years').upsert({
-          user_id: owner, year: Number(year), budget_data: snapshot, updated_at: updatedAt
-        }, { onConflict: 'user_id,year' });
-        if (error) throw error;
-      });
+      try {
+        await queueCloudSave(key, async () => {
+          if (currentUser?.id !== owner) throw new Error('Account changed during legacy income migration');
+          const { writeBudgetRevision } = await import('./scripts/budget-revision.mjs');
+          const write = await writeBudgetRevision(supabaseClient, {
+            owner, year: Number(year), document: snapshot,
+            knownRevision: cloudBudgetVersions.get(key) ?? null, requestedAt: updatedAt
+          });
+          committedAt = write.updatedAt;
+          cloudBudgetVersions.set(key, committedAt);
+        });
+      } catch (error) {
+        markCloudConflict(key, year);
+        throw error;
+      }
     }
     if (currentUser?.id !== owner) return;
     db[year] = snapshot;
     try {
-      localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt }));
+      localStorage.setItem(storageKey(year), JSON.stringify({ data: snapshot, updatedAt: committedAt }));
     } catch (storageError) {
       // Cloud is authoritative after a successful upsert; reload can recover it.
       console.warn('Migrated income saved to cloud but local cache could not be updated', storageError);
@@ -1266,22 +1280,40 @@ async function migrateLoadedIncome() {
   }
 }
 async function initializeAccounts() {
+  const owner = currentUser?.id;
+  if (!owner) return false;
+  accountReadyOwner = null;
+  budgetAccounts = [];
   try {
-    accountService = await import('./scripts/account-storage.mjs');
-    accountBudgetModule = await import('./scripts/account-budget.mjs');
-    accountMigrationModule = await import('./scripts/account-model.mjs');
-    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id, db);
+    const service = await import('./scripts/account-storage.mjs');
+    const budgetModule = await import('./scripts/account-budget.mjs');
+    const migrationModule = await import('./scripts/account-model.mjs');
+    const accounts = await service.loadOrSeedAccounts(supabaseClient, owner, db);
+    if (currentUser?.id !== owner) return false;
+    accountService = service;
+    accountBudgetModule = budgetModule;
+    accountMigrationModule = migrationModule;
+    budgetAccounts = accounts;
     await migrateLoadedIncome();
+    if (currentUser?.id !== owner) return false;
+    accountReadyOwner = owner;
     accountsMessage = '';
     renderAccounts();
+    return true;
   } catch (error) {
     console.error('Accounts could not be loaded or income migrated:', error);
-    renderAccounts();
-    accountStatus('Could not load accounts. Please retry by refreshing the page.');
+    if (currentUser?.id === owner) {
+      accountReadyOwner = null;
+      budgetAccounts = [];
+      renderAccounts();
+      accountStatus('Could not load accounts. Please retry by refreshing the page.');
+    }
+    return false;
   }
 }
 async function runAccountAction(action, id, value) {
-  if (accountsBusy || !accountService || !currentUser) return;
+  if (accountsBusy || !accountService || !currentUser || accountReadyOwner !== currentUser.id) return;
+  const owner = currentUser.id;
   accountsBusy = true;
   accountsMessage = '';
   renderAccounts();
@@ -1290,23 +1322,29 @@ async function runAccountAction(action, id, value) {
       const name = String(value || '').trim();
       if (!name) throw new Error('Enter an account name');
       const accountId = 'account-' + crypto.randomUUID();
-      await accountService.createAccount(supabaseClient, currentUser.id, budgetAccounts, name, accountId);
+      await accountService.createAccount(supabaseClient, owner, budgetAccounts, name, accountId);
     } else if (action === 'rename') {
-      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { name: value });
+      await accountService.updateAccount(supabaseClient, owner, budgetAccounts, id, { name: value });
     } else if (action === 'included') {
-      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { included: value });
+      await accountService.updateAccount(supabaseClient, owner, budgetAccounts, id, { included: value });
     } else if (action === 'remove') {
-      await accountService.deleteAccount(supabaseClient, currentUser.id, budgetAccounts, id, db);
+      await accountService.deleteAccount(supabaseClient, owner, budgetAccounts, id, db);
     }
-    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    // Never publish a previous owner's result into a newly authenticated session.
+    if (currentUser?.id !== owner) return;
+    const latest = await accountService.loadOrSeedAccounts(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    budgetAccounts = latest;
     accountStatus('Account changes saved.');
     render();
   } catch (error) {
     console.error('Account change failed:', error);
-    accountStatus(error.message || 'Account changes could not be saved.');
+    if (currentUser?.id === owner) {
+      accountStatus(error.message || 'Account changes could not be saved.');
+    }
   } finally {
     accountsBusy = false;
-    renderAccounts();
+    if (currentUser?.id === owner) renderAccounts();
   }
 }
 document.addEventListener('submit', event => {
@@ -1356,11 +1394,13 @@ async function initApp() {
   currentUser = user;
   dueDayModule = await import('./scripts/due-day.mjs');
   selectedIdx = restoreSelectedMonth(activeYear);
-  document.documentElement.classList.add("budget-authenticated");
+  gateMessage.textContent = 'Loading your accounts and budget…';
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT" || !session?.user) {
       clearMonthPreferences(currentUser);
       currentUser = null;
+      accountReadyOwner = null;
+      budgetAccounts = [];
       ensureRecurringSyncOwner(null);
       db = {};
       document.documentElement.classList.remove("budget-authenticated");
@@ -1368,22 +1408,46 @@ async function initApp() {
       return;
     }
     if (session.user.id !== currentUser?.id) {
+      const switchingTo = session.user.id;
       clearMonthPreferences(currentUser);
+      // Hide the previous owner's UI immediately; the cloud year and catalog
+      // are loaded separately and must not become interactable halfway through.
+      document.documentElement.classList.remove("budget-authenticated");
+      gateMessage.textContent = 'Loading your selected account…';
+      accountReadyOwner = null;
+      budgetAccounts = [];
+      db = {};
       currentUser = session.user;
       selectedIdx = restoreSelectedMonth(activeYear);
       setTimeout(async () => {
-        const verified = await supabaseClient.auth.getUser();
-        if (verified.error || verified.data.user?.id !== session.user.id) {
-          document.documentElement.classList.remove("budget-authenticated");
-          window.location.replace(home);
-          return;
+        try {
+          const verified = await supabaseClient.auth.getUser();
+          if (currentUser?.id !== switchingTo) return;
+          if (verified.error || verified.data.user?.id !== switchingTo) {
+            document.documentElement.classList.remove("budget-authenticated");
+            window.location.replace(home);
+            return;
+          }
+          await loadAllYears();
+          if (currentUser?.id !== switchingTo) return;
+          const ready = await initializeAccounts();
+          if (currentUser?.id !== switchingTo) return;
+          if (!ready) {
+            gateMessage.textContent = 'Could not load accounts. Refresh to retry.';
+            return;
+          }
+          render();
+          applyPage(pageFromLocation());
+          document.getElementById('userStatusSub').textContent = 'Logged in as ' + (currentUser.email || '');
+          document.documentElement.classList.add("budget-authenticated");
+          ensureRecurringSyncOwner(switchingTo);
+          if (recurringSyncScopes.length) void retryRecurringSynchronization();
+        } catch (error) {
+          console.error('Could not restore the selected account:', error);
+          if (currentUser?.id === switchingTo) {
+            gateMessage.textContent = 'Could not load the selected account. Refresh to retry.';
+          }
         }
-        await loadAllYears();
-        if (currentUser) await initializeAccounts();
-        render();
-        applyPage(pageFromLocation());
-        ensureRecurringSyncOwner(currentUser?.id);
-        if (recurringSyncScopes.length) void retryRecurringSynchronization();
       }, 0);
     }
   });
@@ -1391,9 +1455,14 @@ async function initApp() {
   document.getElementById("mobileAuthBtn").textContent = "Sign Out";
   document.getElementById("userStatusSub").textContent = "Logged in as " + currentUser.email;
   await loadAllYears();
-  await initializeAccounts();
+  const ready = await initializeAccounts();
+  if (!ready || currentUser?.id !== user.id) {
+    if (currentUser?.id === user.id) gateMessage.textContent = 'Could not load accounts. Refresh to retry.';
+    return;
+  }
   render();
   applyPage(pageFromLocation());
+  document.documentElement.classList.add("budget-authenticated");
   ensureRecurringSyncOwner(currentUser?.id);
   if (recurringSyncScopes.length) void retryRecurringSynchronization();
 }
@@ -1676,6 +1745,18 @@ function queueCloudSave(key, operation) {
   }).catch(() => {});
   return pending;
 }
+function budgetEditAllowed() {
+  const owner = currentUser?.id;
+  if (owner && accountReadyOwner !== owner) {
+    showCloudSaveStatus('Account data is still loading. Changes are temporarily blocked.');
+    return false;
+  }
+  if (owner && reconcilingBudgetYears.has(owner + ':' + activeYear)) {
+    showCloudSaveStatus('Reconciliation in progress. Budget changes are blocked; retry when it finishes.');
+    return false;
+  }
+  return true;
+}
 async function saveDB({ backfillNewYear = true } = {}) {
   const year = activeYear;
   const userId = currentUser?.id || null;
@@ -1793,6 +1874,7 @@ async function verifiedYearPlanSource(owner, year) {
 // target while the other is awaiting a cloud save or recurring backfill.
 let yearPlanActionBusy = false;
 async function persistYearPlanChange(owner, year, updated, localOnlyMessage) {
+  if (!budgetEditAllowed()) return 'not-saved';
   const original = db[year];
   db[year] = updated;
   const status = await saveDB();
@@ -2040,6 +2122,7 @@ function accountPicker(type, idx, accountId) {
   return '<select aria-label="Account for ' + esc(type) + ' entry" onchange="editEntryAccount(&quot;' + type + '&quot;,' + idx + ',this.value)">' + accountOptions(accountId) + '</select>';
 }
 async function editEntryAccount(type, idx, accountId) {
+  if (!budgetEditAllowed()) return;
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
   const entry = db[activeYear].months[selectedIdx][type]?.[idx];
   if (!entry) return;
@@ -2051,6 +2134,7 @@ function refreshAccountSelectors() {
   document.querySelectorAll('[data-rec-field="account"]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior, false); });
 }
 function render() {
+  if (currentUser && accountReadyOwner !== currentUser.id) return;
   const yearData = db[activeYear];
   if (!yearData) return;
   // Compute the selected month before rendering either desktop or mobile views.
@@ -2258,6 +2342,7 @@ function render() {
 
 function esc(str) { return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&#39;"); }
 function selectMonth(idx) {
+  if (currentUser && accountReadyOwner !== currentUser.id) return;
   if (!Number.isInteger(idx) || idx < 0 || idx > 11) return;
   selectedIdx = idx;
   rememberSelectedMonth(activeYear, idx);
@@ -2269,11 +2354,13 @@ document.getElementById("autoRollToggle").addEventListener("change", (e) => {
 });
 
 async function updateStartLeftover(val) {
+  if (!budgetEditAllowed()) return;
   db[activeYear].months[selectedIdx].recordedLeftover = parseFloat(val) || 0;
   await saveDB(); render();
 }
-async function editInc(idx, f, v) { db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
+async function editInc(idx, f, v) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx].income[idx][f] = f==='name'?v:parseFloat(v)||0; await saveDB(); render(); }
 async function addIncome() {
+  if (!budgetEditAllowed()) return;
   const name = document.getElementById("newIncName").value.trim();
 
   if (!name) return;
@@ -2285,12 +2372,14 @@ async function addIncome() {
   await saveDB(); render();
 }
 async function editExp(type, idx, f, v) {
+  if (!budgetEditAllowed()) return;
   const entry = db[activeYear].months[selectedIdx][type][idx];
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'amount' ? parseFloat(v) || 0 : v;
   await saveDB(); render();
 }
 async function addExpense(type) {
+  if (!budgetEditAllowed()) return;
   const p = type === 'fixed' ? 'newFix' : 'newVar';
   const name = document.getElementById(p + 'Name').value.trim();
   const dueDay = dueDayModule.parseDueDay(document.getElementById(p + 'Due').value);
@@ -2301,12 +2390,14 @@ async function addExpense(type) {
   await saveDB(); render();
 }
 async function editLoan(idx, f, v) {
+  if (!budgetEditAllowed()) return;
   const entry = db[activeYear].months[selectedIdx].loans[idx];
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
   await saveDB(); render();
 }
 async function addLoan() {
+  if (!budgetEditAllowed()) return;
   const name = document.getElementById("newLoanName").value.trim();
   const dueDay = dueDayModule.parseDueDay(document.getElementById("newLoanDue").value);
   const balance = parseFloat(document.getElementById("newLoanBal").value) || 0;
@@ -2317,12 +2408,14 @@ async function addLoan() {
   await saveDB(); render();
 }
 async function editCC(idx, f, v) {
+  if (!budgetEditAllowed()) return;
   const entry = db[activeYear].months[selectedIdx].creditCards[idx];
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'name' ? v : parseFloat(v) || 0;
   await saveDB(); render();
 }
 async function addCC() {
+  if (!budgetEditAllowed()) return;
   const name = document.getElementById("newCcName").value.trim();
   const dueDay = dueDayModule.parseDueDay(document.getElementById("newCcDue").value);
   const statement = parseFloat(document.getElementById("newCcStmt").value) || 0;
@@ -2333,7 +2426,7 @@ async function addCC() {
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
-async function delItem(list, idx) { db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
+async function delItem(list, idx) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
 
 /* Auth Modal & Handlers */
 function handleAuthClick() {
@@ -2853,6 +2946,7 @@ function syncMobileSettingsControls() {
 }
 
 async function setAutoCascade(enabled) {
+  if (!budgetEditAllowed()) return;
   if (!db?.[activeYear]) return;
   db[activeYear].autoCascade = Boolean(enabled);
   document.getElementById("autoRollToggle").checked = Boolean(enabled);

@@ -119,3 +119,43 @@ test('existing manual target entries block copying even alongside generated entr
   assert.equal(isEmptyYearPlan(target), false);
   assert.throws(() => copyPreviousYearPlan(source, target), /already contains manual entries/);
 });
+
+test('matches generated occurrences one-to-one and preserves extra identical manual entries', () => {
+  const source = blank(), target = blank();
+  source.months[0].fixed.push(
+    { name: 'Rent', dueDay: 1, amount: 900, accountId: 'checking' },
+    { name: 'Rent', dueDay: 1, amount: 900, accountId: 'checking' },
+    { name: 'Rent', dueDay: 1, amount: 900, accountId: 'checking' }
+  );
+  target.months[0].fixed.push(
+    { name: 'Rent', dueDay: 1, amount: 900, accountId: 'checking', occurrenceId: 'rent-a' },
+    { name: 'Rent', dueDay: 1, amount: 900, accountId: 'checking', occurrenceId: 'rent-b' }
+  );
+  const untouchedSource = structuredClone(source);
+  const untouchedTarget = structuredClone(target);
+  const result = copyPreviousYearPlan(source, target);
+  assert.deepEqual(source, untouchedSource);
+  assert.deepEqual(target, untouchedTarget);
+  assert.equal(result.months[0].fixed.length, 3);
+  assert.deepEqual(result.months[0].fixed.map(entry => entry.occurrenceId || null), ['rent-a', 'rent-b', null]);
+  assert.equal(result.months[0].fixed[2].amount, 900);
+  assert.throws(() => copyPreviousYearPlan(source, result), /already contains manual entries/);
+});
+
+test('generated matching does not consume manual entries with different amounts or accounts', () => {
+  const source = blank(), target = blank();
+  source.months[0].variable.push(
+    { name: 'Bill', amount: 50, dueDay: 7, accountId: 'checking' },
+    { name: 'Bill', amount: 50, dueDay: 7, accountId: 'savings' },
+    { name: 'Bill', amount: 60, dueDay: 7, accountId: 'checking' },
+    { name: 'Bill', amount: 50, dueDay: 7, accountId: 'checking' }
+  );
+  target.months[0].variable.push({
+    name: 'Bill', amount: 50, dueDay: 7, accountId: 'checking', occurrenceId: 'bill-a'
+  });
+  const result = copyPreviousYearPlan(source, target);
+  assert.equal(result.months[0].variable.length, 4);
+  assert.deepEqual(result.months[0].variable.map(entry => [entry.amount, entry.accountId]), [
+    [50, 'checking'], [50, 'savings'], [60, 'checking'], [50, 'checking']
+  ]);
+});

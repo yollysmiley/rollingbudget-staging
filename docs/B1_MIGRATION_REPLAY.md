@@ -13,21 +13,23 @@ This PR adds a **secret-free, disposable PostgreSQL 17** GitHub Actions check. I
 | 20261115043000_create_budget_recurring_rules.sql | **20261115043822** |
 | 20261116172229_add_recurring_due_day_and_full_dates.sql | 20261116172229 |
 
-The two version discrepancies are **not** corrected by renaming previously applied files. The applied account and recurring-rule SQL statements were inspected and match the repository statements apart from formatting/comment differences. These are the applied statement-array digests exposed by the staging migration-history table (read-only query); they are **not** hashes of the original migration files or a substitute for comparing SQL semantics. Preserve the recorded staging history.
+The two version discrepancies are **not** corrected by renaming previously applied files. A read-only comparison of each repository source against the actual staging stored statement found that all six agree when documented formatting/comment differences are ignored. In particular, the account and recurring-rule migrations have **exact identical statement text** despite different version IDs. Preserve the recorded staging history; do not rename applied versions.
 
 
 ## Applied staging statement fingerprints
 
 Read-only snapshot of `supabase_migrations.schema_migrations` (2026-11-16 UTC). Each applied migration has one recorded statement. The digest is `md5(array_to_string(statements, E'\\n'))`, which is reproducible from the *stored statement array* but is not a checksum of the repository file bytes.
 
-| Staging version | Applied-statement MD5 |
-| --- | --- |
-| 20261029194718 | `1c6abf6438d2bcdbd491e5834e6d2ded` |
-| 20261114184318 | `7170a14d1024a0af6cf73dafe166e097` |
-| 20261114192802 | `69acd09ce8bc8d1d83ec0e61857a45c9` |
-| 20261114221703 | `b2eab2f8e2907c8024b067876d9e856d` |
-| 20261115043822 | `3fadc29eb5281d7cea83626e6c07a640` |
-| 20261116172229 | `29bc9155f2b372256ad34d93c44cd3b6` |
+| Staging version | Applied statement MD5 | Repository source MD5 | Comparison |
+| --- | --- | --- | --- |
+| 20261029194718 | `1c6abf6438d2bcdbd491e5834e6d2ded` | `8f5df55e188ca521afbe5ac886219069` | Same after removing comments and whitespace |
+| 20261114184318 | `7170a14d1024a0af6cf73dafe166e097` | `0f1eda3db6c773bf421ee452c764d855` | Trailing newline only |
+| 20261114192802 | `69acd09ce8bc8d1d83ec0e61857a45c9` | `a1593f9ceb2b2e5699f1c74e0fbc9a14` | Same after removing comments and whitespace |
+| 20261114221703 | `b2eab2f8e2907c8024b067876d9e856d` | `b2eab2f8e2907c8024b067876d9e856d` | Exact text match; version ID differs |
+| 20261115043822 | `3fadc29eb5281d7cea83626e6c07a640` | `3fadc29eb5281d7cea83626e6c07a640` | Exact text match; version ID differs |
+| 20261116172229 | `29bc9155f2b372256ad34d93c44cd3b6` | `1c67007c40e8f7a93f91e91061dca390` | Trailing newline only |
+
+Comparison method: source-controlled UTF-8 file content was passed as a **literal value** to a read-only staging `SELECT md5(...)` and compared to `supabase_migrations.schema_migrations.statements[1]`. The newline-only pairs compared identical after `trim()`. For the two comment/formatting pairs, content starting at `BEGIN;` compared identical after removing single-line comments and whitespace. This check is **not a general-purpose SQL parser or formal semantic-equivalence proof**; independently replayed schema objects and RLS policies are verified in CI. Staging PostgreSQL reports version **17.11**, matching the disposable CI PostgreSQL major version 17.
 
 Re-run the same read-only inventory before any history reconciliation. Never assume a mismatched version identifies missing schema changes: verify the actual applied statements and schema contract.
 

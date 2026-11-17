@@ -100,6 +100,10 @@ async function switchTo(page, account, label) {
   }, { access_token: account.access_token, refresh_token: account.refresh_token });
   expect(result).toBeNull();
   await expect.poll(() => page.evaluate(id => currentUser?.id === id, account.user.id)).toBe(true);
+  // The year may arrive before its owner-scoped catalog. Do not interact before both are ready.
+  await expect.poll(() => page.evaluate(id => accountReadyOwner === id, account.user.id)).toBe(true);
+  await expect.poll(() => page.evaluate(id => budgetAccounts.some(account => account.id === id), FIXTURE_ACCOUNT_ID)).toBe(true);
+  await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
   if (label) {
     await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe(label);
     await page.evaluate(() => selectMonth(0));

@@ -1,6 +1,15 @@
 - Phase A2: share owner/year-scoped optimistic cloud revision writes between regular budget saves and explicit reconciliation; reject stale revisions, preserve insert-only first saves, and add revision contract unit tests. No schema or UI changes.\n- Phase A1 test correction: remove obsolete historical-year navigation scenario; retain rolling three-year desktop/mobile coverage and independent cloud-conflict preservation tests.\n- Phase A1 (staging, pending validation): restrict desktop/mobile year selection and session restoration to current calendar year plus two future years, while retaining historical/cloud conflict records for recovery; align unit and browser regressions.\n## Unreleased
 
-- B3 (staging draft): owner-scoped global recurring-rule deletion checks, validated composite account FK with non-destructive orphan preflight, and PostgreSQL plus desktop/mobile regression tests. No live migration applied and no production changes.
+- B4 (staging PR #72): introduce secret-free PostgreSQL 17 two-owner RLS tests for all four budget tables, cross-owner insert/update/delete denials, and recurring full-date/leap-day constraints; preserve the existing frontend and production data.
+- B3 (staging PR #73): guard global recurring-rule account references before deletion; add a forward-only tenant-safe account FK, disposable populated-upgrade/recovery tests, and independent desktop/mobile deletion-confirmation regressions. No production changes.
+
+- Staging A3 account-switch hardening: hide previous-user budget while asynchronous year/account catalog loading runs, block rendering and edits until the verified owner's accounts are ready, and add independent desktop/mobile delayed-catalog plus credentialed integration regressions. No production changes.
+
+- PR #70 (staging, issue #52): document a shared owner-scoped write, conflict, retry, and partial-success contract; preserve account catalog revisions for compare-and-set edits/deletions; prevent stale account updates and cross-session UI write contamination. Add synthetic two-context revision tests and independent desktop/mobile stale-account regressions. No database or production changes.
+
+- PR #69 (staging, issue #46): block in-memory budget edits during active cloud reconciliation on desktop and mobile; conditionally migrate legacy income with owner/year cloud revisions; match generated recurring entries one-to-one during year copying. Added reload, stale-revision, migration/year-copy, and duplicate-copy regressions. No database or production changes.
+
+- B1 staging PR #68: add a disposable PostgreSQL 17 clean migration replay with owner-scoped policy, index and constraint checks; record applied migration IDs and exact staging/source SQL fingerprints plus safe non-destructive repair guidance. No staging or production database writes.
 
 - Phase A2 correction review (staging PR #45): require a cloud-verified, conflict-free source year for manual plan copying and January projection; protect cloud reconciliation against invalid snapshots, missing backups, account switches and concurrent edits; persist owner-scoped recurring retry ranges across browser sessions, auto-retry on sign-in, and distinguish a confirmed cloud budget save from deferred recurring backfill. Expand desktop/mobile recovery regressions. No production changes.
 
