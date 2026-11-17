@@ -1112,6 +1112,7 @@ test('mobile expense category settings section is reachable without desktop cont
   await expect(page.locator('[data-mobile-settings-section="categories"]')).toBeVisible();
   await expect(page.locator('#mobileExpenseCategoriesManager [data-expense-category-create]')).toHaveCount(1);
   await expect(page.locator('#mobileExpenseCategoriesManager [name="categoryKind"] option')).toHaveCount(2);
+  await expect(page.locator('#mobileExpenseCategoriesManager [data-expense-category-action="delete"]')).toHaveCount(0); // Empty owner catalog and built-in categories cannot be deleted.
   await expect(page.locator('#mobileExpenseCategoriesManager')).toHaveCount(1); // Empty manager shell has no visible box until category controls are implemented.
   await expect(page.locator('#settingsCategories')).toBeHidden();
 });
