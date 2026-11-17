@@ -1036,7 +1036,7 @@ test('desktop rejects budget edits while cloud reconciliation is in flight and s
   await page.locator('#newVarName').fill('Blocked addition');
   await page.locator('#newVarDue').selectOption('15');
   await page.locator('#newVarAmt').fill('800');
-  await page.locator('button[onclick="addExpense(\\'variable\\')"]').click();
+  await page.locator(`button[onclick="addExpense('variable')"]`).click();
   await page.evaluate(async () => {
     await editExp('variable', 0, 'amount', '999');
     await delItem('variable', 0);
