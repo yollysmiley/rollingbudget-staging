@@ -10,8 +10,14 @@ test('desktop and mobile use distinct account manager containers', () => {
   assert.match(html, /id="mobileSettingsPanel"/);
   assert.match(html, /function renderAccounts\(\)/);
 });
-test('account manager is initialized after authenticated year loading', () => {
-  assert.match(html, /await loadAllYears\(\);\s*await initializeAccounts\(\);\s*render\(\);/);
+test('account manager finishes loading before initial budget render and auth gate reveal', () => {
+  const init = html.slice(html.indexOf('async function initApp() {'), html.indexOf('function parseLocalBudgetRecord('));
+  const yearLoad = init.lastIndexOf('await loadAllYears();');
+  const catalogLoad = init.lastIndexOf('const ready = await initializeAccounts();');
+  const render = init.lastIndexOf('render();');
+  const reveal = init.lastIndexOf('document.documentElement.classList.add("budget-authenticated");');
+  assert.ok(yearLoad >= 0 && yearLoad < catalogLoad && catalogLoad < render && render < reveal);
+  assert.match(init, /if \(!ready \|\| currentUser\?\.id !== user\.id\)/);
 });
 test('browser service modules are published to both staging app routes', () => {
   assert.match(build, /dist\/scripts/);
@@ -19,7 +25,15 @@ test('browser service modules are published to both staging app routes', () => {
   assert.match(html, /import\('\.\/scripts\/account-storage\.mjs'\)/);
 });
 test('account-aware budget totals are calculated only after accounts load', () => {
-  assert.match(html, /accountBudgetModule = await import\('\.\/scripts\/account-budget\.mjs'\)/);
+  assert.match(html, /const budgetModule = await import\('\.\/scripts\/account-budget\.mjs'\)/);
+  assert.match(html, /accountBudgetModule = budgetModule;/);
+  const start = html.indexOf('async function initializeAccounts() {');
+  const end = html.indexOf('async function runAccountAction(', start);
+  const code = html.slice(start, end);
+  assert.ok(code.indexOf('const accounts = await service.loadOrSeedAccounts') <
+    code.indexOf('accountBudgetModule = budgetModule;'));
+  assert.ok(code.indexOf('accountBudgetModule = budgetModule;') <
+    code.indexOf('accountReadyOwner = owner;'));
   assert.match(html, /accountBudgetModule\.computeAccountBudget\(db\[yrKey\], budgetAccounts\)/);
   assert.match(html, /accountStatus\('Account changes saved\.'\);\s*render\(\)/);
 });
