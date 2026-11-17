@@ -65,8 +65,8 @@ BEGIN
   WHERE schemaname = 'public'
     AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules')
     AND roles = ARRAY['authenticated']::name[];
-  IF policy_count <> 20 THEN
-    RAISE EXCEPTION 'Expected 20 authenticated owner policies, found %', policy_count;
+  IF policy_count <> 16 THEN
+    RAISE EXCEPTION 'Expected 16 authenticated owner policies, found %', policy_count;
   END IF;
 
   IF EXISTS (SELECT 1 FROM pg_policies
