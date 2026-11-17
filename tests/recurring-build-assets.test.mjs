@@ -44,3 +44,15 @@ test('desktop and mobile recurring manager use date fields without manual previe
   assert.doesNotMatch(app, /potential recurring entries|Apply scheduled entries/i);
   assert.doesNotMatch(app, /data-rec-field="startMonth"|data-rec-field="due"/);
 });
+
+test('staging publishes category and migration modules at both import roots', () => {
+  for (const route of ['dist/scripts', 'dist/app/scripts']) {
+    for (const name of ['expense-category-model.mjs', 'expense-category-storage.mjs',
+      'expense-entry-migration.mjs', 'account-budget.mjs']) {
+      assert.ok(existsSync(route + '/' + name), route + '/' + name + ' must be published');
+    }
+  }
+  const app = readFileSync('dist/app/index.html', 'utf8');
+  assert.match(app, /import\('\.\/scripts\/expense-entry-migration\.mjs'\)/);
+  assert.match(app, /import\('\.\/scripts\/expense-category-storage\.mjs'\)/);
+});
