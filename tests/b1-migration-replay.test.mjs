@@ -29,3 +29,14 @@ test('B1 workflow is secret-free and does not change existing required CI', () =
   assert.match(workflow, /bash scripts\/verify-clean-migration-replay\.sh/);
   assert.doesNotMatch(workflow, /secrets\.|supabase\.co|apply_migration|deploy-pages/);
 });
+
+test('B3 migration rejects orphaned references and enforces a validated tenant-safe RESTRICT FK', () => {
+  const migration = readFileSync('supabase/migrations/20261117015000_protect_global_recurring_account_refs.sql', 'utf8');
+  assert.match(migration, /BEGIN;/);
+  assert.match(migration, /account_id IS NOT NULL AND a\.id IS NULL/);
+  assert.match(migration, /FOREIGN KEY \(user_id, account_id\)/);
+  assert.match(migration, /REFERENCES public\.budget_accounts \(user_id, id\)/);
+  assert.match(migration, /ON DELETE RESTRICT/);
+  assert.match(migration, /VALIDATE CONSTRAINT budget_recurring_account_owner_fk/);
+  assert.doesNotMatch(migration, /ON DELETE CASCADE|SET NULL/);
+});
