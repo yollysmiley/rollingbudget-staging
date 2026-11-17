@@ -30,7 +30,7 @@ function isPossibleDuplicate(entry, occurrence) {
 // Pure preview used by both desktop and mobile views. It never changes budgets.
 // Existing legacy entries cannot reliably be deduplicated without a verified
 // source-rule mapping, so a matching rule ID in a month blocks generation there.
-export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds = [], approvedOccurrenceIds = [] } = {}) {
+export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds = [], approvedOccurrenceIds = [], expenseCategoryIds = [] } = {}) {
   if (!yearDocument || !Array.isArray(yearDocument.months) || yearDocument.months.length !== 12) {
     throw new Error('Complete 12-month budget required');
   }
@@ -56,12 +56,16 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
   let added = 0;
   const skipped = [];
   for (const rule of rules) {
-    for (const occurrence of scheduledOccurrences(rule, year)) {
+    for (const occurrence of scheduledOccurrences(rule, year, { expenseCategoryIds })) {
       const index = Number(occurrence.scheduledMonth.slice(5, 7)) - 1;
+      const customExpense = !Object.hasOwn(TARGETS, occurrence.category);
       const target = TARGETS[occurrence.category];
       const migratedDefault = months[index].expenseSchemaVersion === 2 &&
         (occurrence.category === 'fixed' || occurrence.category === 'variable');
-      const list = migratedDefault ? months[index].expenses : months[index][target];
+      if (customExpense && !Array.isArray(months[index].expenses)) {
+        throw new Error('Custom recurring category requires category expense storage');
+      }
+      const list = customExpense || migratedDefault ? months[index].expenses : months[index][target];
       const inventories = [...Object.values(TARGETS).map(category => ({ category, entries: months[index][category] })),
         ...(months[index].expenses ? [{ category: 'expenses', entries: months[index].expenses }] : [])];
       // A legacy occurrence may have moved categories after manual edits.
@@ -94,7 +98,7 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
         : occurrence.category === 'cc'
           ? { ...common, statement: 0, apr: 0, payment: occurrence.amount }
           : { ...common, amount: occurrence.amount };
-      list.push(migratedDefault ? { ...item, categoryId: occurrence.category } : item);
+      list.push(customExpense || migratedDefault ? { ...item, categoryId: occurrence.category } : item);
       added++;
     }
   }
