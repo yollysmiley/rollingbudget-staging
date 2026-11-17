@@ -26,8 +26,8 @@ export async function loadOrSeedAccounts(client, userId, yearDocuments = {}) {
   return accountCatalog(final.data ?? []);
 }
 
-export async function createAccount(client, userId, accounts, name, id) {
-  const normalized = normalizeAccounts([...accounts, { id, name, included: true }]);
+export async function createAccount(client, userId, accounts, name, id, included = true) {
+  const normalized = normalizeAccounts([...accounts, { id, name, included: Boolean(included) }]);
   const account = normalized.at(-1);
   const { error } = await client.from('budget_accounts').insert({ ...account, user_id: userId });
   if (error) throw error;
