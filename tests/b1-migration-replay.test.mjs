@@ -19,7 +19,7 @@ test('B1 replay enumerates all committed SQL migrations in order', () => {
   assert.match(replay, /find supabase\/migrations/);
   assert.match(replay, /LC_ALL=C sort/);
   assert.match(replay, /migrations\[@\]/);
-  assert.match(replay, /policy_count <> 20/);
+  assert.match(replay, /policy_count <> 16/);
   assert.match(replay, /index_count <> 9/);
 });
 
