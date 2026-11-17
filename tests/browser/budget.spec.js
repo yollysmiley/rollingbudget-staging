@@ -25,6 +25,16 @@ async function queueBrandedResponses(page, responses) {
     observer.observe(backdrop, { attributes: true, attributeFilter: ['hidden'] });
   }, responses);
 }
+async function dismissVisibleBrandedAlerts(page) {
+  // A failed save may leave a queued informational alert open after the status updates.
+  // Acknowledge only alerts, never confirmations for destructive operations.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const alertOpen = await page.locator('#rbDialogBackdrop').evaluate(el =>
+      !el.hidden && document.getElementById('rbDialogCancel').hidden);
+    if (!alertOpen) break;
+    await page.locator('#rbDialogAccept').click();
+  }
+}
 async function queueBrandedResponse(page, decision = 'accept', value = '') {
   return queueBrandedResponses(page, [{ decision, value }]);
 }
@@ -884,6 +894,7 @@ test('failed browser storage rolls back a plan copy without claiming it was save
   }), next);
   expect(result).toEqual({ entries: [], cloud: null });
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await dismissVisibleBrandedAlerts(page);
   await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
   await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
