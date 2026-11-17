@@ -1104,3 +1104,12 @@ test('mobile account deletion cancellation preserves settings and route on refre
   await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
+
+
+test('mobile expense category settings section is reachable without desktop controls', async ({ page }) => {
+  await page.goto('rollover-budget-app.html?page=settings');
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Expense Categories' }).click();
+  await expect(page.locator('[data-mobile-settings-section="categories"]')).toBeVisible();
+  await expect(page.locator('#mobileExpenseCategoriesManager')).toBeVisible();
+  await expect(page.locator('#settingsCategories')).toBeHidden();
+});
