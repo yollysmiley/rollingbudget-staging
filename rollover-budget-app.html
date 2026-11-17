@@ -1282,6 +1282,7 @@ async function initializeAccounts() {
 }
 async function runAccountAction(action, id, value) {
   if (accountsBusy || !accountService || !currentUser) return;
+  const owner = currentUser.id;
   accountsBusy = true;
   accountsMessage = '';
   renderAccounts();
@@ -1290,23 +1291,29 @@ async function runAccountAction(action, id, value) {
       const name = String(value || '').trim();
       if (!name) throw new Error('Enter an account name');
       const accountId = 'account-' + crypto.randomUUID();
-      await accountService.createAccount(supabaseClient, currentUser.id, budgetAccounts, name, accountId);
+      await accountService.createAccount(supabaseClient, owner, budgetAccounts, name, accountId);
     } else if (action === 'rename') {
-      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { name: value });
+      await accountService.updateAccount(supabaseClient, owner, budgetAccounts, id, { name: value });
     } else if (action === 'included') {
-      await accountService.updateAccount(supabaseClient, currentUser.id, budgetAccounts, id, { included: value });
+      await accountService.updateAccount(supabaseClient, owner, budgetAccounts, id, { included: value });
     } else if (action === 'remove') {
-      await accountService.deleteAccount(supabaseClient, currentUser.id, budgetAccounts, id, db);
+      await accountService.deleteAccount(supabaseClient, owner, budgetAccounts, id, db);
     }
-    budgetAccounts = await accountService.loadOrSeedAccounts(supabaseClient, currentUser.id);
+    // Never publish a previous owner's result into a newly authenticated session.
+    if (currentUser?.id !== owner) return;
+    const latest = await accountService.loadOrSeedAccounts(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    budgetAccounts = latest;
     accountStatus('Account changes saved.');
     render();
   } catch (error) {
     console.error('Account change failed:', error);
-    accountStatus(error.message || 'Account changes could not be saved.');
+    if (currentUser?.id === owner) {
+      accountStatus(error.message || 'Account changes could not be saved.');
+    }
   } finally {
     accountsBusy = false;
-    renderAccounts();
+    if (currentUser?.id === owner) renderAccounts();
   }
 }
 document.addEventListener('submit', event => {
