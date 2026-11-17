@@ -1204,6 +1204,8 @@ async function retryRecurringSynchronization() {
 let recurringApplyBusy = false;
 let accountsBusy = false;
 let accountsMessage = '';
+let accountCreateOpen = false;
+let accountCreateIncluded = true;
 function accountStatus(message) {
   accountsMessage = message;
   for (const id of ['desktopAccountsStatus', 'mobileAccountsStatus']) {
@@ -1217,7 +1219,7 @@ function renderAccounts() {
       <strong>${esc(account.name)}</strong>
       <div class="account-manager-actions">
         <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
-        <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Rename</button>
+        <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" aria-label="Edit ${esc(account.name)} account name" title="Edit account name" ${accountsBusy ? 'disabled' : ''}>&#9998;</button>
         <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
       </div>
     </div>`).join('');
@@ -1225,10 +1227,15 @@ function renderAccounts() {
     const el = document.getElementById(target);
     if (!el) continue;
     el.innerHTML = `<div class="account-manager-list">${markup || '<p>No accounts yet.</p>'}</div>
-      <form class="account-manager-form" data-account-form>
-        <input type="text" name="accountName" maxlength="120" placeholder="New account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}>
-        <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
-      </form>
+      <button type="button" class="primary" data-account-action="start-create" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
+      ${accountCreateOpen ? `<form class="account-manager-form account-manager-row" data-account-form>
+        <label>Account name <input type="text" name="accountName" maxlength="120" placeholder="Enter account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}></label>
+        <label><input type="checkbox" name="included" ${accountCreateIncluded ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
+        <div class="account-manager-actions">
+          <button type="button" data-account-action="cancel-create">Cancel</button>
+          <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>Save account</button>
+        </div>
+      </form>` : ''}
       <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite">${esc(accountsMessage)}</p>`;
   }
 }
@@ -1319,10 +1326,10 @@ async function runAccountAction(action, id, value) {
   renderAccounts();
   try {
     if (action === 'create') {
-      const name = String(value || '').trim();
+      const name = String(value?.name ?? value ?? '').trim();
       if (!name) throw new Error('Enter an account name');
       const accountId = 'account-' + crypto.randomUUID();
-      await accountService.createAccount(supabaseClient, owner, budgetAccounts, name, accountId);
+      await accountService.createAccount(supabaseClient, owner, budgetAccounts, name, accountId, value?.included ?? true);
     } else if (action === 'rename') {
       await accountService.updateAccount(supabaseClient, owner, budgetAccounts, id, { name: value });
     } else if (action === 'included') {
@@ -1335,6 +1342,7 @@ async function runAccountAction(action, id, value) {
     const latest = await accountService.loadOrSeedAccounts(supabaseClient, owner);
     if (currentUser?.id !== owner) return;
     budgetAccounts = latest;
+    accountCreateOpen = false;
     accountStatus('Account changes saved.');
     render();
   } catch (error) {
@@ -1352,11 +1360,23 @@ document.addEventListener('submit', event => {
   if (!form) return;
   event.preventDefault();
   const name = form.elements.accountName.value;
-  void runAccountAction('create', null, name);
+  const included = form.elements.included.checked;
+  void runAccountAction('create', null, { name, included });
 });
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-account-action]');
   if (!button || accountsBusy) return;
+  if (button.dataset.accountAction === 'start-create') {
+    accountCreateOpen = true;
+    accountCreateIncluded = true;
+    renderAccounts();
+    return;
+  }
+  if (button.dataset.accountAction === 'cancel-create') {
+    accountCreateOpen = false;
+    renderAccounts();
+    return;
+  }
   const id = button.dataset.accountId;
   const account = budgetAccounts.find(item => item.id === id);
   if (!account) return;
