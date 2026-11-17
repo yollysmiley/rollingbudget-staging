@@ -46,7 +46,7 @@ for migration in "${migrations[@]}"; do
 done
 
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
-DO $
+DO $$
 DECLARE
   constraint_definition text;
 BEGIN
@@ -59,11 +59,11 @@ BEGIN
      position('income' in constraint_definition) = 0 THEN
     RAISE EXCEPTION 'Custom recurring category constraint missing after replay';
   END IF;
-END $;
+END $$;
 SQL
 
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
-DO $
+DO $$
 DECLARE
   table_count integer;
   policy_count integer;
