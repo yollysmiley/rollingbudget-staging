@@ -124,7 +124,7 @@ function versionedAccountClient(initial, beforeMutation = null) {
   return { client: { from(tableName) { assert.equal(tableName, 'budget_accounts'); return table; } }, rows, operations };
 }
 
-const priorAccount = () => ({ id: 'custom', name: 'Custom', included: true });
+const priorAccount = () => ({ id: 'custom', name: 'Custom', included: true, updatedAt: '2026-11-01T00:00:00.000Z' });
 const savedAccount = () => ({ ...priorAccount(), user_id: 'user-1', updated_at: '2026-11-01T00:00:00.000Z' });
 
 test('account updates use owner and timestamp CAS, and stale catalogs cannot overwrite them', async () => {
@@ -162,4 +162,15 @@ test('last unreferenced account is removable only at the expected owner revision
   const stale = versionedAccountClient([{ ...savedAccount(), name: 'Already changed' }]);
   await assert.rejects(deleteAccount(stale.client, 'user-1', [priorAccount()], 'custom', {}), /another device/);
   assert.equal(stale.rows.length, 1);
+});
+
+test('account edits reject a stale revision even when a remote change restores identical field values', async () => {
+  const { updateAccount } = await import('../scripts/account-storage.mjs');
+  const current = savedAccount();
+  current.updated_at = '2026-11-03T00:00:00.000Z';
+  const fixture = versionedAccountClient([current]);
+  await assert.rejects(updateAccount(fixture.client, 'user-1', [priorAccount()],
+    'custom', { included: false }), /another device/);
+  assert.equal(fixture.rows[0].included, true);
+  assert.equal(fixture.operations.length, 0);
 });
