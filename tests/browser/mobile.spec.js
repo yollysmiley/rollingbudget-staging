@@ -450,6 +450,10 @@ test('mobile SPA routes persist through refresh and browser history', async ({ p
     await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
   }
   await page.locator('#mobileMenuButton').click();
+  const recurringSidebar = page.locator('#mobileSidebar');
+  await expect(recurringSidebar).toHaveClass(/open/);
+  // CSS visibility is not enough during the slide-in transition; require a usable tap target.
+  await expect(page.locator('[data-mobile-action="recurring"]')).toBeInViewport();
   await page.locator('[data-mobile-action="recurring"]').click();
   await expect(page).toHaveURL(/[?&]page=recurring-rules(?:&|$)/);
   await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
