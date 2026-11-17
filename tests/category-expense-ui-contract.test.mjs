@@ -35,3 +35,15 @@ test('default cards preserve migrated source indices for edits, account changes 
   assert.match(app, /month\.expenses\.push\(\{ \.\.\.entry, categoryId: type \}\)/);
   assert.match(app, /month\.expenseSchemaVersion === 2\s*\? month\.expenses : month\[list\]/);
 });
+
+test('desktop and mobile recurring selectors use owner-scoped custom category options', () => {
+  for (const view of ['desktop', 'mobile']) {
+    const form = app.match(new RegExp('data-recurring-form="' + view + '"[\\s\\S]*?data-rec-field="category"'));
+    assert.ok(form, view + ' recurring form missing');
+  }
+  assert.match(app, /function renderRecurringCategoryOptions\(\)/);
+  assert.match(app, /expenseCategoryOwner === currentUser\.id/);
+  assert.match(app, /select\.querySelectorAll\('option\[data-custom-category\]'\)/);
+  assert.match(app, /option\.value = category\.id/);
+  assert.match(app, /renderRecurringCategoryOptions\(\)/);
+});
