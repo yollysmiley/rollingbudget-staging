@@ -34,6 +34,20 @@ function isolatedCloud() {
         return q;
       }
     };
+    if (table === 'budget_recurring_rules') return {
+      select(fields) {
+        assert.equal(fields, 'id');
+        const filters = {};
+        const q = {
+          eq(field, value) { filters[field] = value; return q; },
+          then(resolve, reject) {
+            assert.equal(filters.user_id, owner);
+            return Promise.resolve({ data: [], error: null }).then(resolve, reject);
+          }
+        };
+        return q;
+      }
+    };
     if (table !== 'budget_accounts') throw new Error('Unexpected table');
     return {
       insert: async row => {
