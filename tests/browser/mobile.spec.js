@@ -50,6 +50,21 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
 });
 
+test('mobile branded dialog validates input and restores focus on cancellation', async ({ page }) => {
+  const trigger = page.locator('#mobileMenuButton');
+  await trigger.focus();
+  const opened = page.evaluate(() => rbPrompt('Enter a category name', ''));
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInput')).toBeFocused();
+  await page.locator('#rbDialogAccept').click();
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInput')).toBeVisible();
+  await page.locator('#rbDialogCancel').click();
+  expect(await opened).toBeNull();
+  await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test('mobile overview renders the balance, snapshot and allocation sections', async ({ page }) => {
   await expect(page.locator('#mobileOverview .mobile-overview-hero')).toBeVisible();
   await expect(page.locator('#mobileOverview .mobile-snapshot-grid')).toBeVisible();
