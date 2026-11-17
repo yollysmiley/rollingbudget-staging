@@ -1078,6 +1078,10 @@ test('legacy income migration refreshes the source cloud revision for year copy 
   }, year);
   await page.reload();
   await expectAuthenticatedBudget(page);
+  // Authentication can complete before account migration; wait for committed converted rows.
+  await expect.poll(() => page.evaluate(y =>
+    db[y].months[0].income.map(item => [item.accountId, item.amount]), year))
+    .toEqual([['cpm', 40], ['usaa', 60]]);
   const migrated = await page.evaluate(y => {
     const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[y];
     return {
@@ -1111,6 +1115,12 @@ test('year planning blocks stale remote revisions even after legacy migration', 
   }, year);
   await page.reload();
   await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(y => {
+    const row = db[y].months[11].income[0];
+    const remote = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y];
+    return row?.accountId === 'cpm' && row?.amount === 125 &&
+      Boolean(remote && cloudBudgetVersions.get(currentUser.id + ':' + y) === remote.updated_at);
+  }, year)).toBe(true);
   await page.evaluate(y => {
     const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
     rows[y].updated_at = '2099-01-01T00:00:00.000Z';
