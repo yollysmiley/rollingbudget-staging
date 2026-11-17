@@ -2988,9 +2988,16 @@ function updateMobileCardToggleAllLabel() {
     ? "Expand all cards" : "Collapse all cards";
 }
 
+// Keyboard-driven viewport height changes must not reset the active Settings subpage.
+// Reapply the shared route only when crossing the desktop/mobile layout breakpoint.
+let lastViewportMobile = window.matchMedia("(max-width: 768px)").matches;
 window.addEventListener('resize', () => {
   syncMobileSettingsControls();
-  if (activePage) applyPage(activePage);
+  const mobile = window.matchMedia("(max-width: 768px)").matches;
+  if (mobile !== lastViewportMobile) {
+    lastViewportMobile = mobile;
+    if (activePage) applyPage(activePage);
+  }
 });
 syncMobileSettingsControls();
 applyPage(pageFromLocation());

@@ -221,6 +221,49 @@ test('mobile Settings opens only approved sections and returns to its menu', asy
   await expect(page.locator('#mobileSettingsDetail')).toBeHidden();
 });
 
+test('mobile Budget Accounts remains open when keyboard-related viewport resize fires', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  const detail = page.locator('[data-mobile-settings-section="accounts"]');
+  const name = page.locator('#mobileSettingsAccounts input[name="accountName"]');
+  await expect(detail).toBeVisible();
+  await name.focus();
+  await name.fill('Keyboard resize draft');
+  // Mobile software keyboards can change the layout viewport height.
+  await page.setViewportSize({ width: 390, height: 540 });
+  await expect(detail).toBeVisible();
+  await expect(page.locator('#mobileSettingsMenu')).toBeHidden();
+  await expect(name).toHaveValue('Keyboard resize draft');
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+});
+
+test('Settings stays coherent when switching between mobile and desktop breakpoints', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#mobileMenuButton').click();
+  await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('[data-mobile-settings-section="accounts"]')).toBeVisible();
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
+  await expect(page.locator('#settingsAccounts')).toBeVisible();
+  await expect(page.locator('#mobileSettingsPanel')).toBeHidden();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+  await expect(page.locator('#mobileSettingsMenu')).toBeVisible();
+  await expect(page.locator('#mobileSettingsDetail')).toBeHidden();
+  await expect(page.locator('#desktopSettingsPanel')).toBeHidden();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
 test('mobile Settings returns to its menu when reopened after visiting another page', async ({ page }) => {
   await page.locator('#mobileMenuButton').click();
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
