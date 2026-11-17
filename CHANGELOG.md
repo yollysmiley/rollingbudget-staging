@@ -1,5 +1,15 @@
 - Phase A2: share owner/year-scoped optimistic cloud revision writes between regular budget saves and explicit reconciliation; reject stale revisions, preserve insert-only first saves, and add revision contract unit tests. No schema or UI changes.\n- Phase A1 test correction: remove obsolete historical-year navigation scenario; retain rolling three-year desktop/mobile coverage and independent cloud-conflict preservation tests.\n- Phase A1 (staging, pending validation): restrict desktop/mobile year selection and session restoration to current calendar year plus two future years, while retaining historical/cloud conflict records for recovery; align unit and browser regressions.\n## Unreleased
 
+- PR #71 Phase 5 migration-history reconciliation: align three staging SQL filenames with already-applied Supabase migration versions (accounts 20261114221703, recurring rules 20261115043822, B3 account protection 20261117024033). SQL contents and live database/history remain unchanged; add exact manifest regression coverage. Verified staging columns, constraints and owner-scoped policies before repository-only rename. Live credentialed acceptance remains pending after a failed workflow run.
+
+- PR #71 Phase 4: extend independent desktop/mobile Playwright regression coverage for account deletion cancellation, blocked recurring-reference deletion, status messaging, and settings route persistence after refresh. Successful dependency-removal deletion remains covered by credentialed Phase 3 API acceptance. No application UI changes.
+
+- PR #71 Phase 3: add credentialed two-user live staging account-reference acceptance (active/disabled/future/historical rules, cross-owner FK/RLS, nullable account, explicit dependency removal and owner-scoped cleanup); wire into the protected live workflow, with draft-branch manual execution pending verification. No production changes.
+
+- PR #71 Phase 2: extend disposable PostgreSQL B3 contracts for disabled, future and historical recurring account references, atomic failed deletions, explicit dependency removal, and both orderings of concurrent rule creation/account deletion. No deployed database writes.
+
+- PR #71 Phase 1: rebase the draft B3/B4 live acceptance effort onto staging main and consolidate overlapping proposed B4 PostgreSQL checks with the already-merged B4 suite; dedicated live acceptance and additional concurrency assertions remain pending. No production or schema changes.
+
 - B4 (staging PR #72): introduce secret-free PostgreSQL 17 two-owner RLS tests for all four budget tables, cross-owner insert/update/delete denials, and recurring full-date/leap-day constraints; preserve the existing frontend and production data.
 - B3 (staging PR #73): guard global recurring-rule account references before deletion; add a forward-only tenant-safe account FK, disposable populated-upgrade/recovery tests, and independent desktop/mobile deletion-confirmation regressions. No production changes.
 

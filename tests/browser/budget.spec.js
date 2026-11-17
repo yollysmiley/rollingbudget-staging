@@ -229,6 +229,8 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
     await saveDB();
   });
   await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => db[activeYear]?.months?.[0]?.income?.length)).toBe(2);
   await page.evaluate(() => selectMonth(0));
   // The rollover summary row has its own numeric input; target income entry rows only.
   const migratedNames = page.locator('#incomeBody tr:not(.roll-row) input.inline-input:not([type])');
@@ -243,7 +245,8 @@ test('legacy mixed income migrates automatically once and survives reload', asyn
     { name: 'Legacy Pay', accountId: 'usaa', amount: 300, recurringRuleId: 'legacy-rule' }
   ]);
   await page.reload();
-  expect(await read()).toEqual(entries);
+  await expectAuthenticatedBudget(page);
+  await expect.poll(read).toEqual(entries);
   await expect(page.locator('#incomeBody button', { hasText: 'Split income' })).toHaveCount(0);
 });
 
@@ -1244,4 +1247,34 @@ test('desktop confirms deletion and blocks accounts referenced by disabled globa
   await expect(page.locator('#desktopAccountsStatus')).toContainText('Reassign or remove global recurring rules');
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
+});
+
+
+test('desktop account deletion cancellation preserves the account and settings route', async ({ page }) => {
+  await page.evaluate(() => {
+    budgetAccounts = [{ id: 'cancel-checking', name: 'Cancel Checking', included: true }];
+    renderAccounts();
+  });
+  await page.locator('#desktopSettingsButton').click();
+  const row = page.locator('#desktopAccountsManager .account-manager-row[data-account-id="cancel-checking"]');
+  await expect(row).toBeVisible();
+  let prompt;
+  page.once('dialog', async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await row.locator('[data-account-action="remove"]').click();
+  expect(prompt).toContain('Remove Cancel Checking?');
+  expect(prompt).toContain('This cannot be undone');
+  await expect(row).toContainText('Cancel Checking');
+  await expect(page.locator('#desktopAccountsStatus')).not.toContainText('Account changes saved');
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('#desktopRecurringButton')).toHaveAttribute('aria-current', 'page');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#desktopRecurringButton')).toHaveAttribute('aria-current', 'page');
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
 });
