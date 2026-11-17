@@ -388,6 +388,17 @@
     .form-group input, .form-group select { width: 100%; background: #faf9fe; border: 1px solid var(--border); color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 0.85rem; font-family: inherit; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+    /* Shared branded application dialogs, separate from authentication overlays. */
+    .rb-dialog-backdrop { position:fixed; inset:0; z-index:110; background:rgba(23,21,43,.66); display:flex; align-items:center; justify-content:center; padding:16px; }
+    .rb-dialog-backdrop[hidden] { display:none; }
+    .rb-dialog { width:min(100%,440px); max-height:calc(100dvh - 32px); overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:18px; padding:24px; box-shadow:0 22px 55px rgba(0,0,0,.25); }
+    .rb-dialog h2 { font-size:1.18rem; margin:0 0 10px; }
+    .rb-dialog p { margin:0 0 18px; line-height:1.5; white-space:pre-wrap; }
+    .rb-dialog label { display:block; font-weight:600; margin-bottom:8px; }
+    .rb-dialog input { width:100%; min-height:44px; border:1px solid var(--border); border-radius:8px; padding:10px; font:inherit; margin-bottom:12px; }
+    .rb-dialog .modal-actions { flex-wrap:wrap; }
+    .rb-dialog .modal-actions button { min-height:44px; }
+    @media(max-width:768px) { .rb-dialog { padding:20px; } .rb-dialog .modal-actions { display:grid; grid-template-columns:1fr 1fr; } }
     /* Dedicated mobile presentation. Desktop keeps the existing dashboard layout. */
     .mobile-card-tools { display: none; }
     .mobile-card-toggle { display: none; }
@@ -979,7 +990,84 @@
 <label>End date (optional)<input data-rec-field="endDate" type="date"></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><button class="primary recurring-mobile-add-button" type="button" onclick="addRecurringRule('mobile')">Add rule</button></section></div>
 </div></section>
+<div id="rbDialogBackdrop" class="rb-dialog-backdrop" hidden>
+  <section class="rb-dialog" role="dialog" aria-modal="true" aria-labelledby="rbDialogTitle" aria-describedby="rbDialogMessage">
+    <h2 id="rbDialogTitle">Rolling Budget</h2>
+    <p id="rbDialogMessage"></p>
+    <label id="rbDialogInputLabel" for="rbDialogInput" hidden>Value</label>
+    <input id="rbDialogInput" type="text" hidden>
+    <div class="modal-actions">
+      <button id="rbDialogCancel" type="button">Cancel</button>
+      <button id="rbDialogAccept" type="button" class="primary">Continue</button>
+    </div>
+  </section>
+</div>
 <script>
+// Shared, queued branded dialogs; never run a destructive callback before confirmation.
+let rbDialogQueue = Promise.resolve();
+function rbDialog(type, message, options = {}) {
+  const previous = rbDialogQueue;
+  let release;
+  rbDialogQueue = new Promise(resolve => { release = resolve; });
+  return (async () => {
+    await previous;
+    const backdrop = document.getElementById('rbDialogBackdrop');
+    const title = document.getElementById('rbDialogTitle');
+    const description = document.getElementById('rbDialogMessage');
+    const input = document.getElementById('rbDialogInput');
+    const inputLabel = document.getElementById('rbDialogInputLabel');
+    const accept = document.getElementById('rbDialogAccept');
+    const cancel = document.getElementById('rbDialogCancel');
+    const priorFocus = document.activeElement;
+    title.textContent = options.title || (type === 'alert' ? 'Rolling Budget' : 'Please confirm');
+    description.textContent = message;
+    input.hidden = type !== 'prompt';
+    inputLabel.hidden = type !== 'prompt';
+    input.value = options.value ?? '';
+    input.type = options.inputType || 'text';
+    cancel.hidden = type === 'alert';
+    accept.textContent = type === 'alert' ? 'OK' : (options.acceptLabel || 'Continue');
+    backdrop.hidden = false;
+    return new Promise(resolve => {
+      const controls = () => [accept, cancel, ...(input.hidden ? [] : [input])].filter(el => !el.hidden);
+      const finish = result => {
+        backdrop.hidden = true;
+        backdrop.removeEventListener('keydown', onKeydown);
+        accept.removeEventListener('click', onAccept);
+        cancel.removeEventListener('click', onCancel);
+        priorFocus?.isConnected && priorFocus.focus?.();
+        release();
+        resolve(result);
+      };
+      const onAccept = () => {
+        if (type === 'prompt') {
+          if (!input.value.trim()) { input.setCustomValidity('Enter a value'); input.reportValidity(); return; }
+          if (input.type === 'number' && !input.checkValidity()) { input.reportValidity(); return; }
+        }
+        finish(type === 'prompt' ? input.value : true);
+      };
+      const onCancel = () => finish(type === 'prompt' ? null : false);
+      const onKeydown = event => {
+        if (event.key === 'Escape') { event.preventDefault(); if (type !== 'alert') onCancel(); return; }
+        if (event.key === 'Enter' && event.target === input) { event.preventDefault(); onAccept(); return; }
+        if (event.key !== 'Tab') return;
+        const focusables = controls();
+        const first = focusables[0], last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      };
+      input.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+      accept.addEventListener('click', onAccept);
+      cancel.addEventListener('click', onCancel);
+      backdrop.addEventListener('keydown', onKeydown);
+      (type === 'prompt' ? input : accept).focus();
+    });
+  })();
+}
+function rbAlert(message) { return rbDialog('alert', message); }
+function rbConfirm(message, options) { return rbDialog('confirm', message, options); }
+function rbPrompt(message, value = '', options = {}) { return rbDialog('prompt', message, { ...options, value }); }
+
 // --- CLOUD CONFIGURATION ---
 // Replace with your backend URL and Anon Key when deploying
 const SUPABASE_URL = "YOUR_SUPABASE_URL";
@@ -1397,7 +1485,7 @@ document.addEventListener('click', event => {
     accountEditingId = id;
     renderAccounts();
   } else if (button.dataset.accountAction === 'remove') {
-    if (confirm('Remove ' + account.name + '? This cannot be undone.')) void runAccountAction('remove', id);
+    void rbConfirm('Remove ' + account.name + '? This cannot be undone.', { acceptLabel: 'Remove account' }).then(confirmed => { if (confirmed) void runAccountAction('remove', id); });
   }
 });
 document.addEventListener('change', event => {
@@ -1644,7 +1732,7 @@ async function reconcileCloudBudget(useLocal) {
   const key = owner + ':' + year;
   const budgetKey = storageKey(year), markerKey = conflictStorageKey(year);
   if (reconcilingBudgetYears.has(key) || localStorage.getItem(markerKey) !== '1') return;
-  if (!confirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
+  if (!await rbConfirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
   const originalMemory = structuredClone(db[year]);
   const originalLocalRaw = localStorage.getItem(budgetKey);
   let insertedNewYear = false;
@@ -1809,7 +1897,7 @@ async function saveDB({ backfillNewYear = true } = {}) {
     if (migrated.changed && db[year] === original) db[year] = snapshot;
   } catch (error) {
     console.error("Local save error:", error);
-    alert("Could not save this budget in browser storage. Your changes may not persist.");
+    void rbAlert("Could not save this budget in browser storage. Your changes may not persist.");
     return 'not-saved';
   }
   if (!supabaseClient || !userId) {
@@ -1941,7 +2029,7 @@ async function applyProjectedJanuaryOpening() {
     if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
     const source = await verifiedYearPlanSource(owner, previous);
     const projection = projectedJanuaryOpening(source, budgetAccounts, accountBudgetModule.computeAccountBudget);
-    if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
+    if (!await rbConfirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
         ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
     if (activeYear !== year || currentUser?.id !== owner ||
         cloudBudgetConflicts.has(owner + ':' + year) ||
@@ -1957,7 +2045,7 @@ async function applyProjectedJanuaryOpening() {
     console.error('Could not apply January projection:', error);
     if (currentUser?.id === owner) {
       showCloudSaveStatus('January projection blocked: verify and reconcile the previous budget year before retrying.');
-      alert('January projection could not be applied. Check the previous year and retry.');
+      void rbAlert('January projection could not be applied. Check the previous year and retry.');
     }
   } finally {
     yearPlanActionBusy = false;
@@ -2002,7 +2090,7 @@ async function copyPreviousYearPlan() {
     // Validate the cloud-backed source before prompting, then revalidate after confirmation.
     const source = await verifiedYearPlanSource(owner, previous);
     copyPlan(source, db[year]);
-    if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
+    if (!await rbConfirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
         year + '? Existing opening balances and recurring entries will remain unchanged.')) return;
     if (activeYear !== year || currentUser?.id !== owner ||
         cloudBudgetConflicts.has(owner + ':' + year) ||
@@ -2015,7 +2103,7 @@ async function copyPreviousYearPlan() {
     console.error('Could not copy previous year plan:', error);
     if (currentUser?.id === owner) {
       showCloudSaveStatus('Plan copy blocked: verify and reconcile the previous budget year before retrying.');
-      alert('The plan could not be copied. Check the previous year and retry.');
+      void rbAlert('The plan could not be copied. Check the previous year and retry.');
     }
   } finally {
     yearPlanActionBusy = false;
@@ -2462,9 +2550,9 @@ async function addCC() {
 async function delItem(list, idx) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
 
 /* Auth Modal & Handlers */
-function handleAuthClick() {
+async function handleAuthClick() {
   if (currentUser) {
-    if (confirm("Sign out of your account?")) {
+    if (await rbConfirm('Sign out of your account?', { acceptLabel: 'Sign out' })) {
       if (supabaseClient) supabaseClient.auth.signOut();
     }
   } else {
@@ -2761,7 +2849,7 @@ async function addRecurringRule(view) {
   const name = get('name').trim(), amount = Number(get('amount'));
   const startDate = get('startDate'), endDate = get('endDate') || null, frequency = get('frequency');
   if (!name || !Number.isFinite(amount) || amount < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
-      (endDate && endDate < startDate) || !RECURRING_FREQUENCIES[frequency]) { alert('Enter valid recurring dates, amount and frequency.'); return; }
+      (endDate && endDate < startDate) || !RECURRING_FREQUENCIES[frequency]) { void rbAlert('Enter valid recurring dates, amount and frequency.'); return; }
   try {
     const owner = currentUser.id, selectedYear = activeYear;
     await recurringAppService.createRecurringRule(supabaseClient, owner, {
@@ -2781,7 +2869,7 @@ async function addRecurringRule(view) {
       const status = await saveDB({ backfillNewYear: false });
       if (status !== 'cloud-saved') {
         renderRulesList();
-        alert('Recurring rule saved, but the selected budget year could not be synchronized. Resolve the cloud save before retrying.');
+        void rbAlert('Recurring rule saved, but the selected budget year could not be synchronized. Resolve the cloud save before retrying.');
         return;
       }
     }
@@ -2789,22 +2877,22 @@ async function addRecurringRule(view) {
     renderRulesList();
   } catch (error) {
     console.error('Could not create recurring rule:', error);
-    alert('Recurring rule could not be saved. Please retry.');
+    void rbAlert('Recurring rule could not be saved. Please retry.');
   }
 }
 async function editRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
   const owner = currentUser.id;
-  const amountInput = prompt('New recurring amount (future months only):',
+  const amountInput = await rbPrompt('New recurring amount (future months only):',
     String(rule.upcomingAmount ?? rule.displayAmount ?? rule.amount));
   if (amountInput === null) return;
   const amount = Number(amountInput);
-  if (!Number.isFinite(amount) || amount < 0) { alert('Enter a valid non-negative amount.'); return; }
-  const frequency = prompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually',
+  if (!Number.isFinite(amount) || amount < 0) { void rbAlert('Enter a valid non-negative amount.'); return; }
+  const frequency = await rbPrompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually',
     rule.upcomingFrequency || rule.displayFrequency || rule.frequency);
   if (frequency === null) return;
-  if (!RECURRING_FREQUENCIES[frequency]) { alert('Select a supported frequency.'); return; }
+  if (!RECURRING_FREQUENCIES[frequency]) { void rbAlert('Select a supported frequency.'); return; }
   const effectiveFrom = nextRecurringEffectiveMonth(rule);
   try {
     await recurringAppService.editRecurringRule(supabaseClient, owner, rule.id,
@@ -2816,7 +2904,7 @@ async function editRecurringRule(index) {
     if (currentUser?.id === owner) renderRulesList();
   } catch (error) {
     console.error('Could not edit recurring rule:', error);
-    if (currentUser?.id === owner) alert('Recurring rule could not be edited.');
+    if (currentUser?.id === owner) void rbAlert('Recurring rule could not be edited.');
   }
 }
 async function toggleRecurringRule(index) {
@@ -2835,20 +2923,20 @@ async function toggleRecurringRule(index) {
     if (currentUser?.id === owner) renderRulesList();
   } catch (error) {
     console.error('Could not update recurring rule:', error);
-    if (currentUser?.id === owner) alert('Recurring rule could not be updated.');
+    if (currentUser?.id === owner) void rbAlert('Recurring rule could not be updated.');
   }
 }
 async function deleteRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
-  if (!confirm('Delete this recurring rule? Existing budget transactions will remain unchanged.')) return;
+  if (!await rbConfirm('Delete this recurring rule? Existing budget transactions will remain unchanged.', { acceptLabel: 'Delete rule' })) return;
   try {
     await recurringAppService.removeRecurringRule(supabaseClient, currentUser.id, rule.id);
     await refreshRecurringPreview();
     renderRulesList();
   } catch (error) {
     console.error('Could not delete recurring rule:', error);
-    alert('Recurring rule could not be deleted.');
+    void rbAlert('Recurring rule could not be deleted.');
   }
 }
 
