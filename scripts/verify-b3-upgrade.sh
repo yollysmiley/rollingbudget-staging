@@ -27,7 +27,7 @@ SQL
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
 if [[ "${#migrations[@]}" -ne 8 ||
       "${migrations[6]}" != *"protect_global_recurring_account_refs.sql" ]]; then
-  echo "Expected six baseline migrations, B3, and expense category migration" >&2
+  echo "Expected six baseline migrations, B3, and expense category migrations" >&2
   exit 1
 fi
 for migration in "${migrations[@]:0:6}"; do
@@ -81,6 +81,7 @@ SQL
 
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[6]}" >/dev/null
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[7]}" >/dev/null
+psql -X -v ON_ERROR_STOP=1 -f "${migrations[8]}" >/dev/null
 # Re-applying a forward-only migration must not overwrite existing records.
 psql -X -v ON_ERROR_STOP=1 -f "${migrations[6]}" >/dev/null
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
