@@ -1162,8 +1162,9 @@ test('desktop account rename refuses stale other-device changes and reloads auth
     rows[0].updated_at = '2026-11-02T00:00:00.000Z';
     sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
   });
-  page.once('dialog', dialog => dialog.accept('Unsafe local rename'));
   await page.locator('#desktopAccountsManager [data-account-action="rename"][data-account-id="checking"]').click();
+  await page.locator('#desktopAccountsManager [data-account-rename-form][data-account-id="checking"] input[name="accountName"]').fill('Unsafe local rename');
+  await page.locator('#desktopAccountsManager [data-account-rename-form][data-account-id="checking"] button[type="submit"]').click();
   await expect(page.locator('#desktopAccountsStatus')).toContainText('Account changed on another device');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows'))[0].name))
     .toBe('Changed on another device');
