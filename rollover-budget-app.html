@@ -724,6 +724,7 @@
   <div class="settings-layout">
     <nav class="settings-section-nav" aria-label="Settings sections">
 <button type="button" data-settings-section="accounts" aria-controls="settingsAccounts" onclick="showSettingsSection('accounts')">Budget Accounts</button>
+<button type="button" data-settings-section="categories" aria-controls="settingsCategories" onclick="showSettingsSection('categories')">Expense Categories</button>
 <button type="button" data-settings-section="automation" aria-controls="settingsAutomation" onclick="showSettingsSection('automation')">Rollover &amp; Automation</button>
 <button type="button" data-settings-section="security" aria-controls="settingsProfile" onclick="showSettingsSection('security')">Profile &amp; Security</button>
 </nav>
@@ -733,6 +734,7 @@
     <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
     <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
   </div>
+  <div class="desktop-settings-card" id="settingsCategories" hidden><h3>Expense Categories</h3><p>Manage custom expense categories for your budget.</p><div id="desktopExpenseCategoriesManager" class="account-manager" aria-label="Expense Categories Manager"></div></div>
   <div class="desktop-settings-card" id="settingsAutomation" hidden>
     <h3>Rollover &amp; Automation</h3>
     <p>Control how unspent funds carry forward and manage recurring budget rules.</p>
@@ -770,6 +772,7 @@
     <p class="mobile-settings-intro">Choose a section to manage your budget preferences.</p>
 <nav id="mobileSettingsMenu" class="mobile-settings-menu" aria-label="Settings sections">
 <button type="button" onclick="showMobileSettingsSection('accounts')">Budget Accounts</button>
+<button type="button" onclick="showMobileSettingsSection('categories')">Expense Categories</button>
 <button type="button" onclick="showMobileSettingsSection('automation')">Rollover &amp; Automation</button>
 <button type="button" onclick="showMobileSettingsSection('security')">Profile &amp; Security</button>
 </nav>
@@ -778,6 +781,7 @@
       <h3 style="font-size:.95rem;margin-bottom:8px">Budget Accounts</h3>
       <div id="mobileSettingsAccounts" class="account-manager"></div>
     </div>
+<div data-mobile-settings-section="categories" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3>Expense Categories</h3><div id="mobileExpenseCategoriesManager" class="account-manager"></div></div>
 <div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p></div>
     <div data-mobile-settings-section="security" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
@@ -2952,7 +2956,7 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
-const settingsSectionIds = { accounts: "settingsAccounts", automation: "settingsAutomation", security: "settingsProfile" };
+const settingsSectionIds = { accounts: "settingsAccounts", categories: "settingsCategories", automation: "settingsAutomation", security: "settingsProfile" };
 let activeSettingsSection = "accounts";
 function showSettingsSection(section) {
   if (!settingsSectionIds[section]) return;
