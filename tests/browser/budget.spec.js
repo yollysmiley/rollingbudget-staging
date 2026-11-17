@@ -1244,6 +1244,10 @@ test('desktop confirms deletion and blocks accounts referenced by disabled globa
   await expect(page.locator('#desktopAccountsStatus')).toContainText('Reassign or remove global recurring rules');
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
 });
 
 
