@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
 import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { test, expect } from '@playwright/test';
 
@@ -286,7 +287,9 @@ test('mobile automatic recurring backfill persists across desktop layout and rel
   await expect.poll(() => page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.reload();
-  expect(await page.evaluate(() => db['2026'].months[0].fixed.filter(x => x.name === 'Verified expense').length)).toBe(1);
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() =>
+    db['2026']?.months?.[0]?.fixed.filter(x => x.name === 'Verified expense').length ?? 0)).toBe(1);
 });
 test('mobile recurring cloud failure does not add unsaved occurrences', async ({ page }) => {
   await page.evaluate(() => sessionStorage.setItem('__mock_budget_cloud_failure', '1'));
@@ -853,4 +856,53 @@ test('mobile rejects budget edits while cloud reconciliation is in flight and su
   expect(await page.evaluate(() => db[activeYear].months[0].variable.map(item => [item.name, item.amount])))
     .toEqual([['Protected expense', 25]]);
   expect(await page.evaluate(() => db[activeYear].months[0].recordedLeftover)).toBe(0);
+});
+
+test('mobile account deletion refuses stale remote revisions without dropping account on reload', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify([{
+      user_id: currentUser.id, id: 'checking', name: 'Checking', included: true,
+      updated_at: '2026-11-01T00:00:00.000Z'
+    }]));
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.id))).toEqual(['checking']);
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]')).toContainText('Checking');
+
+  // Simulate another browser updating this same account since the catalog was loaded.
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_account_rows'));
+    rows[0].updated_at = '2026-11-02T00:00:00.000Z';
+    rows[0].included = false;
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#mobileSettingsAccounts [data-account-action="remove"][data-account-id="checking"]').click();
+  await expect(page.locator('#mobileAccountsStatus')).toContainText('Account changed on another device');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows')).length)).toBe(1);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => [account.id, account.included])))
+    .toEqual([['checking', false]]);
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
+  await expect(page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]')).toBeVisible();
+});
+
+
+test('mobile account switching keeps the previous owner hidden until the new catalog loads', async ({ page }) => {
+  await switchWhileAccountCatalogLoads(page);
+  await expect(page.locator('#mobileOverview')).toBeVisible();
+  await expect(page.locator('#mobileOverview')).toContainText('$250.00');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SECOND OWNER INCOME');
+  await expect(page.locator('#incomeBody')).not.toContainText('FIRST OWNER INCOME');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => window.__errors)).toEqual([]);
 });

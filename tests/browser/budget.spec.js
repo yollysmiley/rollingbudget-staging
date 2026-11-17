@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
 import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
@@ -1136,4 +1137,92 @@ test('year planning blocks stale remote revisions even after legacy migration', 
   await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
   expect(await page.evaluate(y => db[y].months[0].income, next)).toEqual([]);
   await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+});
+
+test('desktop account rename refuses stale other-device changes and reloads authoritative catalog', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify([{
+      user_id: currentUser.id, id: 'checking', name: 'Checking', included: true,
+      updated_at: '2026-11-01T00:00:00.000Z'
+    }]));
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.id))).toEqual(['checking']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]')).toContainText('Checking');
+
+  // Simulate another authorized browser committing between our catalog read and edit.
+  await page.evaluate(() => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_account_rows'));
+    rows[0].name = 'Changed on another device';
+    rows[0].updated_at = '2026-11-02T00:00:00.000Z';
+    sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
+  });
+  page.once('dialog', dialog => dialog.accept('Unsafe local rename'));
+  await page.locator('#desktopAccountsManager [data-account-action="rename"][data-account-id="checking"]').click();
+  await expect(page.locator('#desktopAccountsStatus')).toContainText('Account changed on another device');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows'))[0].name))
+    .toBe('Changed on another device');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
+    .toEqual(['Changed on another device']);
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]')).toContainText('Changed on another device');
+});
+
+test('desktop account write never publishes the previous owner catalog after session switch', async ({ page }) => {
+  const started = await page.evaluate(async () => {
+    const previousOwner = currentUser;
+    const originalFrom = supabaseClient.from.bind(supabaseClient);
+    window.__originalAccountOwner = previousOwner;
+    window.__originalAccountFrom = originalFrom;
+    supabaseClient.from = table => {
+      const query = originalFrom(table);
+      if (table === 'budget_accounts') {
+        const originalInsert = query.insert.bind(query);
+        query.insert = row => new Promise(resolve => {
+          window.__releaseAccountWrite = () => Promise.resolve(originalInsert(row)).then(resolve);
+        });
+      }
+      return query;
+    };
+    window.__accountWrite = runAccountAction('create', null, 'Original owner checking');
+    for (let i = 0; i < 50 && !window.__releaseAccountWrite; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    if (!window.__releaseAccountWrite) throw new Error('Account write not pending');
+    currentUser = { id: 'other-owner', email: 'other-owner@example.invalid' };
+    return { active: accountsBusy, accounts: budgetAccounts.map(account => account.name) };
+  });
+  expect(started).toEqual({ active: true, accounts: [] });
+  await page.evaluate(async () => {
+    window.__releaseAccountWrite();
+    await window.__accountWrite;
+  });
+  const protectedState = await page.evaluate(() => ({
+    activeOwner: currentUser.id,
+    accounts: budgetAccounts.map(account => account.name),
+    message: accountsMessage,
+    busy: accountsBusy
+  }));
+  expect(protectedState).toEqual({ activeOwner: 'other-owner', accounts: [], message: '', busy: false });
+  await page.evaluate(() => {
+    currentUser = window.__originalAccountOwner;
+    supabaseClient.from = window.__originalAccountFrom;
+  });
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
+    .toEqual(['Original owner checking']);
+});
+
+
+test('desktop account switching waits for the incoming owner catalog before rendering budget', async ({ page }) => {
+  await switchWhileAccountCatalogLoads(page);
+  await expect(page.locator('#incTotalBadge')).toHaveText('$250.00');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SECOND OWNER INCOME');
+  await expect(page.locator('#incomeBody')).not.toContainText('FIRST OWNER INCOME');
+  expect(await page.evaluate(() => window.__errors)).toEqual([]);
 });
