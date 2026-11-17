@@ -75,4 +75,7 @@ export async function switchWhileAccountCatalogLoads(page) {
     ready: 'browser-test-other-owner',
     accounts: ['checking-b']
   });
+  // The earlier January selection was intentionally rejected while the catalog
+  // was pending. Once ready, selecting January must render the saved income.
+  await page.evaluate(() => selectMonth(0));
 }
