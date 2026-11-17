@@ -44,3 +44,14 @@ test('disabled and future recurring references block deletion; incomplete invent
   assert.equal(canDeleteExpenseCategory('utilities', { 2026: { months: [{}] } }, []), false);
   assert.equal(canDeleteExpenseCategory('fixed', years, []), false);
 });
+
+test('custom card entries and versioned recurring rules prevent category deletion', () => {
+  const empty = { 2027: { months: [{ fixed: [], variable: [], expenses: [] }] } };
+  const occupied = { 2027: { months: [{ fixed: [], variable: [],
+    expenses: [{ categoryId: 'utilities', name: 'Power', amount: 0 }] }] } };
+  assert.equal(canDeleteExpenseCategory('utilities', occupied, []), false);
+  assert.equal(canDeleteExpenseCategory('utilities', empty, [{ versions: [{ categoryId: 'utilities' }] }]), false);
+  assert.equal(canDeleteExpenseCategory('utilities', empty, [{ category: 'utilities', active: false }]), false);
+  assert.equal(canDeleteExpenseCategory('utilities', empty, []), true);
+  assert.equal(canDeleteExpenseCategory('utilities', { 2027: { months: [{ fixed: [], variable: [], expenses: null }] } }, []), false);
+});
