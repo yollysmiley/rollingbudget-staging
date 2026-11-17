@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
 import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
@@ -1215,4 +1216,13 @@ test('desktop account write never publishes the previous owner catalog after ses
   await expectAuthenticatedBudget(page);
   await expect.poll(() => page.evaluate(() => budgetAccounts.map(account => account.name)))
     .toEqual(['Original owner checking']);
+});
+
+
+test('desktop account switching waits for the incoming owner catalog before rendering budget', async ({ page }) => {
+  await switchWhileAccountCatalogLoads(page);
+  await expect(page.locator('#incTotalBadge')).toHaveText('$250.00');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SECOND OWNER INCOME');
+  await expect(page.locator('#incomeBody')).not.toContainText('FIRST OWNER INCOME');
+  expect(await page.evaluate(() => window.__errors)).toEqual([]);
 });
