@@ -50,7 +50,7 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
       throw new Error('Invalid category expense inventory');
     }
     return { ...month, income: [...month.income], fixed: [...month.fixed],
-      variable: [...month.variable], expenses: month.expenses ? [...month.expenses] : undefined,
+      variable: [...month.variable], ...(month.expenses ? { expenses: [...month.expenses] } : {}),
       loans: [...month.loans], creditCards: [...month.creditCards] };
   });
   let added = 0;
