@@ -1062,11 +1062,11 @@ test('mobile account deletion cancellation preserves settings and route on refre
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
   const row = page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="cancel-checking"]');
   await expect(row).toBeVisible();
-  let prompt;
-  page.once('dialog', async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await queueBrandedResponse(page, 'cancel');
   await row.locator('[data-account-action="remove"]').click();
-  expect(prompt).toContain('Remove Cancel Checking?');
-  expect(prompt).toContain('This cannot be undone');
+  const message = await page.evaluate(() => window.__brandedDialogSeen[0]);
+  expect(message).toContain('Remove Cancel Checking?');
+  expect(message).toContain('This cannot be undone');
   await expect(row).toContainText('Cancel Checking');
   await expect(page.locator('#mobileAccountsStatus')).not.toContainText('Account changes saved');
   await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
