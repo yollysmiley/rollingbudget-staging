@@ -867,6 +867,7 @@ test('mobile planning actions cannot overlap while a first-year save is pending'
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Manual January');
   await expect(page.locator('#mobileProjectJanuary')).toBeEnabled();
   await page.evaluate(() => { window.saveDB = window.__originalSaveDB; });
+  await queueBrandedResponse(page);
   await page.locator('#mobileProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(130);
 });
@@ -889,6 +890,7 @@ test('mobile January projection restores its prior value when browser storage fa
   await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
   expect(await page.evaluate(y => JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null, next)).toBe(null);
   await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await queueBrandedResponse(page);
   await page.locator('#mobileProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
   await page.reload();
