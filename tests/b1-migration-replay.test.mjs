@@ -41,7 +41,7 @@ test('B3 migration rejects orphaned references and enforces a validated tenant-s
   assert.doesNotMatch(migration, /ON DELETE CASCADE|SET NULL/);
 });
 
-test('committed account and recurring migration versions match the applied staging manifest', () => {
+test('committed migrations match the applied staging manifest', () => {
   const expected = [
     '20261029194718_create_staging_budget_data.sql',
     '20261114184318_create_budget_ui_years.sql',
@@ -50,9 +50,9 @@ test('committed account and recurring migration versions match the applied stagi
     '20261115043822_create_budget_recurring_rules.sql',
     '20261116172229_add_recurring_due_day_and_full_dates.sql',
     '20261117024033_protect_global_recurring_account_refs.sql',
-    '20261117050000_create_budget_expense_categories.sql',
-    '20261117060000_remove_expense_category_kind.sql',
-    '20261117070000_allow_custom_recurring_categories.sql'
+    '20261117071635_create_budget_expense_categories.sql',
+    '20261117071637_remove_expense_category_kind.sql',
+    '20261117071639_allow_custom_recurring_categories.sql'
   ];
   assert.deepEqual(migrationFiles, expected);
 });

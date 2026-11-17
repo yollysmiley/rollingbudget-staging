@@ -1,15 +1,24 @@
 # Rolling Budget — CI Responsibilities (Staging)
 
-This document preserves the CI contract formerly described in README. For browser-test details see [browser acceptance tests](browser-tests.md).
+This document describes the workflows present in staging at the Phase 1 release baseline. See [browser acceptance tests](browser-tests.md) for browser coverage.
 
-## CI workflow responsibilities
+## Workflow ownership
 
 | Workflow | Trigger | Responsibility |
 | --- | --- | --- |
-| `build-staging.yml` (`build`) | Pull requests, staging `main`, manual | Build staging assets, run unit/security regressions and desktop/mobile Playwright acceptance; publish Pages only from staging `main`. Superseded PR runs may be cancelled; main deployments are not cancelled. |
-| `authenticated-test-validation.yml` (`validate`) | Pull requests, dedicated validation branch | Secret-free syntax checks and authenticated Playwright test discovery. The main build owns live safety unit-test execution to avoid redundant work. |
-| `live-staging-tests.yml` (`integration`) | Staging `main`, manual | Credential-protected Supabase authentication, RLS, and browser persistence checks using dedicated test users. It intentionally revalidates its own prerequisites for independently triggered runs. Manual runs are permitted only on staging `main`; the protected `staging-live-tests` environment still controls secret access. Never expose its secrets to pull-request jobs. |
+| `build-staging.yml` (`build`, `deploy`) | PR, staging `main`, manual; also `ci/staging-browser-tests` pushes | Node 24 build, unit/security tests, desktop/mobile Playwright acceptance, and staging Pages deployment from `main` only. Superseded PR runs may be cancelled; main deployments are preserved. |
+| `staging-postgres-contracts.yml` (`postgres-contracts`) | PR, staging `main`, manual | Secret-free PostgreSQL 17 disposable database tests: populated upgrade, clean migration replay, owner isolation, recurring constraints and account deletion races. |
+| `live-staging-tests.yml` (`integration`) | Staging `main` push or manual dispatch | Protected credentialed staging authentication, RLS, persistence and browser acceptance. The job permits `main` and a specific manual audit branch (`audit/b4-rls-schema-contract`); revisit the exception before production release. |
+| `logout-diagnostics.yml` (`diagnostics`) | Manual dispatch on staging `main` | Private logout troubleshooting, with encrypted short-retention traces. Diagnostic-only; not a general release gate. |
 
-Keep the required `build` and `validate` status checks stable when changing CI. Browser failure reports are retained for seven days; successful runs do not upload those reports. The built staging frontend remains available as a short-lived artifact. Live tests seed only modern `amount`/`accountId` income and a run-scoped account; dedicated unit/browser regressions test historical CPM/USAA migration separately. Cleanup must verify test-run ownership before deleting fixture records.
+The previously documented `authenticated-test-validation.yml` / `validate` check is not present in this baseline. Do not assume a check is required or passing based on historical documentation. **Verify branch protection's actual required check names and recent GitHub Actions runs before changing protection rules or approving a release.**
 
-**Reproducible installs:** `package-lock.json` is committed. All three workflows use `npm ci` and `actions/setup-node` npm caching keyed to the lockfile; the credentialed live workflow and secret-free validation retain `--ignore-scripts`. The cache contains npm download artifacts, not browser sessions or authenticated data.
+## Test isolation and secrets
+
+The PR build and PostgreSQL contract jobs use no live staging credentials. The live integration job uses the protected `staging-live-tests` environment and dedicated staging test users; it must never expose secrets to untrusted pull requests. Tests must create and clean up their own records, preserve owner isolation and avoid historical production data. Separate desktop/mobile browser regression coverage is required for navigation and settings changes.
+
+The committed `package-lock.json` supports reproducible `npm ci` installs with npm caching. The live workflow uses `--ignore-scripts`; the main build uses `npm ci --no-audit --no-fund`. Keep build, database and credentialed integration responsibilities distinct.
+
+## Release validation
+
+Before staging is promoted, verify `build`, `postgres-contracts`, and protected `integration` results for the **same approved release commit** (or document an explicit tested equivalent). Check GitHub Pages deployment, branch protection, and production authentication redirects separately; this document is not evidence of those external settings.
