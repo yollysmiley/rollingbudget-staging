@@ -5,7 +5,7 @@ import {
   renameExpenseCategory, canDeleteExpenseCategory
 } from '../scripts/expense-category-model.mjs';
 
-const sample = { id: 'utilities', name: 'Utilities', kind: 'variable' };
+const sample = { id: 'utilities', name: 'Utilities' };
 
 test('new users have built-in categories and no custom categories', () => {
   assert.deepEqual(normalizeExpenseCategories([]), []);
@@ -14,11 +14,11 @@ test('new users have built-in categories and no custom categories', () => {
 
 test('custom category names are trimmed, unique case-insensitively, and nonblank', () => {
   assert.deepEqual(createExpenseCategory([], { ...sample, name: ' Utilities ' }), [{ ...sample, builtin: false }]);
-  assert.throws(() => createExpenseCategory([sample], { id: 'other', name: 'UTILITIES', kind: 'fixed' }), /unique/);
+  assert.throws(() => createExpenseCategory([sample], { id: 'other', name: 'UTILITIES' }), /unique/);
   assert.throws(() => createExpenseCategory([], { ...sample, name: '  ' }), /nonblank/);
   assert.throws(() => createExpenseCategory([], { ...sample, name: 'Fixed Expenses' }), /unique/);
   assert.throws(() => createExpenseCategory([], { ...sample, id: 'fixed' }), /unique/);
-  assert.throws(() => createExpenseCategory([], { ...sample, kind: 'income' }), /fixed or variable/);
+  assert.deepEqual(createExpenseCategory([], { ...sample, kind: 'income' }), [{ ...sample, builtin: false }]); // Legacy classification is ignored.
 });
 
 test('renaming preserves stable category ID and does not mutate existing records', () => {
