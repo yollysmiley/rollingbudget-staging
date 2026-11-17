@@ -1420,6 +1420,7 @@ async function saveExpenseCategoryAction(action, id, name) {
     expenseCategories = fresh;
     expenseCategoryEditingId = null;
     expenseCategoryMessage = 'Expense category saved.';
+    renderRecurringCategoryOptions();
     render();
   } catch (error) {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not save expense category.';
