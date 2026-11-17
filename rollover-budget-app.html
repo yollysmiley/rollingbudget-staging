@@ -1334,6 +1334,90 @@ function renderAccounts() {
       <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite">${esc(accountsMessage)}</p>`;
   }
 }
+// Category management uses the same owner-scoped cloud session as budget accounts.
+let expenseCategories = [];
+let expenseCategoryService = null;
+let expenseCategoryOwner = null;
+let expenseCategoryBusy = false;
+let expenseCategoryEditingId = null;
+let expenseCategoryMessage = '';
+function renderExpenseCategories() {
+  const builtins = [{ id: 'fixed', name: 'Fixed Expenses' }, { id: 'variable', name: 'Variable & One-Time Expenses' }];
+  const rows = [...builtins.map(category => `<div class="account-manager-row"><strong>${esc(category.name)}</strong><span>Built-in</span></div>`),
+    ...expenseCategories.map(category => `<div class="account-manager-row" data-expense-category-id="${esc(category.id)}">
+      ${expenseCategoryEditingId === category.id ? `<form data-expense-category-rename="${esc(category.id)}" class="account-manager-form"><label>Category name <input name="categoryName" maxlength="80" required value="${esc(category.name)}"></label><button type="submit" class="primary">Save</button><button type="button" data-expense-category-action="cancel">Cancel</button></form>` : `<strong>${esc(category.name)}</strong><span>${esc(category.kind)}</span><button type="button" data-expense-category-action="rename" data-id="${esc(category.id)}" ${expenseCategoryBusy ? 'disabled' : ''}>Rename</button>`}
+    </div>`)].join('');
+  for (const id of ['desktopExpenseCategoriesManager', 'mobileExpenseCategoriesManager']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.innerHTML = `<div class="account-manager-list">${rows}</div>
+      <form data-expense-category-create class="account-manager-form">
+        <label>Category name <input name="categoryName" maxlength="80" required ${expenseCategoryBusy ? 'disabled' : ''}></label>
+        <label>Type <select name="categoryKind" ${expenseCategoryBusy ? 'disabled' : ''}><option value="fixed">Fixed</option><option value="variable">Variable</option></select></label>
+        <button type="submit" class="primary" ${expenseCategoryBusy ? 'disabled' : ''}>Add category</button>
+      </form>
+      <p class="account-manager-status" role="status" aria-live="polite">${esc(expenseCategoryMessage)}</p>`;
+  }
+}
+async function initializeExpenseCategories() {
+  const owner = currentUser?.id;
+  expenseCategoryOwner = null;
+  expenseCategories = [];
+  expenseCategoryMessage = '';
+  renderExpenseCategories();
+  if (!owner) return;
+  try {
+    const service = await import('./scripts/expense-category-storage.mjs');
+    const categories = await service.loadExpenseCategories(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    expenseCategoryService = service;
+    expenseCategories = categories;
+    expenseCategoryOwner = owner;
+  } catch (error) {
+    if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not load expense categories.';
+  }
+  if (currentUser?.id === owner) renderExpenseCategories();
+}
+async function saveExpenseCategoryAction(action, id, name, kind) {
+  const owner = currentUser?.id;
+  if (!owner || expenseCategoryOwner !== owner || !expenseCategoryService || expenseCategoryBusy) return;
+  expenseCategoryBusy = true;
+  expenseCategoryMessage = '';
+  renderExpenseCategories();
+  try {
+    if (action === 'create') {
+      const newId = 'cat_' + crypto.randomUUID().replace(/-/g, '');
+      await expenseCategoryService.saveExpenseCategory(supabaseClient, owner, expenseCategories, { id: newId, name, kind });
+    } else {
+      await expenseCategoryService.updateExpenseCategory(supabaseClient, owner, expenseCategories, id, name);
+    }
+    const fresh = await expenseCategoryService.loadExpenseCategories(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    expenseCategories = fresh;
+    expenseCategoryEditingId = null;
+    expenseCategoryMessage = 'Expense category saved.';
+  } catch (error) {
+    if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not save expense category.';
+  } finally {
+    expenseCategoryBusy = false;
+    if (currentUser?.id === owner) renderExpenseCategories();
+  }
+}
+document.addEventListener('submit', event => {
+  const create = event.target.closest('[data-expense-category-create]');
+  const rename = event.target.closest('[data-expense-category-rename]');
+  if (!create && !rename) return;
+  event.preventDefault();
+  if (create) void saveExpenseCategoryAction('create', null, create.elements.categoryName.value.trim(), create.elements.categoryKind.value);
+  else void saveExpenseCategoryAction('rename', rename.dataset.expenseCategoryRename, rename.elements.categoryName.value.trim());
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-expense-category-action]');
+  if (!button || expenseCategoryBusy) return;
+  expenseCategoryEditingId = button.dataset.expenseCategoryAction === 'rename' ? button.dataset.id : null;
+  renderExpenseCategories();
+});
+
 let accountMigrationModule = null;
 async function migrateLoadedIncome() {
   if (!currentUser || !accountMigrationModule || !budgetAccounts.length) return;
@@ -1401,6 +1485,7 @@ async function initializeAccounts() {
     accountReadyOwner = owner;
     accountsMessage = '';
     renderAccounts();
+    await initializeExpenseCategories();
     return true;
   } catch (error) {
     console.error('Accounts could not be loaded or income migrated:', error);
