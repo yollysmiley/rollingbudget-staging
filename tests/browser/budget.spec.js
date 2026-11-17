@@ -1245,3 +1245,29 @@ test('desktop confirms deletion and blocks accounts referenced by disabled globa
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
 });
+
+
+test('desktop account deletion cancellation preserves the account and settings route', async ({ page }) => {
+  await page.evaluate(() => {
+    budgetAccounts = [{ id: 'cancel-checking', name: 'Cancel Checking', included: true }];
+    renderAccounts();
+  });
+  await page.locator('#desktopSettingsButton').click();
+  const row = page.locator('#desktopAccountsManager .account-manager-row[data-account-id="cancel-checking"]');
+  await expect(row).toBeVisible();
+  let prompt;
+  page.once('dialog', async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await row.locator('[data-account-action="remove"]').click();
+  expect(prompt).toContain('Remove Cancel Checking?');
+  expect(prompt).toContain('This cannot be undone');
+  await expect(row).toContainText('Cancel Checking');
+  await expect(page.locator('#desktopAccountsStatus')).not.toContainText('Account changes saved');
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await page.locator('#desktopRecurringButton').click();
+  await expect(page.locator('#desktopRecurringButton')).toHaveAttribute('aria-current', 'page');
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page.locator('#desktopRecurringButton')).toHaveAttribute('aria-current', 'page');
+  await page.locator('#desktopSettingsButton').click();
+  await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
+});
