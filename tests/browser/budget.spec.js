@@ -115,14 +115,14 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
 test('desktop branded dialog validates input and restores focus on cancellation', async ({ page }) => {
   const trigger = page.locator('#desktopSettingsButton');
   await trigger.focus();
-  const opened = page.evaluate(() => rbPrompt('Enter a category name', ''));
+  await page.evaluate(() => { window.__dialogResult = rbPrompt('Enter a category name', ''); });
   await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
   await expect(page.locator('#rbDialogInput')).toBeFocused();
   await page.locator('#rbDialogAccept').click();
   await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
   await expect(page.locator('#rbDialogInput')).toBeVisible();
   await page.locator('#rbDialogCancel').click();
-  expect(await opened).toBeNull();
+  expect(await page.evaluate(() => window.__dialogResult)).toBeNull();
   await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
   await expect(trigger).toBeFocused();
 });
