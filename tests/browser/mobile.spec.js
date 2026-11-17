@@ -556,8 +556,10 @@ test('mobile disable preserves saved entries; re-enable backfills missing future
     month.fixed.filter(x => x.name === 'Mobile reactivation').length));
   expect(counts).toEqual(Array(12).fill(1));
   await page.reload();
-  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
-    x => x.name === 'Mobile reactivation').length)).toBe(1);
+  await expectAuthenticatedBudget(page);
+  await expect.poll(() => page.evaluate(() =>
+    db['2026']?.months?.[11]?.fixed.filter(
+      x => x.name === 'Mobile reactivation').length ?? 0)).toBe(1);
 });
 
 test('mobile recurring synchronization identifies possible duplicates without changing manual entries', async ({ page }) => {
