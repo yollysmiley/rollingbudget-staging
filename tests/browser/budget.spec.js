@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
@@ -1028,4 +1029,41 @@ test('desktop save migrates known legacy ordinals without altering expense amoun
   expect(saved.local[1].due).toBeUndefined();
   await page.reload();
   await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
+});
+
+test('desktop rejects budget edits while cloud reconciliation is in flight and survives reload', async ({ page }) => {
+  await holdCloudReconciliation(page);
+  await page.locator('#newVarName').fill('Blocked addition');
+  await page.locator('#newVarDue').selectOption('15');
+  await page.locator('#newVarAmt').fill('800');
+  await page.locator('button[onclick="addExpense(\\'variable\\')"]').click();
+  await page.evaluate(async () => {
+    await editExp('variable', 0, 'amount', '999');
+    await delItem('variable', 0);
+    await updateStartLeftover('400');
+    await setAutoCascade(false);
+  });
+  const during = await page.evaluate(() => {
+    const year = db[activeYear];
+    const cached = JSON.parse(localStorage.getItem(storageKey(activeYear)));
+    return {
+      rows: year.months[0].variable.map(item => [item.name, item.amount]),
+      cachedRows: cached.data.months[0].variable.map(item => [item.name, item.amount]),
+      opening: year.months[0].recordedLeftover,
+      autoCascade: year.autoCascade,
+      locked: reconcilingBudgetYears.has(currentUser.id + ':' + activeYear)
+    };
+  });
+  expect(during).toEqual({
+    rows: [['Protected expense', 25]], cachedRows: [['Protected expense', 25]],
+    opening: 0, autoCascade: true, locked: true
+  });
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation in progress');
+  await finishHeldReconciliation(page);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(() => db[activeYear].months[0].variable.map(item => [item.name, item.amount])))
+    .toEqual([['Protected expense', 25]]);
+  expect(await page.evaluate(() => db[activeYear].months[0].recordedLeftover)).toBe(0);
 });
