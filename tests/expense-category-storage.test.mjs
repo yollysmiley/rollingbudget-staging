@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadExpenseCategories, saveExpenseCategory, updateExpenseCategory } from '../scripts/expense-category-storage.mjs';
+import { loadExpenseCategories, saveExpenseCategory, updateExpenseCategory, deleteExpenseCategory } from '../scripts/expense-category-storage.mjs';
 
 test('category storage refuses unauthenticated access', async () => {
   await assert.rejects(loadExpenseCategories(null, null), /Authenticated/);
@@ -42,4 +42,23 @@ test('category inserts include authenticated owner scope', async () => {
   } };
   await saveExpenseCategory(client, 'owner-a', [], { id: 'groceries', name: 'Groceries', kind: 'variable' });
   assert.deepEqual(inserted, { user_id: 'owner-a', id: 'groceries', name: 'Groceries', kind: 'variable' });
+});
+
+test('category deletion refuses unauthenticated access', async () => {
+  await assert.rejects(deleteExpenseCategory(null, null, [], 'custom'), /Authenticated/);
+});
+
+test('category deletion fails closed when cloud year inventory fails', async () => {
+  let deleted = false;
+  const client = { from(table) {
+    if (table === 'budget_ui_years') return { select() { return { async eq() { return { data: null, error: new Error('Year lookup failed') }; } }; } };
+    deleted = true;
+    throw new Error('Unexpected table access');
+  } };
+  await assert.rejects(deleteExpenseCategory(client, 'owner-a', [{ id: 'custom', name: 'Custom', kind: 'fixed' }], 'custom'), /Year lookup failed/);
+  assert.equal(deleted, false);
+});
+
+test('category deletion refuses built-in categories without cloud access', async () => {
+  await assert.rejects(deleteExpenseCategory({ from() { throw Error('Unexpected cloud access'); } }, 'owner-a', [], 'fixed'), /not found/);
 });
