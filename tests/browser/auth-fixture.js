@@ -47,9 +47,16 @@ export async function mockSignedInBudget(page) {
                 const recurringRows = table === 'budget_recurring_rules'
                   ? JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules') || '[]') : [];
                 if (table === 'budget_recurring_rules') {
-                  const result = Promise.resolve({ data: recurringRows, error: null });
-                  result.eq = (_field, id) => Promise.resolve({ data: recurringRows.filter(row => row.id === id), error: null });
-                  return result;
+                  const filters = {};
+                  const query = {
+                    eq(key, value) { filters[key] = value; return query; },
+                    then(resolve, reject) {
+                      const scoped = recurringRows.filter(row => row.user_id === user.id &&
+                        Object.entries(filters).every(([key, value]) => row[key] === value));
+                      return Promise.resolve({ data: scoped, error: null }).then(resolve, reject);
+                    }
+                  };
+                  return query;
                 }
                 return Promise.resolve({ data: accountRows, error: null });
               },
