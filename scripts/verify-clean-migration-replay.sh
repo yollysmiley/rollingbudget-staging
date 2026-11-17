@@ -37,7 +37,7 @@ SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
 if [[ "${#migrations[@]}" -ne 8 ]]; then
-  echo "Expected eight staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
+  echo "Expected nine staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
   exit 1
 fi
 for migration in "${migrations[@]}"; do
