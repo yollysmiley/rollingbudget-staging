@@ -66,7 +66,7 @@ export async function deleteExpenseCategory(client, userId, categories, id) {
     .select('year,budget_data').eq('user_id', userId);
   if (yearError) throw yearError;
   const { data: rules, error: ruleError } = await client.from('budget_recurring_rules')
-    .select('id,category,category_id,versions').eq('user_id', userId);
+    .select('id,category,versions').eq('user_id', userId);
   if (ruleError) throw ruleError;
   if (!Array.isArray(years) || !Array.isArray(rules) ||
       years.some(row => !row || !row.budget_data || !Number.isInteger(Number(row.year)))) {
