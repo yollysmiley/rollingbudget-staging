@@ -9,7 +9,7 @@ export async function holdCloudReconciliation(page) {
     render();
     markCloudConflict(owner + ':' + year, year);
     const originalFrom = supabaseClient.from.bind(supabaseClient);
-    const originalConfirm = window.confirm;
+    const originalConfirm = rbConfirm;
     let releaseRead = null;
     supabaseClient.from = table => {
       const query = originalFrom(table);
@@ -30,7 +30,7 @@ export async function holdCloudReconciliation(page) {
       };
       return query;
     };
-    window.confirm = () => true;
+    rbConfirm = async () => true;
     const pending = reconcileCloudBudget(false);
     for (let i = 0; i < 50 && !releaseRead; i++) await new Promise(resolve => setTimeout(resolve, 0));
     if (!releaseRead || !reconcilingBudgetYears.has(owner + ':' + year)) {
@@ -42,7 +42,7 @@ export async function holdCloudReconciliation(page) {
         await pending;
       } finally {
         supabaseClient.from = originalFrom;
-        window.confirm = originalConfirm;
+        rbConfirm = originalConfirm;
         delete window.__finishHeldReconciliation;
       }
     };

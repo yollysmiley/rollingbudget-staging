@@ -388,6 +388,17 @@
     .form-group input, .form-group select { width: 100%; background: #faf9fe; border: 1px solid var(--border); color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 0.85rem; font-family: inherit; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+    /* Shared branded application dialogs, separate from authentication overlays. */
+    .rb-dialog-backdrop { position:fixed; inset:0; z-index:110; background:rgba(23,21,43,.66); display:flex; align-items:center; justify-content:center; padding:16px; }
+    .rb-dialog-backdrop[hidden] { display:none; }
+    .rb-dialog { width:min(100%,440px); max-height:calc(100dvh - 32px); overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:18px; padding:24px; box-shadow:0 22px 55px rgba(0,0,0,.25); }
+    .rb-dialog h2 { font-size:1.18rem; margin:0 0 10px; }
+    .rb-dialog p { margin:0 0 18px; line-height:1.5; white-space:pre-wrap; }
+    .rb-dialog label { display:block; font-weight:600; margin-bottom:8px; }
+    .rb-dialog input { width:100%; min-height:44px; border:1px solid var(--border); border-radius:8px; padding:10px; font:inherit; margin-bottom:12px; }
+    .rb-dialog .modal-actions { flex-wrap:wrap; }
+    .rb-dialog .modal-actions button { min-height:44px; }
+    @media(max-width:768px) { .rb-dialog { padding:20px; } .rb-dialog .modal-actions { display:grid; grid-template-columns:1fr 1fr; } }
     /* Dedicated mobile presentation. Desktop keeps the existing dashboard layout. */
     .mobile-card-tools { display: none; }
     .mobile-card-toggle { display: none; }
@@ -713,6 +724,7 @@
   <div class="settings-layout">
     <nav class="settings-section-nav" aria-label="Settings sections">
 <button type="button" data-settings-section="accounts" aria-controls="settingsAccounts" onclick="showSettingsSection('accounts')">Budget Accounts</button>
+<button type="button" data-settings-section="categories" aria-controls="settingsCategories" onclick="showSettingsSection('categories')">Expense Categories</button>
 <button type="button" data-settings-section="automation" aria-controls="settingsAutomation" onclick="showSettingsSection('automation')">Rollover &amp; Automation</button>
 <button type="button" data-settings-section="security" aria-controls="settingsProfile" onclick="showSettingsSection('security')">Profile &amp; Security</button>
 </nav>
@@ -722,6 +734,7 @@
     <p>Manage the accounts used by your budget. Exclusion from financial totals will become available when transaction assignment is upgraded.</p>
     <div id="desktopAccountsManager" class="account-manager" aria-label="Accounts Manager"></div>
   </div>
+  <div class="desktop-settings-card" id="settingsCategories" hidden><h3>Expense Categories</h3><p>Manage custom expense categories for your budget.</p><div id="desktopExpenseCategoriesManager" class="account-manager" aria-label="Expense Categories Manager"></div></div>
   <div class="desktop-settings-card" id="settingsAutomation" hidden>
     <h3>Rollover &amp; Automation</h3>
     <p>Control how unspent funds carry forward and manage recurring budget rules.</p>
@@ -759,6 +772,7 @@
     <p class="mobile-settings-intro">Choose a section to manage your budget preferences.</p>
 <nav id="mobileSettingsMenu" class="mobile-settings-menu" aria-label="Settings sections">
 <button type="button" onclick="showMobileSettingsSection('accounts')">Budget Accounts</button>
+<button type="button" onclick="showMobileSettingsSection('categories')">Expense Categories</button>
 <button type="button" onclick="showMobileSettingsSection('automation')">Rollover &amp; Automation</button>
 <button type="button" onclick="showMobileSettingsSection('security')">Profile &amp; Security</button>
 </nav>
@@ -767,6 +781,7 @@
       <h3 style="font-size:.95rem;margin-bottom:8px">Budget Accounts</h3>
       <div id="mobileSettingsAccounts" class="account-manager"></div>
     </div>
+<div data-mobile-settings-section="categories" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3>Expense Categories</h3><div id="mobileExpenseCategoriesManager" class="account-manager"></div></div>
 <div data-mobile-settings-section="automation" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none"><h3 style="font-size:.95rem;margin-bottom:8px">Rollover &amp; Automation</h3><label class="mobile-settings-toggle" for="mobileAutoRollToggle"><input type="checkbox" id="mobileAutoRollToggle" onchange="setAutoCascade(this.checked)"><span>Auto-Cascade</span></label><p class="settings-help">Carry remaining funds into the next month automatically.</p></div>
     <div data-mobile-settings-section="security" hidden class="card mobile-settings-section" style="padding:16px;box-shadow:none">
       <h3 style="font-size:.95rem;margin-bottom:5px">Profile &amp; Security</h3>
@@ -858,6 +873,8 @@
         <button class="primary" onclick="addExpense('variable')">Add</button>
       </div>
     </div>
+
+    <div id="customExpenseCards" data-expense-cards="desktop"></div>
 
     <!-- LOANS -->
     <div class="card">
@@ -979,7 +996,86 @@
 <label>End date (optional)<input data-rec-field="endDate" type="date"></label>
 <label>Frequency<select data-rec-field="frequency"><option value="monthly">Monthly</option><option value="every-2-months">Every 2 months</option><option value="quarterly">Quarterly</option><option value="every-6-months">Every 6 months</option><option value="annually">Annually</option></select></label></div><button class="primary recurring-mobile-add-button" type="button" onclick="addRecurringRule('mobile')">Add rule</button></section></div>
 </div></section>
+<div id="rbDialogBackdrop" class="rb-dialog-backdrop" hidden>
+  <section class="rb-dialog" role="dialog" aria-modal="true" aria-labelledby="rbDialogTitle" aria-describedby="rbDialogMessage">
+    <h2 id="rbDialogTitle">Rolling Budget</h2>
+    <p id="rbDialogMessage"></p>
+    <label id="rbDialogInputLabel" for="rbDialogInput" hidden>Value</label>
+    <input id="rbDialogInput" type="text" hidden>
+    <div class="modal-actions">
+      <button id="rbDialogCancel" type="button">Cancel</button>
+      <button id="rbDialogAccept" type="button" class="primary">Continue</button>
+    </div>
+  </section>
+</div>
 <script>
+// Shared, queued branded dialogs; never run a destructive callback before confirmation.
+let rbDialogQueue = Promise.resolve();
+function rbDialog(type, message, options = {}) {
+  const previous = rbDialogQueue;
+  let release;
+  rbDialogQueue = new Promise(resolve => { release = resolve; });
+  return (async () => {
+    await previous;
+    const backdrop = document.getElementById('rbDialogBackdrop');
+    const title = document.getElementById('rbDialogTitle');
+    const description = document.getElementById('rbDialogMessage');
+    const input = document.getElementById('rbDialogInput');
+    const inputLabel = document.getElementById('rbDialogInputLabel');
+    const accept = document.getElementById('rbDialogAccept');
+    const cancel = document.getElementById('rbDialogCancel');
+    const priorFocus = document.activeElement;
+    title.textContent = options.title || (type === 'alert' ? 'Rolling Budget' : 'Please confirm');
+    description.textContent = message;
+    input.hidden = type !== 'prompt';
+    inputLabel.hidden = type !== 'prompt';
+    input.value = options.value ?? '';
+    input.type = options.inputType || 'text';
+    cancel.hidden = type === 'alert';
+    accept.textContent = type === 'alert' ? 'OK' : (options.acceptLabel || 'Continue');
+    backdrop.hidden = false;
+    return new Promise(resolve => {
+      const controls = () => [accept, cancel, ...(input.hidden ? [] : [input])].filter(el => !el.hidden);
+      const finish = result => {
+        backdrop.hidden = true;
+        backdrop.removeEventListener('keydown', onKeydown);
+        accept.removeEventListener('click', onAccept);
+        cancel.removeEventListener('click', onCancel);
+        input.oninput = null;
+        if (priorFocus?.isConnected) priorFocus.focus?.();
+        release();
+        resolve(result);
+      };
+      const onAccept = () => {
+        if (type === 'prompt') {
+          if (!input.value.trim()) { input.setCustomValidity('Enter a value'); input.reportValidity(); return; }
+          if (input.type === 'number' && !input.checkValidity()) { input.reportValidity(); return; }
+        }
+        finish(type === 'prompt' ? input.value : true);
+      };
+      const onCancel = () => finish(type === 'prompt' ? null : false);
+      const onKeydown = event => {
+        if (event.key === 'Escape') { event.preventDefault(); if (type !== 'alert') onCancel(); return; }
+        if (event.key === 'Enter' && event.target === input) { event.preventDefault(); onAccept(); return; }
+        if (event.key !== 'Tab') return;
+        const focusables = controls();
+        const first = focusables[0], last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      };
+      input.setCustomValidity('');
+      input.oninput = () => input.setCustomValidity('');
+      accept.addEventListener('click', onAccept);
+      cancel.addEventListener('click', onCancel);
+      backdrop.addEventListener('keydown', onKeydown);
+      (type === 'prompt' ? input : accept).focus();
+    });
+  })();
+}
+function rbAlert(message) { return rbDialog('alert', message); }
+function rbConfirm(message, options) { return rbDialog('confirm', message, options); }
+function rbPrompt(message, value = '', options = {}) { return rbDialog('prompt', message, { ...options, value }); }
+
 // --- CLOUD CONFIGURATION ---
 // Replace with your backend URL and Anon Key when deploying
 const SUPABASE_URL = "YOUR_SUPABASE_URL";
@@ -1204,6 +1300,9 @@ async function retryRecurringSynchronization() {
 let recurringApplyBusy = false;
 let accountsBusy = false;
 let accountsMessage = '';
+let accountCreateOpen = false;
+let accountCreateIncluded = true;
+let accountEditingId = null;
 function accountStatus(message) {
   accountsMessage = message;
   for (const id of ['desktopAccountsStatus', 'mobileAccountsStatus']) {
@@ -1214,10 +1313,10 @@ function accountStatus(message) {
 function renderAccounts() {
   const markup = budgetAccounts.map(account => `
     <div class="account-manager-row" data-account-id="${esc(account.id)}">
-      <strong>${esc(account.name)}</strong>
+      ${accountEditingId === account.id ? `<form data-account-rename-form data-account-id="${esc(account.id)}" class="account-manager-form"><input name="accountName" maxlength="120" required aria-label="Edit account name" value="${esc(account.name)}"><button type="submit" class="primary">Save</button><button type="button" data-account-action="cancel-rename">Cancel</button></form>` : `<strong>${esc(account.name)}</strong>`}
       <div class="account-manager-actions">
         <label><input type="checkbox" data-account-action="included" data-account-id="${esc(account.id)}" ${account.included ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
-        <button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Rename</button>
+        ${accountEditingId === account.id ? '' : `<button type="button" data-account-action="rename" data-account-id="${esc(account.id)}" aria-label="Edit ${esc(account.name)} account name" title="Edit account name" ${accountsBusy ? 'disabled' : ''}>&#9998;</button>`}
         <button type="button" data-account-action="remove" data-account-id="${esc(account.id)}" ${accountsBusy ? 'disabled' : ''}>Remove</button>
       </div>
     </div>`).join('');
@@ -1225,13 +1324,127 @@ function renderAccounts() {
     const el = document.getElementById(target);
     if (!el) continue;
     el.innerHTML = `<div class="account-manager-list">${markup || '<p>No accounts yet.</p>'}</div>
-      <form class="account-manager-form" data-account-form>
-        <input type="text" name="accountName" maxlength="120" placeholder="New account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}>
-        <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
-      </form>
+      <button type="button" class="primary" data-account-action="start-create" ${accountsBusy ? 'disabled' : ''}>+ Add account</button>
+      ${accountCreateOpen ? `<form class="account-manager-form account-manager-row" data-account-form>
+        <label>Account name <input type="text" name="accountName" maxlength="120" placeholder="Enter account name" aria-label="New account name" required ${accountsBusy ? 'disabled' : ''}></label>
+        <label><input type="checkbox" name="included" ${accountCreateIncluded ? 'checked' : ''} ${accountsBusy ? 'disabled' : ''}> Include in budget totals</label>
+        <div class="account-manager-actions">
+          <button type="button" data-account-action="cancel-create">Cancel</button>
+          <button type="submit" class="primary" ${accountsBusy ? 'disabled' : ''}>Save account</button>
+        </div>
+      </form>` : ''}
       <p class="account-manager-status" id="${suffix}AccountsStatus" role="status" aria-live="polite">${esc(accountsMessage)}</p>`;
   }
 }
+// Category management uses the same owner-scoped cloud session as budget accounts.
+let expenseCategories = [];
+let expenseCategoryService = null;
+let expenseCategoryOwner = null;
+let expenseCategoryBusy = false;
+let expenseCategoryEditingId = null;
+let expenseCategoryMessage = '';
+function renderExpenseCategories() {
+  const builtins = [{ id: 'fixed', name: 'Fixed Expenses' }, { id: 'variable', name: 'Variable & One-Time Expenses' }];
+  const rows = [...builtins.map(category => `<div class="account-manager-row"><strong>${esc(category.name)}</strong><span>Built-in</span></div>`),
+    ...expenseCategories.map(category => `<div class="account-manager-row" data-expense-category-id="${esc(category.id)}">
+      ${expenseCategoryEditingId === category.id ? `<form data-expense-category-rename="${esc(category.id)}" class="account-manager-form"><label>Category name <input name="categoryName" maxlength="80" required value="${esc(category.name)}"></label><button type="submit" class="primary">Save</button><button type="button" data-expense-category-action="cancel">Cancel</button></form>` : `<strong>${esc(category.name)}</strong><button type="button" data-expense-category-action="rename" data-id="${esc(category.id)}" ${expenseCategoryBusy ? 'disabled' : ''}>Rename</button><button type="button" data-expense-category-action="delete" data-id="${esc(category.id)}" ${expenseCategoryBusy ? 'disabled' : ''}>Delete</button>`}
+    </div>`)].join('');
+  for (const id of ['desktopExpenseCategoriesManager', 'mobileExpenseCategoriesManager']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.innerHTML = `<div class="account-manager-list">${rows}</div>
+      <form data-expense-category-create class="account-manager-form">
+        <label>Category name <input name="categoryName" maxlength="80" required ${expenseCategoryBusy ? 'disabled' : ''}></label>
+        <button type="submit" class="primary" ${expenseCategoryBusy ? 'disabled' : ''}>Add category</button>
+      </form>
+      <p class="account-manager-status" role="status" aria-live="polite">${esc(expenseCategoryMessage)}</p>`;
+  }
+}
+async function initializeExpenseCategories() {
+  const owner = currentUser?.id;
+  expenseCategoryOwner = null;
+  expenseCategories = [];
+  expenseCategoryMessage = '';
+  renderExpenseCategories();
+  renderRecurringCategoryOptions();
+  if (!owner) return;
+  try {
+    const service = await import('./scripts/expense-category-storage.mjs');
+    const categories = await service.loadExpenseCategories(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    expenseCategoryService = service;
+    expenseCategories = categories;
+    expenseCategoryOwner = owner;
+  } catch (error) {
+    if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not load expense categories.';
+  }
+  if (currentUser?.id === owner) { renderExpenseCategories(); renderRecurringCategoryOptions(); render(); }
+}
+async function confirmDeleteExpenseCategory(id) {
+  const owner = currentUser?.id;
+  const category = expenseCategories.find(item => item.id === id);
+  if (!category || !owner || expenseCategoryOwner !== owner || expenseCategoryBusy) return;
+  const confirmed = await rbConfirm('Delete expense category "' + category.name + '"? This cannot be undone.', { acceptLabel: 'Delete category' });
+  if (!confirmed || currentUser?.id !== owner || expenseCategoryOwner !== owner) return;
+  expenseCategoryBusy = true;
+  expenseCategoryMessage = '';
+  renderExpenseCategories();
+  try {
+    await expenseCategoryService.deleteExpenseCategory(supabaseClient, owner, expenseCategories, id);
+    const fresh = await expenseCategoryService.loadExpenseCategories(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    expenseCategories = fresh;
+    expenseCategoryMessage = 'Expense category deleted.';
+  } catch (error) {
+    if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Category could not be deleted.';
+  } finally {
+    expenseCategoryBusy = false;
+    if (currentUser?.id === owner) { renderExpenseCategories(); renderRecurringCategoryOptions(); }
+  }
+}
+async function saveExpenseCategoryAction(action, id, name) {
+  const owner = currentUser?.id;
+  if (!owner || expenseCategoryOwner !== owner || !expenseCategoryService || expenseCategoryBusy) return;
+  expenseCategoryBusy = true;
+  expenseCategoryMessage = '';
+  renderExpenseCategories();
+  try {
+    if (action === 'create') {
+      const newId = 'cat_' + crypto.randomUUID().replace(/-/g, '');
+      await expenseCategoryService.saveExpenseCategory(supabaseClient, owner, expenseCategories, { id: newId, name });
+    } else {
+      await expenseCategoryService.updateExpenseCategory(supabaseClient, owner, expenseCategories, id, name);
+    }
+    const fresh = await expenseCategoryService.loadExpenseCategories(supabaseClient, owner);
+    if (currentUser?.id !== owner) return;
+    expenseCategories = fresh;
+    expenseCategoryEditingId = null;
+    expenseCategoryMessage = 'Expense category saved.';
+    renderRecurringCategoryOptions();
+    render();
+  } catch (error) {
+    if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Could not save expense category.';
+  } finally {
+    expenseCategoryBusy = false;
+    if (currentUser?.id === owner) renderExpenseCategories();
+  }
+}
+document.addEventListener('submit', event => {
+  const create = event.target.closest('[data-expense-category-create]');
+  const rename = event.target.closest('[data-expense-category-rename]');
+  if (!create && !rename) return;
+  event.preventDefault();
+  if (create) void saveExpenseCategoryAction('create', null, create.elements.categoryName.value.trim());
+  else void saveExpenseCategoryAction('rename', rename.dataset.expenseCategoryRename, rename.elements.categoryName.value.trim());
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-expense-category-action]');
+  if (!button || expenseCategoryBusy) return;
+  if (button.dataset.expenseCategoryAction === 'delete') { void confirmDeleteExpenseCategory(button.dataset.id); return; }
+  expenseCategoryEditingId = button.dataset.expenseCategoryAction === 'rename' ? button.dataset.id : null;
+  renderExpenseCategories();
+});
+
 let accountMigrationModule = null;
 async function migrateLoadedIncome() {
   if (!currentUser || !accountMigrationModule || !budgetAccounts.length) return;
@@ -1279,6 +1492,23 @@ async function migrateLoadedIncome() {
     }
   }
 }
+// Read-only migration preflight: never mutates db or writes cloud/local data.
+// Conversion stays disabled until default-card editing and recurring backfill can
+// read the versioned expense collection without changing historical entries.
+async function preflightExpenseMigration() {
+  if (!currentUser || !cloudYearLoadSucceeded || !accountBudgetModule) return;
+  const owner = currentUser.id;
+  const migration = await import('./scripts/expense-entry-migration.mjs');
+  for (const [year, original] of Object.entries(db)) {
+    if (currentUser?.id !== owner) return;
+    const key = owner + ':' + year;
+    if (cloudBudgetConflicts.has(key) ||
+        localStorage.getItem(conflictStorageKey(year, owner)) === '1') continue;
+    const converted = migration.migrateExpenseYear(original);
+    migration.verifyExpenseMigration(original, converted, budgetAccounts,
+      accountBudgetModule.computeAccountBudget);
+  }
+}
 async function initializeAccounts() {
   const owner = currentUser?.id;
   if (!owner) return false;
@@ -1296,9 +1526,12 @@ async function initializeAccounts() {
     budgetAccounts = accounts;
     await migrateLoadedIncome();
     if (currentUser?.id !== owner) return false;
+    await preflightExpenseMigration();
+    if (currentUser?.id !== owner) return false;
     accountReadyOwner = owner;
     accountsMessage = '';
     renderAccounts();
+    await initializeExpenseCategories();
     return true;
   } catch (error) {
     console.error('Accounts could not be loaded or income migrated:', error);
@@ -1319,10 +1552,10 @@ async function runAccountAction(action, id, value) {
   renderAccounts();
   try {
     if (action === 'create') {
-      const name = String(value || '').trim();
+      const name = String(value?.name ?? value ?? '').trim();
       if (!name) throw new Error('Enter an account name');
       const accountId = 'account-' + crypto.randomUUID();
-      await accountService.createAccount(supabaseClient, owner, budgetAccounts, name, accountId);
+      await accountService.createAccount(supabaseClient, owner, budgetAccounts, name, accountId, value?.included ?? true);
     } else if (action === 'rename') {
       await accountService.updateAccount(supabaseClient, owner, budgetAccounts, id, { name: value });
     } else if (action === 'included') {
@@ -1335,6 +1568,8 @@ async function runAccountAction(action, id, value) {
     const latest = await accountService.loadOrSeedAccounts(supabaseClient, owner);
     if (currentUser?.id !== owner) return;
     budgetAccounts = latest;
+    accountCreateOpen = false;
+    accountEditingId = null;
     accountStatus('Account changes saved.');
     render();
   } catch (error) {
@@ -1348,23 +1583,46 @@ async function runAccountAction(action, id, value) {
   }
 }
 document.addEventListener('submit', event => {
+  const renameForm = event.target.closest('[data-account-rename-form]');
+  if (renameForm) {
+    event.preventDefault();
+    void runAccountAction('rename', renameForm.dataset.accountId, renameForm.elements.accountName.value.trim());
+    return;
+  }
   const form = event.target.closest('[data-account-form]');
   if (!form) return;
   event.preventDefault();
   const name = form.elements.accountName.value;
-  void runAccountAction('create', null, name);
+  const included = form.elements.included.checked;
+  void runAccountAction('create', null, { name, included });
 });
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-account-action]');
   if (!button || accountsBusy) return;
+  if (button.dataset.accountAction === 'cancel-rename') {
+    accountEditingId = null;
+    renderAccounts();
+    return;
+  }
+  if (button.dataset.accountAction === 'start-create') {
+    accountCreateOpen = true;
+    accountCreateIncluded = true;
+    renderAccounts();
+    return;
+  }
+  if (button.dataset.accountAction === 'cancel-create') {
+    accountCreateOpen = false;
+    renderAccounts();
+    return;
+  }
   const id = button.dataset.accountId;
   const account = budgetAccounts.find(item => item.id === id);
   if (!account) return;
   if (button.dataset.accountAction === 'rename') {
-    const name = prompt('Account name:', account.name);
-    if (name !== null) void runAccountAction('rename', id, name.trim());
+    accountEditingId = id;
+    renderAccounts();
   } else if (button.dataset.accountAction === 'remove') {
-    if (confirm('Remove ' + account.name + '? This cannot be undone.')) void runAccountAction('remove', id);
+    void rbConfirm('Remove ' + account.name + '? This cannot be undone.', { acceptLabel: 'Remove account' }).then(confirmed => { if (confirmed) void runAccountAction('remove', id); });
   }
 });
 document.addEventListener('change', event => {
@@ -1611,7 +1869,7 @@ async function reconcileCloudBudget(useLocal) {
   const key = owner + ':' + year;
   const budgetKey = storageKey(year), markerKey = conflictStorageKey(year);
   if (reconcilingBudgetYears.has(key) || localStorage.getItem(markerKey) !== '1') return;
-  if (!confirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
+  if (!await rbConfirm(useLocal ? 'Replace the cloud budget with your unsynced local budget? This replaces newer cloud edits.' : 'Replace the local budget with the latest cloud copy? A local backup will be retained.')) return;
   const originalMemory = structuredClone(db[year]);
   const originalLocalRaw = localStorage.getItem(budgetKey);
   let insertedNewYear = false;
@@ -1776,7 +2034,7 @@ async function saveDB({ backfillNewYear = true } = {}) {
     if (migrated.changed && db[year] === original) db[year] = snapshot;
   } catch (error) {
     console.error("Local save error:", error);
-    alert("Could not save this budget in browser storage. Your changes may not persist.");
+    void rbAlert("Could not save this budget in browser storage. Your changes may not persist.");
     return 'not-saved';
   }
   if (!supabaseClient || !userId) {
@@ -1908,7 +2166,7 @@ async function applyProjectedJanuaryOpening() {
     if (activeYear !== year || currentUser?.id !== owner || !canApplyJanuaryOpening(db[year])) return;
     const source = await verifiedYearPlanSource(owner, previous);
     const projection = projectedJanuaryOpening(source, budgetAccounts, accountBudgetModule.computeAccountBudget);
-    if (!confirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
+    if (!await rbConfirm('Apply the projected ' + previous + ' December ending balance (' + fmt(projection) +
         ') as the ' + year + ' January opening balance? This does not change the previous year.')) return;
     if (activeYear !== year || currentUser?.id !== owner ||
         cloudBudgetConflicts.has(owner + ':' + year) ||
@@ -1924,7 +2182,7 @@ async function applyProjectedJanuaryOpening() {
     console.error('Could not apply January projection:', error);
     if (currentUser?.id === owner) {
       showCloudSaveStatus('January projection blocked: verify and reconcile the previous budget year before retrying.');
-      alert('January projection could not be applied. Check the previous year and retry.');
+      void rbAlert('January projection could not be applied. Check the previous year and retry.');
     }
   } finally {
     yearPlanActionBusy = false;
@@ -1969,7 +2227,7 @@ async function copyPreviousYearPlan() {
     // Validate the cloud-backed source before prompting, then revalidate after confirmation.
     const source = await verifiedYearPlanSource(owner, previous);
     copyPlan(source, db[year]);
-    if (!confirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
+    if (!await rbConfirm('Copy the manual planned amounts and categories from ' + previous + ' into ' +
         year + '? Existing opening balances and recurring entries will remain unchanged.')) return;
     if (activeYear !== year || currentUser?.id !== owner ||
         cloudBudgetConflicts.has(owner + ':' + year) ||
@@ -1982,7 +2240,7 @@ async function copyPreviousYearPlan() {
     console.error('Could not copy previous year plan:', error);
     if (currentUser?.id === owner) {
       showCloudSaveStatus('Plan copy blocked: verify and reconcile the previous budget year before retrying.');
-      alert('The plan could not be copied. Check the previous year and retry.');
+      void rbAlert('The plan could not be copied. Check the previous year and retry.');
     }
   } finally {
     yearPlanActionBusy = false;
@@ -2097,6 +2355,25 @@ function populateNewDueDaySelectors() {
     if (select && select.options.length === 1) select.innerHTML = dueDayOptions(null);
   }
 }
+// A default card may read legacy arrays or migrated category entries.
+// Preserve source indices so edits always target the underlying saved record.
+function defaultExpenseRows(month, categoryId) {
+  if (month.expenseSchemaVersion === 2) {
+    if (!Array.isArray(month.expenses) || month.fixed.length || month.variable.length) {
+      throw new Error('Invalid migrated expense inventory');
+    }
+    return month.expenses.map((entry, index) => ({ entry, index }))
+      .filter(row => row.entry.categoryId === categoryId);
+  }
+  return month[categoryId].map((entry, index) => ({ entry, index }));
+}
+function defaultExpenseEntry(month, categoryId, index) {
+  if (categoryId !== 'fixed' && categoryId !== 'variable') return null;
+  const entries = month.expenseSchemaVersion === 2 ? month.expenses : month[categoryId];
+  const entry = entries?.[index];
+  if (!entry || (month.expenseSchemaVersion === 2 && entry.categoryId !== categoryId)) return null;
+  return entry;
+}
 function dueDayPicker(type, idx, item) {
   let selected = null, invalid = false;
   try { selected = dueDayModule.dueDayOf(item); }
@@ -2124,7 +2401,9 @@ function accountPicker(type, idx, accountId) {
 async function editEntryAccount(type, idx, accountId) {
   if (!budgetEditAllowed()) return;
   if (accountId && !budgetAccounts.some(a => a.id === accountId)) return;
-  const entry = db[activeYear].months[selectedIdx][type]?.[idx];
+  const month = db[activeYear].months[selectedIdx];
+  const entry = type === 'fixed' || type === 'variable'
+    ? defaultExpenseEntry(month, type, idx) : month[type]?.[idx];
   if (!entry) return;
   entry.accountId = accountId || null;
   await saveDB(); render();
@@ -2133,6 +2412,76 @@ function refreshAccountSelectors() {
   document.querySelectorAll('[data-new-entry-account]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior); });
   document.querySelectorAll('[data-rec-field="account"]').forEach(select => { const prior = select.value; select.innerHTML = accountOptions(prior, false); });
 }
+
+// Custom cards use a single month-scoped expense collection. Legacy default cards
+// continue to read their existing arrays until the migration is independently verified.
+function renderCustomExpenseCards(month) {
+  const target = document.getElementById('customExpenseCards');
+  if (!target) return;
+  const entries = Array.isArray(month.expenses) ? month.expenses : [];
+  if (currentUser && expenseCategoryOwner !== currentUser.id) { target.innerHTML = ''; return; }
+  target.innerHTML = expenseCategories.map(category => {
+    const rows = entries.map((entry, index) => ({ entry, index }))
+      .filter(item => item.entry.categoryId === category.id);
+    const total = rows.reduce((sum, item) => sum + (budgetAccounts.some(account =>
+      account.id === item.entry.accountId && account.included === false) ? 0 : Number(item.entry.amount) || 0), 0);
+    return `<section class="card" data-custom-expense-card="${esc(category.id)}">
+      <div class="card-header"><h2>${esc(category.name)} <span class="badge">${fmt(total)}</span></h2>
+      <button type="button" class="mobile-card-toggle" aria-expanded="true" onclick="toggleMobileCard(this)">Collapse</button></div>
+      <table><thead><tr><th>Expense</th><th>Due</th><th class="num">Amount</th><th>Account</th><th></th></tr></thead>
+      <tbody>${rows.map(({entry,index}) => `<tr>
+        <td><input class="inline-input" aria-label="Expense name" value="${esc(entry.name)}" onchange="editCustomExpense(${index},'name',this.value)"></td>
+        <td><select aria-label="Due day" onchange="editCustomExpense(${index},'dueDay',this.value)">${dueDayOptions(entry.dueDay ?? null)}</select></td>
+        <td><input class="inline-input num" aria-label="Expense amount" type="number" step="0.01" value="${Number(entry.amount)||0}" onchange="editCustomExpense(${index},'amount',this.value)"></td>
+        <td><select aria-label="Expense account" onchange="editCustomExpense(${index},'accountId',this.value)">${accountOptions(entry.accountId)}</select></td>
+        <td><button type="button" class="del-btn" aria-label="Delete expense" onclick="deleteCustomExpense(${index})">×</button></td>
+      </tr>`).join('')}</tbody></table>
+      <form class="add-row" data-add-custom-expense="${esc(category.id)}">
+        <input name="name" aria-label="New expense name" required maxlength="120" placeholder="Expense name">
+        <select name="dueDay" aria-label="New expense due day">${dueDayOptions(null)}</select>
+        <input name="amount" aria-label="New expense amount" type="number" step="0.01" required placeholder="Amount">
+        <select name="accountId" aria-label="New expense account">${accountOptions(null)}</select>
+        <button type="submit" class="primary">Add</button>
+      </form></section>`;
+  }).join('');
+}
+async function editCustomExpense(index, field, value) {
+  if (!budgetEditAllowed()) return;
+  const entry = db[activeYear]?.months[selectedIdx]?.expenses?.[index];
+  if (!entry) return;
+  if (field === 'dueDay') setEntryDueDay(entry, value);
+  else if (field === 'amount') entry.amount = Number(value) || 0;
+  else if (field === 'accountId') {
+    if (value && !budgetAccounts.some(account => account.id === value)) return;
+    entry.accountId = value || null;
+  } else if (field === 'name') entry.name = value.trim();
+  await saveDB(); render();
+}
+async function deleteCustomExpense(index) {
+  if (!budgetEditAllowed()) return;
+  const entries = db[activeYear]?.months[selectedIdx]?.expenses;
+  if (!Array.isArray(entries) || !entries[index]) return;
+  entries.splice(index, 1);
+  await saveDB(); render();
+}
+document.addEventListener('submit', event => {
+  const form = event.target.closest('[data-add-custom-expense]');
+  if (!form) return;
+  event.preventDefault();
+  if (!budgetEditAllowed()) return;
+  const id = form.dataset.addCustomExpense;
+  if (!expenseCategories.some(category => category.id === id)) return;
+  const name = form.elements.name.value.trim();
+  const amount = Number(form.elements.amount.value);
+  if (!name || !Number.isFinite(amount) || amount < 0) return;
+  const month = db[activeYear].months[selectedIdx];
+  if (!Array.isArray(month.expenses)) month.expenses = [];
+  month.expenses.push({ categoryId: id, name, amount,
+    dueDay: dueDayModule.parseDueDay(form.elements.dueDay.value),
+    accountId: form.elements.accountId.value || null });
+  void saveDB().then(() => render());
+});
+
 function render() {
   if (currentUser && accountReadyOwner !== currentUser.id) return;
   const yearData = db[activeYear];
@@ -2141,6 +2490,7 @@ function render() {
   const computed = computeRolling(activeYear);
   const m = yearData.months[selectedIdx];
   const c = computed[selectedIdx];
+  renderCustomExpenseCards(m);
   const nextMonthName = selectedIdx < 11 ? yearData.months[selectedIdx + 1].name : `Jan ${parseInt(activeYear)+1}`;
   document.getElementById("autoRollToggle").checked = yearData.autoCascade; syncMobileSettingsControls();
   refreshAccountSelectors();
@@ -2291,7 +2641,7 @@ function render() {
   document.getElementById("incomeBody").innerHTML = incHtml;
 
   document.getElementById("fixTotalBadge").textContent = fmt(c.fixedTotal);
-  document.getElementById("fixedBody").innerHTML = m.fixed.map((item, idx) => `
+  document.getElementById("fixedBody").innerHTML = defaultExpenseRows(m, 'fixed').map(({ entry: item, index: idx }) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('fixed', ${idx}, 'name', this.value)" /></td>
       <td>${dueDayPicker("fixed", idx, item)}</td>
@@ -2302,7 +2652,7 @@ function render() {
   `).join("");
 
   document.getElementById("varTotalBadge").textContent = fmt(c.varTotal);
-  document.getElementById("variableBody").innerHTML = m.variable.map((item, idx) => `
+  document.getElementById("variableBody").innerHTML = defaultExpenseRows(m, 'variable').map(({ entry: item, index: idx }) => `
     <tr>
       <td><input class="inline-input" value="${esc(item.name)}" onchange="editExp('variable', ${idx}, 'name', this.value)" /></td>
       <td>${dueDayPicker("variable", idx, item)}</td>
@@ -2373,7 +2723,8 @@ async function addIncome() {
 }
 async function editExp(type, idx, f, v) {
   if (!budgetEditAllowed()) return;
-  const entry = db[activeYear].months[selectedIdx][type][idx];
+  const entry = defaultExpenseEntry(db[activeYear].months[selectedIdx], type, idx);
+  if (!entry) return;
   if (f === 'dueDay') setEntryDueDay(entry, v);
   else entry[f] = f === 'amount' ? parseFloat(v) || 0 : v;
   await saveDB(); render();
@@ -2385,7 +2736,12 @@ async function addExpense(type) {
   const dueDay = dueDayModule.parseDueDay(document.getElementById(p + 'Due').value);
   const amount = parseFloat(document.getElementById(p + 'Amt').value) || 0;
   if (!name) return;
-  db[activeYear].months[selectedIdx][type].push({ name, dueDay, amount, accountId: document.getElementById(p + 'Account').value || null });
+  const month = db[activeYear].months[selectedIdx];
+  const entry = { name, dueDay, amount, accountId: document.getElementById(p + 'Account').value || null };
+  if (month.expenseSchemaVersion === 2) {
+    if (!Array.isArray(month.expenses)) return;
+    month.expenses.push({ ...entry, categoryId: type });
+  } else month[type].push(entry);
   document.getElementById(p + 'Name').value = ""; document.getElementById(p + 'Due').value = ""; document.getElementById(p + 'Amt').value = "";
   await saveDB(); render();
 }
@@ -2426,12 +2782,21 @@ async function addCC() {
   ['newCcName','newCcDue','newCcStmt','newCcApr','newCcPay'].forEach(id => document.getElementById(id).value='');
   await saveDB(); render();
 }
-async function delItem(list, idx) { if (!budgetEditAllowed()) return; db[activeYear].months[selectedIdx][list].splice(idx, 1); await saveDB(); render(); }
+async function delItem(list, idx) {
+  if (!budgetEditAllowed()) return;
+  const month = db[activeYear].months[selectedIdx];
+  if ((list === 'fixed' || list === 'variable') && !defaultExpenseEntry(month, list, idx)) return;
+  const entries = (list === 'fixed' || list === 'variable') && month.expenseSchemaVersion === 2
+    ? month.expenses : month[list];
+  if (!Array.isArray(entries) || !entries[idx]) return;
+  entries.splice(idx, 1);
+  await saveDB(); render();
+}
 
 /* Auth Modal & Handlers */
-function handleAuthClick() {
+async function handleAuthClick() {
   if (currentUser) {
-    if (confirm("Sign out of your account?")) {
+    if (await rbConfirm('Sign out of your account?', { acceptLabel: 'Sign out' })) {
       if (supabaseClient) supabaseClient.auth.signOut();
     }
   } else {
@@ -2541,6 +2906,23 @@ function openRecurringModal(){
   toggleRecFields();renderRulesList();renderRecurringSyncStatus();document.body.classList.add("recurring-manager-open");
 }
 function closeRecurringModal(){document.body.classList.remove("recurring-manager-open");}
+function renderRecurringCategoryOptions() {
+  const ownerReady = currentUser && expenseCategoryOwner === currentUser.id;
+  for (const select of document.querySelectorAll('[data-recurring-form] [data-rec-field="category"]')) {
+    const selected = select.value;
+    select.querySelectorAll('option[data-custom-category]').forEach(option => option.remove());
+    if (ownerReady) {
+      for (const category of expenseCategories) {
+        const option = document.createElement('option');
+        option.value = category.id;
+        option.textContent = category.name;
+        option.dataset.customCategory = 'true';
+        select.appendChild(option);
+      }
+    }
+    if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  }
+}
 function toggleRecFields(){document.querySelectorAll("[data-rec-account-group]").forEach(group=>group.style.display="grid");}
 function recurringRuleFrequency(rule){return RECURRING_FREQUENCIES[rule.displayFrequency || rule.frequency]?.label||"Monthly (legacy)";}
 function nextRecurringEffectiveMonth(rule) {
@@ -2728,7 +3110,7 @@ async function addRecurringRule(view) {
   const name = get('name').trim(), amount = Number(get('amount'));
   const startDate = get('startDate'), endDate = get('endDate') || null, frequency = get('frequency');
   if (!name || !Number.isFinite(amount) || amount < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
-      (endDate && endDate < startDate) || !RECURRING_FREQUENCIES[frequency]) { alert('Enter valid recurring dates, amount and frequency.'); return; }
+      (endDate && endDate < startDate) || !RECURRING_FREQUENCIES[frequency]) { void rbAlert('Enter valid recurring dates, amount and frequency.'); return; }
   try {
     const owner = currentUser.id, selectedYear = activeYear;
     await recurringAppService.createRecurringRule(supabaseClient, owner, {
@@ -2748,7 +3130,7 @@ async function addRecurringRule(view) {
       const status = await saveDB({ backfillNewYear: false });
       if (status !== 'cloud-saved') {
         renderRulesList();
-        alert('Recurring rule saved, but the selected budget year could not be synchronized. Resolve the cloud save before retrying.');
+        void rbAlert('Recurring rule saved, but the selected budget year could not be synchronized. Resolve the cloud save before retrying.');
         return;
       }
     }
@@ -2756,22 +3138,22 @@ async function addRecurringRule(view) {
     renderRulesList();
   } catch (error) {
     console.error('Could not create recurring rule:', error);
-    alert('Recurring rule could not be saved. Please retry.');
+    void rbAlert('Recurring rule could not be saved. Please retry.');
   }
 }
 async function editRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
   const owner = currentUser.id;
-  const amountInput = prompt('New recurring amount (future months only):',
+  const amountInput = await rbPrompt('New recurring amount (future months only):',
     String(rule.upcomingAmount ?? rule.displayAmount ?? rule.amount));
   if (amountInput === null) return;
   const amount = Number(amountInput);
-  if (!Number.isFinite(amount) || amount < 0) { alert('Enter a valid non-negative amount.'); return; }
-  const frequency = prompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually',
+  if (!Number.isFinite(amount) || amount < 0) { void rbAlert('Enter a valid non-negative amount.'); return; }
+  const frequency = await rbPrompt('Frequency: monthly, every-2-months, quarterly, every-6-months, annually',
     rule.upcomingFrequency || rule.displayFrequency || rule.frequency);
   if (frequency === null) return;
-  if (!RECURRING_FREQUENCIES[frequency]) { alert('Select a supported frequency.'); return; }
+  if (!RECURRING_FREQUENCIES[frequency]) { void rbAlert('Select a supported frequency.'); return; }
   const effectiveFrom = nextRecurringEffectiveMonth(rule);
   try {
     await recurringAppService.editRecurringRule(supabaseClient, owner, rule.id,
@@ -2783,7 +3165,7 @@ async function editRecurringRule(index) {
     if (currentUser?.id === owner) renderRulesList();
   } catch (error) {
     console.error('Could not edit recurring rule:', error);
-    if (currentUser?.id === owner) alert('Recurring rule could not be edited.');
+    if (currentUser?.id === owner) void rbAlert('Recurring rule could not be edited.');
   }
 }
 async function toggleRecurringRule(index) {
@@ -2802,20 +3184,20 @@ async function toggleRecurringRule(index) {
     if (currentUser?.id === owner) renderRulesList();
   } catch (error) {
     console.error('Could not update recurring rule:', error);
-    if (currentUser?.id === owner) alert('Recurring rule could not be updated.');
+    if (currentUser?.id === owner) void rbAlert('Recurring rule could not be updated.');
   }
 }
 async function deleteRecurringRule(index) {
   const rule = loadedRecurringPreview.rules[index];
   if (!rule || !currentUser || !recurringAppService) return;
-  if (!confirm('Delete this recurring rule? Existing budget transactions will remain unchanged.')) return;
+  if (!await rbConfirm('Delete this recurring rule? Existing budget transactions will remain unchanged.', { acceptLabel: 'Delete rule' })) return;
   try {
     await recurringAppService.removeRecurringRule(supabaseClient, currentUser.id, rule.id);
     await refreshRecurringPreview();
     renderRulesList();
   } catch (error) {
     console.error('Could not delete recurring rule:', error);
-    alert('Recurring rule could not be deleted.');
+    void rbAlert('Recurring rule could not be deleted.');
   }
 }
 
@@ -2829,7 +3211,7 @@ function toggleMobileSidebar(open) {
   backdrop.hidden = !open;
   if (trigger) trigger.setAttribute("aria-expanded", String(Boolean(open)));
 }
-const settingsSectionIds = { accounts: "settingsAccounts", automation: "settingsAutomation", security: "settingsProfile" };
+const settingsSectionIds = { accounts: "settingsAccounts", categories: "settingsCategories", automation: "settingsAutomation", security: "settingsProfile" };
 let activeSettingsSection = "accounts";
 function showSettingsSection(section) {
   if (!settingsSectionIds[section]) return;

@@ -18,6 +18,20 @@ export function includedAmount(entry, accounts, field) {
   return accountIncluded(entry.accountId, accounts) ? Number(entry[field]) || 0 : 0;
 }
 
+// Category-based entries are additive only when stored in month.expenses; legacy
+// fixed/variable arrays remain authoritative until an explicit one-time migration.
+export function categoryExpenses(month) {
+  if (month.expenseSchemaVersion === 2 && (month.fixed?.length || month.variable?.length)) {
+    throw new Error('Migrated month contains duplicate legacy expense arrays');
+  }
+  if (month.expenses === undefined) {
+    if (month.expenseSchemaVersion === 2) throw new Error('Migrated month has no category expenses');
+    return [];
+  }
+  if (!Array.isArray(month.expenses)) throw new Error('Invalid category expense collection');
+  return month.expenses;
+}
+
 export function computeAccountBudget(year, accounts) {
   if (!year?.months?.length) return [];
   let running = Number(year.months[0].recordedLeftover) || 0;
@@ -30,14 +44,16 @@ export function computeAccountBudget(year, accounts) {
       sum + (entry.accountId === 'usaa' && accountIncluded('usaa', accounts) ? Number(entry.amount) || 0 : 0)
       + (!entry.accountId && (Number(entry.usaa) || 0) !== 0 && accountIncluded('usaa', accounts) ? Number(entry.usaa) || 0 : 0), 0);
     const newIncome = month.income.reduce((sum, entry) => sum + incomeAmount(entry, accounts), 0);
-    const fixedTotal = month.fixed.reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
-    const varTotal = month.variable.reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
+    const fixedTotal = (month.expenseSchemaVersion === 2 ? categoryExpenses(month).filter(entry => entry.categoryId === 'fixed') : month.fixed).reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
+    const varTotal = (month.expenseSchemaVersion === 2 ? categoryExpenses(month).filter(entry => entry.categoryId === 'variable') : month.variable).reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
+    const categoryTotal = categoryExpenses(month).filter(entry => month.expenseSchemaVersion !== 2 || (entry.categoryId !== 'fixed' && entry.categoryId !== 'variable')).reduce((sum, entry) => sum + includedAmount(entry, accounts, 'amount'), 0);
     const ccTotal = month.creditCards.reduce((sum, entry) => sum + includedAmount(entry, accounts, 'payment'), 0);
     const loanTotal = month.loans.reduce((sum, entry) => sum + includedAmount(entry, accounts, 'payment'), 0);
-    const totalOutflow = fixedTotal + varTotal + ccTotal + loanTotal;
+    const totalOutflow = fixedTotal + varTotal + categoryTotal + ccTotal + loanTotal;
     const pre15Outflow = [
-      ['fixed', 'amount'], ['variable', 'amount'], ['creditCards', 'payment'], ['loans', 'payment']
-    ].reduce((sum, [key, field]) => sum + month[key].reduce((subtotal, entry) => {
+      ['expenses', 'amount'], ['creditCards', 'payment'], ['loans', 'payment'],
+      ...(month.expenseSchemaVersion === 2 ? [] : [['fixed', 'amount'], ['variable', 'amount']])
+    ].reduce((sum, [key, field]) => sum + (key === 'expenses' ? categoryExpenses(month) : month[key]).reduce((subtotal, entry) => {
       let day = 99;
       try { day = dueDayOf(entry) ?? 99; }
       catch { /* Unknown legacy due dates do not count as pre-15. */ }
@@ -46,7 +62,7 @@ export function computeAccountBudget(year, accounts) {
     const totalAvailable = startLeftover + newIncome;
     const endingRollover = totalAvailable - totalOutflow;
     running = endingRollover;
-    return { startLeftover, cpmIncome, usaaIncome, newIncome, fixedTotal, varTotal, ccTotal, loanTotal, totalOutflow,
+    return { startLeftover, cpmIncome, usaaIncome, newIncome, fixedTotal, varTotal, categoryTotal, ccTotal, loanTotal, totalOutflow,
       totalAvailable, pre15Outflow, pre15Buffer: startLeftover - pre15Outflow,
       netMonthlyChange: newIncome - totalOutflow, endingRollover };
   });

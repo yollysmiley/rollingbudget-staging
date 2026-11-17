@@ -101,7 +101,8 @@ writeFileSync('dist/app/styles/settings.css', readFileSync(new URL('../styles/se
 writeFileSync('dist/styles/homepage.css', readFileSync(new URL('../styles/homepage.css', import.meta.url), 'utf8'));
 writeFileSync('dist/app/styles/brand.css', brandCss);
 for (const path of [
-  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs', 'year-discovery.mjs', 'year-plan.mjs', 'due-day.mjs', 'budget-revision.mjs',
+  'account-model.mjs', 'account-storage.mjs', 'account-budget.mjs',
+  'expense-category-model.mjs', 'expense-category-storage.mjs', 'expense-entry-migration.mjs', 'year-discovery.mjs', 'year-plan.mjs', 'due-day.mjs', 'budget-revision.mjs',
   'recurring-foundation.mjs', 'recurring-scheduler.mjs',
   'recurring-budget-preview.mjs', 'recurring-app-service.mjs'
 ]) {

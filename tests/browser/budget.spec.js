@@ -4,6 +4,41 @@ import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliat
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
+// Queue real branded-dialog responses before triggering the action.
+async function queueBrandedResponses(page, responses) {
+  await page.evaluate(items => {
+    const backdrop = document.getElementById('rbDialogBackdrop');
+    const queue = items.slice();
+    window.__brandedDialogSeen = [];
+    const observer = new MutationObserver(() => {
+      if (backdrop.hidden || !queue.length) return;
+      const item = queue.shift();
+      window.__brandedDialogSeen.push(document.getElementById('rbDialogMessage').textContent);
+      const input = document.getElementById('rbDialogInput');
+      if (!input.hidden && item.value !== undefined) {
+        input.value = item.value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      document.getElementById(item.decision === 'cancel' ? 'rbDialogCancel' : 'rbDialogAccept').click();
+      if (!queue.length) observer.disconnect();
+    });
+    observer.observe(backdrop, { attributes: true, attributeFilter: ['hidden'] });
+  }, responses);
+}
+async function dismissVisibleBrandedAlerts(page) {
+  // A failed save may leave a queued informational alert open after the status updates.
+  // Acknowledge only alerts, never confirmations for destructive operations.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const alertOpen = await page.locator('#rbDialogBackdrop').evaluate(el =>
+      !el.hidden && document.getElementById('rbDialogCancel').hidden);
+    if (!alertOpen) break;
+    await page.locator('#rbDialogAccept').click();
+  }
+}
+async function queueBrandedResponse(page, decision = 'accept', value = '') {
+  return queueBrandedResponses(page, [{ decision, value }]);
+}
+
 test.beforeEach(async ({ page }) => {
   await mockSignedInBudget(page);
   await page.route('https://**/rest/v1/**', route => route.abort());
@@ -85,6 +120,21 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
   await page.evaluate(() => addExpense('variable'));
   await expect(page.locator('#variableBody input:not([type])').first()).toHaveValue(payload);
   await expect(page.locator('#variableBody img')).toHaveCount(0);
+});
+
+test('desktop branded dialog validates input and restores focus on cancellation', async ({ page }) => {
+  const trigger = page.locator('#desktopSettingsButton');
+  await trigger.focus();
+  await page.evaluate(() => { window.__dialogResult = rbPrompt('Enter a category name', ''); });
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInput')).toBeFocused();
+  await page.locator('#rbDialogAccept').click();
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInput')).toBeVisible();
+  await page.locator('#rbDialogCancel').click();
+  expect(await page.evaluate(() => window.__dialogResult)).toBeNull();
+  await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
+  await expect(trigger).toBeFocused();
 });
 
 test('desktop recurring manager provides a route back to the budget overview', async ({ page }) => {
@@ -206,7 +256,7 @@ test('brand guidelines document the approved logo, palette, and typography', asy
 });
 
 test('desktop sign-out revokes access and returns to public homepage', async ({ page }) => {
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#authBtn').click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
@@ -214,7 +264,7 @@ test('desktop sign-out revokes access and returns to public homepage', async ({ 
 });
 
 test('cancelling desktop sign-out keeps the authenticated budget visible', async ({ page }) => {
-  page.once('dialog', dialog => dialog.dismiss());
+  await queueBrandedResponse(page, 'cancel');
   await page.locator('#authBtn').click();
   await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
   await expect(page.locator('#authBtn')).toHaveText('Sign Out');
@@ -375,7 +425,7 @@ test('desktop preserves an unresolved cloud conflict across reload and offers ex
   await expect(page.locator('#cloudSaveStatus button')).toHaveCount(2);
   expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
     entry => entry.name === 'Local unsynced entry'))).toBe(true);
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
   expect(await page.evaluate(() => db[activeYear].months[0].fixed.some(
@@ -396,7 +446,7 @@ test('desktop rejects malformed cloud reconciliation without replacing local exp
     showCloudSaveStatus('Unsynced local budget changes require reconciliation.');
     return y;
   });
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('Cloud budget is invalid');
   const result = await page.evaluate(y => ({
@@ -420,7 +470,7 @@ test('desktop refuses destructive reconciliation when the local backup cannot be
       return window.__originalStorageSetItem.call(this, key, value);
     };
   });
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Use cloud version' }).click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation failed');
   const result = await page.evaluate(() => ({
@@ -457,7 +507,8 @@ test('desktop explicitly keeping local changes resolves a conflict with conditio
     db[year].months[0].fixed.push({ name: 'Keep local', amount: 42 });
     await saveDB();
   });
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
   const result = await page.evaluate(() => {
@@ -516,7 +567,7 @@ test('recurring cloud synchronization cannot replace unsaved local desktop chang
     db['2026'].months[2].fixed.push({ name: 'Locally edited only', amount: 44 });
     return { revision: cloud.updated_at, budget: cloud.budget_data };
   });
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.evaluate(() => backfillSavedRecurringYears(currentUser.id, '2026-01-01'));
   const after = await page.evaluate(() => ({
     cloud: JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))['2026'],
@@ -562,8 +613,10 @@ test('desktop edit only fills missing future entries and preserves existing amou
       data: db['2026'], updatedAt: rows['2026'].updated_at
     }));
   });
-  const answers = ['150', 'monthly'];
-  page.on('dialog', dialog => dialog.accept(answers.shift() ?? ''));
+  await queueBrandedResponses(page, [
+    { decision: 'accept', value: '150' },
+    { decision: 'accept', value: 'monthly' }
+  ]);
   await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
   await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
     entry => entry.name === 'Future price edit').map(entry => entry.amount))).toEqual([150]);
@@ -738,17 +791,13 @@ test('desktop plan copy confirms, skips recurring entries, persists and prevents
   await page.evaluate(async y => { db[y].months[0].fixed.push({name:'Rent plan',amount:900,dueDay:1}); db[y].months[0].fixed.push({name:'Generated',amount:30,occurrenceId:'occ',recurringRuleId:'rule'}); await saveDB(); }, year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
-  let confirmations = 0;
-  page.on('dialog', async dialog => {
-    confirmations += 1;
-    if (confirmations === 1) await dialog.dismiss();
-    else await dialog.accept();
-  });
+  await queueBrandedResponse(page, 'cancel');
   await page.locator('#desktopCopyPreviousYear').click();
-  await expect.poll(() => confirmations).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   expect(await page.evaluate(y => db[y].months[0].fixed.length, next)).toBe(0);
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
-  await expect.poll(() => confirmations).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.map(e => e.name), next)).toEqual(['Rent plan']);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
   await page.reload();
@@ -783,7 +832,7 @@ test('desktop detects a stale source cloud revision before copying', async ({ pa
     sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
   }, year);
   await page.locator('#activeYearSelect').selectOption(next);
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
   await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
@@ -810,17 +859,13 @@ test('desktop January rollover is opt-in and preserves manual opening balances',
   },year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
-  let confirmations=0;
-  page.on('dialog',async dialog => {
-    confirmations += 1;
-    if(confirmations === 1) await dialog.dismiss();
-    else await dialog.accept();
-  });
+  await queueBrandedResponse(page, 'cancel');
   await page.locator('#desktopProjectJanuary').click();
-  await expect.poll(() => confirmations).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(0);
+  await queueBrandedResponse(page);
   await page.locator('#desktopProjectJanuary').click();
-  await expect.poll(() => confirmations).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
   await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
   await page.reload();
@@ -840,7 +885,7 @@ test('failed browser storage rolls back a plan copy without claiming it was save
       return window.__storageSetItem.call(this, key, value);
     };
   });
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('was not saved');
   const result = await page.evaluate(y => ({
@@ -849,7 +894,9 @@ test('failed browser storage rolls back a plan copy without claiming it was save
   }), next);
   expect(result).toEqual({ entries: [], cloud: null });
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await dismissVisibleBrandedAlerts(page);
   await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Rent plan');
 });
@@ -871,13 +918,14 @@ test('January first save backfills rules before a manual plan copy without dupli
     entry => entry.name === 'Auto subscription'), year)).toBe(true);
   await page.locator('#desktopBudgetButton').click();
   await page.locator('#activeYearSelect').selectOption(next);
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#desktopProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months.flatMap(month => month.fixed)
     .filter(entry => entry.name === 'Auto subscription').length, next)).toBe(12);
   const opening = await page.evaluate(y => db[y].months[0].recordedLeftover, next);
   expect(opening).not.toBe(0);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
     entry => entry.name === 'Manual insurance'), next)).toBe(true);
@@ -908,7 +956,7 @@ test('failed first cloud save reconciles local plan and backfills recurring rule
   await page.locator('#desktopBudgetButton').click();
   await page.locator('#activeYearSelect').selectOption(next);
   await page.evaluate(() => sessionStorage.setItem('__mock_budget_cloud_failure', '1'));
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('Cloud synchronization is pending');
   expect(await page.evaluate(y => ({
@@ -920,6 +968,7 @@ test('failed first cloud save reconciles local plan and backfills recurring rule
   await expect(page.locator('#activeYearSelect')).toHaveValue(next);
   await expect(page.locator('#cloudSaveStatus')).toContainText('Unsynced local');
   await page.evaluate(() => sessionStorage.removeItem('__mock_budget_cloud_failure'));
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
   await expect.poll(() => page.evaluate(y => db[y].months.flatMap(m => m.fixed)
     .filter(e => e.name === 'Auto rent').length, next)).toBe(12);
@@ -1101,9 +1150,10 @@ test('legacy income migration refreshes the source cloud revision for year copy 
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
   await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].income.length, next)).toBe(2);
+  await queueBrandedResponse(page);
   await page.locator('#desktopProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
   await page.reload();
@@ -1135,7 +1185,7 @@ test('year planning blocks stale remote revisions even after legacy migration', 
   }, year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
-  page.on('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
   expect(await page.evaluate(y => db[y].months[0].income, next)).toEqual([]);
@@ -1162,8 +1212,9 @@ test('desktop account rename refuses stale other-device changes and reloads auth
     rows[0].updated_at = '2026-11-02T00:00:00.000Z';
     sessionStorage.setItem('__mock_account_rows', JSON.stringify(rows));
   });
-  page.once('dialog', dialog => dialog.accept('Unsafe local rename'));
   await page.locator('#desktopAccountsManager [data-account-action="rename"][data-account-id="checking"]').click();
+  await page.locator('#desktopAccountsManager [data-account-rename-form][data-account-id="checking"] input[name="accountName"]').fill('Unsafe local rename');
+  await page.locator('#desktopAccountsManager [data-account-rename-form][data-account-id="checking"] button[type="submit"]').click();
   await expect(page.locator('#desktopAccountsStatus')).toContainText('Account changed on another device');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_account_rows'))[0].name))
     .toBe('Changed on another device');
@@ -1242,7 +1293,7 @@ test('desktop confirms deletion and blocks accounts referenced by disabled globa
   await page.locator('#desktopSettingsButton').click();
   const accountRow = page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]');
   await expect(accountRow).toContainText('Checking');
-  page.once('dialog', dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await accountRow.locator('[data-account-action="remove"]').click();
   await expect(page.locator('#desktopAccountsStatus')).toContainText('Reassign or remove global recurring rules');
   await expect(accountRow).toContainText('Checking');
@@ -1262,11 +1313,11 @@ test('desktop account deletion cancellation preserves the account and settings r
   await page.locator('#desktopSettingsButton').click();
   const row = page.locator('#desktopAccountsManager .account-manager-row[data-account-id="cancel-checking"]');
   await expect(row).toBeVisible();
-  let prompt;
-  page.once('dialog', async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await queueBrandedResponse(page, 'cancel');
   await row.locator('[data-account-action="remove"]').click();
-  expect(prompt).toContain('Remove Cancel Checking?');
-  expect(prompt).toContain('This cannot be undone');
+  const message = await page.evaluate(() => window.__brandedDialogSeen[0]);
+  expect(message).toContain('Remove Cancel Checking?');
+  expect(message).toContain('This cannot be undone');
   await expect(row).toContainText('Cancel Checking');
   await expect(page.locator('#desktopAccountsStatus')).not.toContainText('Account changes saved');
   await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
@@ -1277,4 +1328,17 @@ test('desktop account deletion cancellation preserves the account and settings r
   await expect(page.locator('#desktopRecurringButton')).toHaveAttribute('aria-current', 'page');
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsButton')).toHaveAttribute('aria-current', 'page');
+});
+
+
+test('desktop expense category settings section has its own navigation state', async ({ page }) => {
+  await page.goto('rollover-budget-app.html?page=settings');
+  await page.locator('[data-settings-section="categories"]').click();
+  await expect(page.locator('#settingsCategories')).toBeVisible();
+  await expect(page.locator('#desktopExpenseCategoriesManager [data-expense-category-create]')).toHaveCount(1);
+  await expect(page.locator('#desktopExpenseCategoriesManager [name="categoryKind"]')).toHaveCount(0);
+  await expect(page.locator('#desktopExpenseCategoriesManager [data-expense-category-action="delete"]')).toHaveCount(0); // Empty owner catalog and built-in categories cannot be deleted.
+  await expect(page.locator('#settingsAccounts')).toBeHidden();
+  await expect(page.locator('[data-settings-section="categories"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#mobileSettingsPanel')).toBeHidden();
 });

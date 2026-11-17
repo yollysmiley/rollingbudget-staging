@@ -36,14 +36,31 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
-if [[ "${#migrations[@]}" -ne 7 ]]; then
-  echo "Expected seven staging migrations including B3; found ${#migrations[@]}. Review the replay manifest." >&2
+if [[ "${#migrations[@]}" -ne 10 ]]; then
+  echo "Expected ten staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
   exit 1
 fi
 for migration in "${migrations[@]}"; do
   echo "Replaying ${migration}"
   psql -X -v ON_ERROR_STOP=1 -f "${migration}" >/dev/null
 done
+
+psql -X -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+DECLARE
+  constraint_definition text;
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO constraint_definition
+  FROM pg_constraint
+  WHERE conrelid = 'public.budget_recurring_rules'::regclass
+    AND conname = 'budget_recurring_rules_category_check';
+  IF constraint_definition IS NULL OR
+     position('category' in constraint_definition) = 0 OR
+     position('income' in constraint_definition) = 0 THEN
+    RAISE EXCEPTION 'Custom recurring category constraint missing after replay';
+  END IF;
+END $$;
+SQL
 
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 DO $$
@@ -55,10 +72,10 @@ BEGIN
   SELECT count(*) INTO table_count FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND c.relkind = 'r'
-    AND c.relname IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules')
+    AND c.relname IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules','budget_expense_categories')
     AND c.relrowsecurity;
-  IF table_count <> 4 THEN
-    RAISE EXCEPTION 'Expected four RLS-enabled budget tables, found %', table_count;
+  IF table_count <> 5 THEN
+    RAISE EXCEPTION 'Expected five RLS-enabled budget tables, found %', table_count;
   END IF;
 
   SELECT count(*) INTO policy_count FROM pg_policies
@@ -77,9 +94,9 @@ BEGIN
 
   SELECT count(*) INTO index_count FROM pg_indexes
   WHERE schemaname = 'public'
-    AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules');
-  IF index_count <> 7 THEN
-    RAISE EXCEPTION 'Expected seven budget indexes, found %', index_count;
+    AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules','budget_expense_categories');
+  IF index_count <> 9 THEN
+    RAISE EXCEPTION 'Expected nine budget indexes, found %', index_count;
   END IF;
 
   IF EXISTS (SELECT 1 FROM pg_constraint
