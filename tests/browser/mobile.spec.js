@@ -3,22 +3,29 @@ import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
 import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { test, expect } from '@playwright/test';
 
-// Respond to the actual branded UI rather than relying on browser-native dialogs.
-async function queueBrandedResponse(page, decision = 'accept', value = '') {
-  await page.evaluate(({ decision, value }) => {
+// Queue real branded-dialog responses before triggering the action.
+async function queueBrandedResponses(page, responses) {
+  await page.evaluate(items => {
+    const backdrop = document.getElementById('rbDialogBackdrop');
+    const queue = items.slice();
+    window.__brandedDialogSeen = [];
     const observer = new MutationObserver(() => {
-      const backdrop = document.getElementById('rbDialogBackdrop');
-      if (!backdrop || backdrop.hidden) return;
-      observer.disconnect();
+      if (backdrop.hidden || !queue.length) return;
+      const item = queue.shift();
+      window.__brandedDialogSeen.push(document.getElementById('rbDialogMessage').textContent);
       const input = document.getElementById('rbDialogInput');
-      if (!input.hidden) {
-        input.value = value;
+      if (!input.hidden && item.value !== undefined) {
+        input.value = item.value;
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      document.getElementById(decision === 'cancel' ? 'rbDialogCancel' : 'rbDialogAccept').click();
+      document.getElementById(item.decision === 'cancel' ? 'rbDialogCancel' : 'rbDialogAccept').click();
+      if (!queue.length) observer.disconnect();
     });
-    observer.observe(document.getElementById('rbDialogBackdrop'), { attributes: true, attributeFilter: ['hidden'] });
-  }, { decision, value });
+    observer.observe(backdrop, { attributes: true, attributeFilter: ['hidden'] });
+  }, responses);
+}
+async function queueBrandedResponse(page, decision = 'accept', value = '') {
+  return queueBrandedResponses(page, [{ decision, value }]);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -451,8 +458,8 @@ test('mobile reconciliation aborts when the signed-in owner changes during cloud
       };
       return query;
     };
-    const originalConfirm = window.confirm;
-    window.confirm = () => true;
+    const originalDialog = rbConfirm;
+    rbConfirm = async () => true;
     const pending = reconcileCloudBudget(false);
     for (let i = 0; i < 20 && !releaseRead; i++) await new Promise(resolve => setTimeout(resolve, 0));
     if (!releaseRead) throw new Error('Cloud read was not intercepted');
@@ -461,7 +468,7 @@ test('mobile reconciliation aborts when the signed-in owner changes during cloud
     await pending;
     currentUser = owner;
     supabaseClient.from = originalFrom;
-    window.confirm = originalConfirm;
+    rbConfirm = originalDialog;
     return {
       marker: localStorage.getItem(conflictStorageKey(year)),
       names: db[year].months[0].fixed.map(item => item.name)
@@ -808,7 +815,7 @@ test('mobile January rollover is opt-in and shares state with desktop', async ({
   await page.locator('#mobileActiveYearSelect').selectOption(next);
   await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
   await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
-  page.once('dialog',dialog => dialog.accept());
+  await queueBrandedResponse(page);
   await page.locator('#mobileProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(-50);
   await expect(page.locator('#mobileProjectJanuary')).toBeHidden();
