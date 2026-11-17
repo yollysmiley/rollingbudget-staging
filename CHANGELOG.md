@@ -1,4 +1,8 @@
-- Phase A2: share owner/year-scoped optimistic cloud revision writes between regular budget saves and explicit reconciliation; reject stale revisions, preserve insert-only first saves, and add revision contract unit tests. No schema or UI changes.\n- Phase A1 test correction: remove obsolete historical-year navigation scenario; retain rolling three-year desktop/mobile coverage and independent cloud-conflict preservation tests.\n- Phase A1 (staging, pending validation): restrict desktop/mobile year selection and session restoration to current calendar year plus two future years, while retaining historical/cloud conflict records for recovery; align unit and browser regressions.\n## Unreleased
+# Changelog
+
+## Unreleased
+
+- Phase A2: share owner/year-scoped optimistic cloud revision writes between regular budget saves and explicit reconciliation; reject stale revisions, preserve insert-only first saves, and add revision contract unit tests. No schema or UI changes.\n- Phase A1 test correction: remove obsolete historical-year navigation scenario; retain rolling three-year desktop/mobile coverage and independent cloud-conflict preservation tests.\n- Phase A1 (staging, pending validation): restrict desktop/mobile year selection and session restoration to current calendar year plus two future years, while retaining historical/cloud conflict records for recovery; align unit and browser regressions.\n
 
 - PR #71 Phase 5 migration-history reconciliation: align three staging SQL filenames with already-applied Supabase migration versions (accounts 20261114221703, recurring rules 20261115043822, B3 account protection 20261117024033). SQL contents and live database/history remain unchanged; add exact manifest regression coverage. Verified staging columns, constraints and owner-scoped policies before repository-only rename. Live credentialed acceptance remains pending after a failed workflow run.
 
@@ -69,10 +73,6 @@
 - Added isolated account-model helpers and unit tests for legacy income migration, exclusion totals, and referenced-account removal safeguards. Not yet integrated into the budget UI or cloud persistence.
 
 - Staging draft PR #31: moved desktop year selection, New Year, Auto-Cascade and Recurring Rules controls into a Settings view; added navigation contract tests. Dynamic account management remains unimplemented.
-
-# Changelog
-
-## Unreleased
 
 - Corrected public homepage Forgot Password to request an email and send a Supabase recovery link rather than navigating directly to the token-only reset page; updated desktop/mobile regression coverage.
 
