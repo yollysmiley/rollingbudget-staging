@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
@@ -452,6 +453,10 @@ test('mobile SPA routes persist through refresh and browser history', async ({ p
     await expect(page.locator(`.mobile-sidebar-nav [data-mobile-tab="${tab}"]`)).toHaveAttribute('aria-current', 'page');
   }
   await page.locator('#mobileMenuButton').click();
+  const recurringSidebar = page.locator('#mobileSidebar');
+  await expect(recurringSidebar).toHaveClass(/open/);
+  // CSS visibility is not enough during the slide-in transition; require a usable tap target.
+  await expect(page.locator('[data-mobile-action="recurring"]')).toBeInViewport();
   await page.locator('[data-mobile-action="recurring"]').click();
   await expect(page).toHaveURL(/[?&]page=recurring-rules(?:&|$)/);
   await expect(page.locator('[data-mobile-action="recurring"]')).toHaveAttribute('aria-current', 'page');
@@ -800,10 +805,56 @@ test('mobile plan day selectors use integers and persist after reload', async ({
     return { dueDay: entry.dueDay, hasLegacyDue: Object.hasOwn(entry, 'due') };
   })).toEqual({ dueDay: 22, hasLegacyDue: false });
   await page.reload();
-  await page.locator('#mobileMenuButton').click();
-  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page).toHaveURL(/\\?page=budget(?:&|$)/);
+  await expect(page.locator('body')).toHaveClass(/mobile-tab-plan/);
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#variableBody select[aria-label="Due day for variable entry"]')).toHaveValue('22');
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('#mobileSidebar')).toHaveClass(/open/);
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await expect(page.locator('#mobileSidebar')).not.toHaveClass(/open/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+test('mobile rejects budget edits while cloud reconciliation is in flight and survives reload', async ({ page }) => {
+  await page.locator('#mobileMenuButton').click();
+  await expect(page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]')).toBeInViewport();
+  await page.locator('.mobile-sidebar-nav [data-mobile-tab="plan"]').click();
+  await holdCloudReconciliation(page);
+  await page.locator('#newVarName').fill('Blocked addition');
+  await page.locator('#newVarDue').selectOption('15');
+  await page.locator('#newVarAmt').fill('800');
+  await page.locator(`button[onclick="addExpense('variable')"]`).click();
+  await page.evaluate(async () => {
+    await editExp('variable', 0, 'amount', '999');
+    await delItem('variable', 0);
+    await updateStartLeftover('400');
+    await setAutoCascade(false);
+  });
+  const during = await page.evaluate(() => {
+    const year = db[activeYear];
+    const cached = JSON.parse(localStorage.getItem(storageKey(activeYear)));
+    return {
+      rows: year.months[0].variable.map(item => [item.name, item.amount]),
+      cachedRows: cached.data.months[0].variable.map(item => [item.name, item.amount]),
+      opening: year.months[0].recordedLeftover,
+      autoCascade: year.autoCascade,
+      locked: reconcilingBudgetYears.has(currentUser.id + ':' + activeYear)
+    };
+  });
+  expect(during).toEqual({
+    rows: [['Protected expense', 25]], cachedRows: [['Protected expense', 25]],
+    opening: 0, autoCascade: true, locked: true
+  });
+  await expect(page.locator('#cloudSaveStatus')).toContainText('Reconciliation in progress');
+  await finishHeldReconciliation(page);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(() => db[activeYear].months[0].variable.map(item => [item.name, item.amount])))
+    .toEqual([['Protected expense', 25]]);
+  expect(await page.evaluate(() => db[activeYear].months[0].recordedLeftover)).toBe(0);
 });
 
 test('mobile account deletion refuses stale remote revisions without dropping account on reload', async ({ page }) => {
