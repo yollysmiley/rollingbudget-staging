@@ -42,8 +42,16 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
     for (const target of Object.values(TARGETS)) {
       if (!Array.isArray(month?.[target])) throw new Error('Invalid budget category: ' + target);
     }
+    if (month.expenseSchemaVersion === 2 &&
+        (!Array.isArray(month.expenses) || month.fixed.length || month.variable.length)) {
+      throw new Error('Invalid migrated expense inventory');
+    }
+    if (month.expenses !== undefined && !Array.isArray(month.expenses)) {
+      throw new Error('Invalid category expense inventory');
+    }
     return { ...month, income: [...month.income], fixed: [...month.fixed],
-      variable: [...month.variable], loans: [...month.loans], creditCards: [...month.creditCards] };
+      variable: [...month.variable], expenses: month.expenses ? [...month.expenses] : undefined,
+      loans: [...month.loans], creditCards: [...month.creditCards] };
   });
   let added = 0;
   const skipped = [];
@@ -51,15 +59,19 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
     for (const occurrence of scheduledOccurrences(rule, year)) {
       const index = Number(occurrence.scheduledMonth.slice(5, 7)) - 1;
       const target = TARGETS[occurrence.category];
-      const list = months[index][target];
+      const migratedDefault = months[index].expenseSchemaVersion === 2 &&
+        (occurrence.category === 'fixed' || occurrence.category === 'variable');
+      const list = migratedDefault ? months[index].expenses : months[index][target];
+      const inventories = [...Object.values(TARGETS).map(category => ({ category, entries: months[index][category] })),
+        ...(months[index].expenses ? [{ category: 'expenses', entries: months[index].expenses }] : [])];
       // A legacy occurrence may have moved categories after manual edits.
       // Check every category for that month, not only the target category.
-      const alreadyPresent = Object.values(TARGETS).some(category =>
-        months[index][category].some(entry =>
+      const alreadyPresent = inventories.some(({ entries }) =>
+        entries.some(entry =>
           entry.occurrenceId === occurrence.occurrenceId ||
           entry.recurringRuleId === rule.id));
-      const possible = Object.values(TARGETS).flatMap(category =>
-        months[index][category].filter(entry => isPossibleDuplicate(entry, occurrence))
+      const possible = inventories.flatMap(({ category, entries }) =>
+        entries.filter(entry => isPossibleDuplicate(entry, occurrence))
           .map(entry => ({ category, name: entry.name, amount: amountOf(entry), accountId: accountOf(entry) })));
       if (possible.length && !alreadyPresent) {
         ambiguous.push({ occurrenceId: occurrence.occurrenceId, month: occurrence.scheduledMonth,
@@ -82,7 +94,7 @@ export function previewRecurringYear(yearDocument, year, rules, { blockedRuleIds
         : occurrence.category === 'cc'
           ? { ...common, statement: 0, apr: 0, payment: occurrence.amount }
           : { ...common, amount: occurrence.amount };
-      list.push(item);
+      list.push(migratedDefault ? { ...item, categoryId: occurrence.category } : item);
       added++;
     }
   }
