@@ -24,6 +24,16 @@ async function queueBrandedResponses(page, responses) {
     observer.observe(backdrop, { attributes: true, attributeFilter: ['hidden'] });
   }, responses);
 }
+async function dismissVisibleBrandedAlerts(page) {
+  // A failed save may leave a queued informational alert open after the status updates.
+  // Acknowledge only alerts, never confirmations for destructive operations.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const alertOpen = await page.locator('#rbDialogBackdrop').evaluate(el =>
+      !el.hidden && document.getElementById('rbDialogCancel').hidden);
+    if (!alertOpen) break;
+    await page.locator('#rbDialogAccept').click();
+  }
+}
 async function queueBrandedResponse(page, decision = 'accept', value = '') {
   return queueBrandedResponses(page, [{ decision, value }]);
 }
@@ -889,6 +899,7 @@ test('mobile January projection restores its prior value when browser storage fa
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(0);
   await expect(page.locator('#mobileProjectJanuary')).toBeVisible();
   expect(await page.evaluate(y => JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows') || '{}')[y] || null, next)).toBe(null);
+  await dismissVisibleBrandedAlerts(page);
   await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
   await queueBrandedResponse(page);
   await page.locator('#mobileProjectJanuary').click();
