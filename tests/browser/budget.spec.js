@@ -576,8 +576,10 @@ test('desktop edit only fills missing future entries and preserves existing amou
   expect(state.version.amount).toBe(150);
   await expect(page.locator('#desktopRulesList')).toContainText('Scheduled from 2026-12-01');
   await page.reload();
-  expect(await page.evaluate(() => db['2026'].months[11].fixed.filter(
-    x => x.name === 'Future price edit').map(x => x.amount))).toEqual([150]);
+  await expectAuthenticatedBudget(page);
+  // Cloud year restoration is asynchronous; assert the persisted result after load completes.
+  await expect.poll(() => page.evaluate(() => db['2026']?.months?.[11]?.fixed.filter(
+    x => x.name === 'Future price edit').map(x => x.amount) ?? [])).toEqual([150]);
 });
 
 test('first edit in a virtual future year saves it and safely applies global recurring rules', async ({ page }) => {
