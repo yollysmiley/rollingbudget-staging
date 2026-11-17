@@ -26,3 +26,12 @@ test('legacy default expense tables remain intact during incremental rollout', (
   assert.match(app, /m\.fixed\.map/);
   assert.match(app, /m\.variable\.map/);
 });
+
+test('default cards preserve migrated source indices for edits, account changes and deletion', () => {
+  assert.match(app, /function defaultExpenseRows\(month, categoryId\)/);
+  assert.match(app, /month\.expenses\.map\(\(entry, index\) => \(\{ entry, index \}\)\)/);
+  assert.match(app, /defaultExpenseEntry\(month, type, idx\)/);
+  assert.match(app, /defaultExpenseEntry\(db\[activeYear\]\.months\[selectedIdx\], type, idx\)/);
+  assert.match(app, /month\.expenses\.push\(\{ \.\.\.entry, categoryId: type \}\)/);
+  assert.match(app, /month\.expenseSchemaVersion === 2\s*\? month\.expenses : month\[list\]/);
+});
