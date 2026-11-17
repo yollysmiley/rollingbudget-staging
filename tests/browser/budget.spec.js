@@ -498,6 +498,7 @@ test('desktop explicitly keeping local changes resolves a conflict with conditio
     await saveDB();
   });
   await queueBrandedResponse(page);
+  await queueBrandedResponse(page);
   await page.locator('#cloudSaveStatus button').filter({ hasText: 'Keep local changes' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem(conflictStorageKey(activeYear)))).toBe(null);
   const result = await page.evaluate(() => {
@@ -884,6 +885,7 @@ test('failed browser storage rolls back a plan copy without claiming it was save
   expect(result).toEqual({ entries: [], cloud: null });
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
   await page.evaluate(() => { Storage.prototype.setItem = window.__storageSetItem; });
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed[0]?.name, next)).toBe('Rent plan');
 });
@@ -912,6 +914,7 @@ test('January first save backfills rules before a manual plan copy without dupli
   const opening = await page.evaluate(y => db[y].months[0].recordedLeftover, next);
   expect(opening).not.toBe(0);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.some(
     entry => entry.name === 'Manual insurance'), next)).toBe(true);
@@ -1138,6 +1141,7 @@ test('legacy income migration refreshes the source cloud revision for year copy 
   await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].income.length, next)).toBe(2);
+  await queueBrandedResponse(page);
   await page.locator('#desktopProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
   await page.reload();
