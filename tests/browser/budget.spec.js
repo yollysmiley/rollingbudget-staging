@@ -1336,7 +1336,7 @@ test('desktop expense category settings section has its own navigation state', a
   await page.locator('[data-settings-section="categories"]').click();
   await expect(page.locator('#settingsCategories')).toBeVisible();
   await expect(page.locator('#desktopExpenseCategoriesManager [data-expense-category-create]')).toHaveCount(1);
-  await expect(page.locator('#desktopExpenseCategoriesManager [name="categoryKind"] option')).toHaveCount(2);
+  await expect(page.locator('#desktopExpenseCategoriesManager [name="categoryKind"]')).toHaveCount(0);
   await expect(page.locator('#desktopExpenseCategoriesManager [data-expense-category-action="delete"]')).toHaveCount(0); // Empty owner catalog and built-in categories cannot be deleted.
   await expect(page.locator('#settingsAccounts')).toBeHidden();
   await expect(page.locator('[data-settings-section="categories"]')).toHaveAttribute('aria-current', 'page');
