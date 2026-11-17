@@ -227,6 +227,7 @@ test('mobile Budget Accounts remains open when keyboard-related viewport resize 
   await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
   const detail = page.locator('[data-mobile-settings-section="accounts"]');
+  await page.locator('#mobileSettingsAccounts [data-account-action="start-create"]').click();
   const name = page.locator('#mobileSettingsAccounts input[name="accountName"]');
   await expect(detail).toBeVisible();
   await name.focus();
