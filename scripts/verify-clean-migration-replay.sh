@@ -46,7 +46,24 @@ for migration in "${migrations[@]}"; do
 done
 
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
-DO $$
+DO $
+DECLARE
+  constraint_definition text;
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO constraint_definition
+  FROM pg_constraint
+  WHERE conrelid = 'public.budget_recurring_rules'::regclass
+    AND conname = 'budget_recurring_rules_category_check';
+  IF constraint_definition IS NULL OR
+     position('category' in constraint_definition) = 0 OR
+     position('income' in constraint_definition) = 0 THEN
+    RAISE EXCEPTION 'Custom recurring category constraint missing after replay';
+  END IF;
+END $;
+SQL
+
+psql -X -v ON_ERROR_STOP=1 <<'SQL'
+DO $
 DECLARE
   table_count integer;
   policy_count integer;
