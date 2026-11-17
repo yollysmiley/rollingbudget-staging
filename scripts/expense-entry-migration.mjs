@@ -44,3 +44,24 @@ export function categoryEntries(month, categoryId) {
   if (month.expenses !== undefined && !Array.isArray(month.expenses)) throw new Error('Invalid category expenses');
   return (month.expenses ?? []).filter(entry => entry.categoryId === categoryId);
 }
+
+/**
+ * Compare all financial inputs before allowing a migrated document to be saved.
+ * Uses the same account-aware calculator as the live budget; a mismatch blocks
+ * persistence rather than attempting to repair historical amounts.
+ */
+export function verifyExpenseMigration(source, migrated, accounts, computeBudget) {
+  if (typeof computeBudget !== 'function') throw new Error('Budget calculator required');
+  if (!Array.isArray(source?.months) || !Array.isArray(migrated?.months) ||
+      source.months.length !== migrated.months.length) throw new Error('Budget month inventory changed');
+  const before = computeBudget(source, accounts);
+  const after = computeBudget(migrated, accounts);
+  const fields = ['startLeftover', 'newIncome', 'fixedTotal', 'varTotal', 'categoryTotal',
+    'ccTotal', 'loanTotal', 'totalAvailable', 'totalOutflow', 'pre15Outflow',
+    'pre15Buffer', 'netMonthlyChange', 'endingRollover'];
+  if (before.length !== after.length || before.some((month, index) =>
+    fields.some(field => !Object.is(month[field], after[index][field])))) {
+    throw new Error('Expense migration changed budget calculations');
+  }
+  return true;
+}
