@@ -15,7 +15,7 @@ test('B1 replay uses only an isolated localhost database and fails on SQL errors
 });
 
 test('B1 replay enumerates all committed SQL migrations in order', () => {
-  assert.equal(migrationFiles.length, 9);
+  assert.equal(migrationFiles.length, 10);
   assert.match(replay, /find supabase\/migrations/);
   assert.match(replay, /LC_ALL=C sort/);
   assert.match(replay, /migrations\[@\]/);
