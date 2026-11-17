@@ -1490,6 +1490,23 @@ async function migrateLoadedIncome() {
     }
   }
 }
+// Read-only migration preflight: never mutates db or writes cloud/local data.
+// Conversion stays disabled until default-card editing and recurring backfill can
+// read the versioned expense collection without changing historical entries.
+async function preflightExpenseMigration() {
+  if (!currentUser || !cloudYearLoadSucceeded || !accountBudgetModule) return;
+  const owner = currentUser.id;
+  const migration = await import('./scripts/expense-entry-migration.mjs');
+  for (const [year, original] of Object.entries(db)) {
+    if (currentUser?.id !== owner) return;
+    const key = owner + ':' + year;
+    if (cloudBudgetConflicts.has(key) ||
+        localStorage.getItem(conflictStorageKey(year, owner)) === '1') continue;
+    const converted = migration.migrateExpenseYear(original);
+    migration.verifyExpenseMigration(original, converted, budgetAccounts,
+      accountBudgetModule.computeAccountBudget);
+  }
+}
 async function initializeAccounts() {
   const owner = currentUser?.id;
   if (!owner) return false;
@@ -1506,6 +1523,8 @@ async function initializeAccounts() {
     accountMigrationModule = migrationModule;
     budgetAccounts = accounts;
     await migrateLoadedIncome();
+    if (currentUser?.id !== owner) return false;
+    await preflightExpenseMigration();
     if (currentUser?.id !== owner) return false;
     accountReadyOwner = owner;
     accountsMessage = '';
