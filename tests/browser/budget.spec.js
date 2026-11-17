@@ -1067,3 +1067,61 @@ test('desktop rejects budget edits while cloud reconciliation is in flight and s
     .toEqual([['Protected expense', 25]]);
   expect(await page.evaluate(() => db[activeYear].months[0].recordedLeftover)).toBe(0);
 });
+
+test('legacy income migration refreshes the source cloud revision for year copy and January projection', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
+    db[y].months[0].income.push({ name: 'Legacy January', cpm: 40, usaa: 60 });
+    db[y].months[11].income.push({ name: 'Legacy December', cpm: 80, usaa: 120 });
+    await saveDB();
+  }, year);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  const migrated = await page.evaluate(y => {
+    const row = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'))[y];
+    return {
+      known: cloudBudgetVersions.get(currentUser.id + ':' + y),
+      remote: row.updated_at,
+      entries: db[y].months[0].income.map(item => [item.accountId, item.amount])
+    };
+  }, year);
+  expect(migrated.known).toBe(migrated.remote);
+  expect(migrated.entries).toEqual([['cpm', 40], ['usaa', 60]]);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].income.length, next)).toBe(2);
+  await page.locator('#desktopProjectJanuary').click();
+  await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  expect(await page.evaluate(y => db[y].months[0].income.map(item => item.amount), next)).toEqual([40, 60]);
+  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(300);
+});
+
+test('year planning blocks stale remote revisions even after legacy migration', async ({ page }) => {
+  const year = String(new Date().getFullYear()), next = String(Number(year) + 1);
+  await page.evaluate(async y => {
+    sessionStorage.setItem('__mock_legacy_accounts', '1');
+    db[y].months[11].income.push({ name: 'Legacy December', cpm: 125, usaa: 0 });
+    await saveDB();
+  }, year);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await page.evaluate(y => {
+    const rows = JSON.parse(sessionStorage.getItem('__mock_cloud_budget_rows'));
+    rows[y].updated_at = '2099-01-01T00:00:00.000Z';
+    rows[y].budget_data.months[11].income[0].amount = 999;
+    sessionStorage.setItem('__mock_cloud_budget_rows', JSON.stringify(rows));
+  }, year);
+  await page.locator('#activeYearSelect').selectOption(next);
+  await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#desktopCopyPreviousYear').click();
+  await expect(page.locator('#cloudSaveStatus')).toContainText('previous budget year');
+  expect(await page.evaluate(y => db[y].months[0].income, next)).toEqual([]);
+  await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
+});
