@@ -112,6 +112,21 @@ test('user-entered markup is rendered as text, not executable HTML', async ({ pa
   await expect(page.locator('#variableBody img')).toHaveCount(0);
 });
 
+test('desktop branded dialog validates input and restores focus on cancellation', async ({ page }) => {
+  const trigger = page.locator('#desktopSettingsButton');
+  await trigger.focus();
+  const opened = page.evaluate(() => rbPrompt('Enter a category name', ''));
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInput')).toBeFocused();
+  await page.locator('#rbDialogAccept').click();
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInput')).toBeVisible();
+  await page.locator('#rbDialogCancel').click();
+  expect(await opened).toBeNull();
+  await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test('desktop recurring manager provides a route back to the budget overview', async ({ page }) => {
   await page.locator('#desktopSettingsButton').click();
   await expect(page.locator('#desktopSettingsPanel')).toBeVisible();
