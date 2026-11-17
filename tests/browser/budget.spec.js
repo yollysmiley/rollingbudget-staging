@@ -1029,3 +1029,23 @@ test('desktop save migrates known legacy ordinals without altering expense amoun
   await page.reload();
   await expect(page.locator('#fixedBody select[aria-label="Due day for fixed entry"]')).toHaveValue('1');
 });
+
+
+test('desktop confirms deletion and blocks accounts referenced by disabled global rules', async ({ page }) => {
+  await page.evaluate(() => {
+    budgetAccounts = [{ id: 'checking', name: 'Checking', included: true }];
+    sessionStorage.setItem('__mock_recurring_preview_rules', JSON.stringify([{
+      user_id: currentUser.id, id: 'disabled-reference', account_id: 'checking',
+      active: false, start_date: '2025-01-01'
+    }]));
+    renderAccounts();
+  });
+  await page.locator('#desktopSettingsButton').click();
+  const accountRow = page.locator('#desktopAccountsManager .account-manager-row[data-account-id="checking"]');
+  await expect(accountRow).toContainText('Checking');
+  page.once('dialog', dialog => dialog.accept());
+  await accountRow.locator('[data-account-action="remove"]').click();
+  await expect(page.locator('#desktopAccountsStatus')).toContainText('Reassign or remove global recurring rules');
+  await expect(accountRow).toContainText('Checking');
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
+});
