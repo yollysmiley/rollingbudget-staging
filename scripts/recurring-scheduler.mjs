@@ -9,10 +9,10 @@ const monthNumber = date => {
 const monthDate = index =>
   String(Math.floor(index / 12)).padStart(4, '0') + '-' + String(index % 12 + 1).padStart(2, '0') + '-01';
 
-function versionsFor(rule) {
+function versionsFor(rule, options = {}) {
   const versions = rule.versions ?? [];
   if (!Array.isArray(versions) || !versions.length) throw new Error('Rule versions required');
-  const defaultDueDay = normalizeRecurringRule(rule).dueDay;
+  const defaultDueDay = normalizeRecurringRule(rule, options).dueDay;
   const sorted = versions.map(version => {
     const versionDue = version.dueDay ?? (version.due === '' ? null : version.due);
     const normalized = normalizeRecurringRule({
@@ -20,7 +20,7 @@ function versionsFor(rule) {
       dueDay: versionDue ?? defaultDueDay, due: null,
       startDate: version.effectiveFrom, endDate: null,
       category: rule.category
-    });
+    }, options);
     return { ...normalized.versions[0], effectiveFrom: version.effectiveFrom, enabled: version.enabled !== false };
   }).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
   if (sorted[0].effectiveFrom !== rule.startDate.slice(0, 7) + '-01') throw new Error('Initial version must match start date');
@@ -30,11 +30,11 @@ function versionsFor(rule) {
   return sorted;
 }
 
-export function scheduledOccurrences(rule, year) {
+export function scheduledOccurrences(rule, year, options = {}) {
   if (!Number.isInteger(year) || year < 1900 || year > 2200) throw new Error('Invalid schedule year');
-  const normalized = normalizeRecurringRule(rule);
+  const normalized = normalizeRecurringRule(rule, options);
   if (!normalized.active) return [];
-  const versions = versionsFor(rule);
+  const versions = versionsFor(rule, options);
   const start = monthNumber(normalized.startDate);
   const end = normalized.endDate ? monthNumber(normalized.endDate) : Infinity;
   const first = Math.max(start, year * 12);
