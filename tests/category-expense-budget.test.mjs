@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeAccountBudget, categoryExpenses } from '../scripts/account-budget.mjs';
+import { migrateExpenseYear } from '../scripts/expense-entry-migration.mjs';
 
 const accounts = [{ id: 'checking', name: 'Checking', excluded: false }];
 const month = (overrides = {}) => ({
@@ -32,4 +33,29 @@ test('legacy months without expenses retain existing totals', () => {
 
 test('invalid expense collection fails closed instead of silently losing spending', () => {
   assert.throws(() => categoryExpenses(month({ expenses: null })), /Invalid category/);
+});
+
+test('migration retains rollover, account exclusions and due-day parity without double counting', () => {
+  const source = { autoCascade: true, months: [
+    month({ fixed: [{ name: 'Rent', amount: 500, dueDay: 1, accountId: 'checking' }],
+      variable: [{ name: 'Food', amount: 50, dueDay: 20 }],
+      expenses: [{ categoryId: 'pets', name: 'Vet', amount: 40, dueDay: 3 }] }),
+    month({ fixed: [{ name: 'Insurance', amount: 80, dueDay: 15 }] })
+  ] };
+  const before = computeAccountBudget(source, accounts);
+  const migrated = migrateExpenseYear(source);
+  const after = computeAccountBudget(migrated, accounts);
+  for (let i = 0; i < before.length; i++) {
+    for (const key of ['fixedTotal', 'varTotal', 'categoryTotal', 'totalOutflow',
+      'pre15Outflow', 'pre15Buffer', 'endingRollover', 'startLeftover']) {
+      assert.equal(after[i][key], before[i][key], key + ' month ' + i);
+    }
+  }
+  assert.deepEqual(computeAccountBudget(migrateExpenseYear(migrated), accounts), after);
+});
+
+test('ambiguous migrated month fails before any spending is calculated', () => {
+  assert.throws(() => computeAccountBudget({ autoCascade: true, months: [
+    month({ expenseSchemaVersion: 2, fixed: [{ amount: 1 }], expenses: [{ categoryId: 'fixed', amount: 1 }] })
+  ] }, accounts), /duplicate/);
 });
