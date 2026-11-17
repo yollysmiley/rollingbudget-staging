@@ -24,7 +24,7 @@ psql -X -v ON_ERROR_STOP=1 >"$workdir/deleter.log" 2>&1 <<SQL &
 BEGIN;
 DELETE FROM public.budget_accounts
  WHERE user_id='00000000-0000-4000-8000-000000000404' AND id='race-account';
-\\! touch "$workdir/delete-locked"
+\! touch "$workdir/delete-locked"
 SELECT pg_sleep(2);
 COMMIT;
 SQL
@@ -38,6 +38,7 @@ VALUES ('00000000-0000-4000-8000-000000000404','late-rule','Late rule',
 'fixed',1,'monthly','2028-01-15','[]'::jsonb,'race-account');
 SQL
 then echo 'Concurrent insert bypassed deleted-account FK' >&2; exit 1; fi
+grep -q 'violates foreign key constraint' "$workdir/insert.log" || { echo 'Insert failed for an unexpected reason' >&2; exit 1; }
 wait "$worker"; worker=
 psql -X -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 DO $$
@@ -56,7 +57,7 @@ INSERT INTO public.budget_recurring_rules
 (user_id,id,name,category,amount,frequency,start_date,versions,account_id)
 VALUES ('00000000-0000-4000-8000-000000000404','early-rule','Early rule',
 'fixed',1,'monthly','2028-01-15','[]'::jsonb,'race-account');
-\\! touch "$workdir/insert-locked"
+\! touch "$workdir/insert-locked"
 SELECT pg_sleep(2);
 COMMIT;
 SQL
@@ -68,6 +69,7 @@ DELETE FROM public.budget_accounts
  WHERE user_id='00000000-0000-4000-8000-000000000404' AND id='race-account';
 SQL
 then echo 'Concurrent deletion bypassed referenced-account FK' >&2; exit 1; fi
+grep -q 'violates foreign key constraint' "$workdir/delete.log" || { echo 'Delete failed for an unexpected reason' >&2; exit 1; }
 wait "$worker"; worker=
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 DO $$
