@@ -6,11 +6,17 @@ export function migrateExpenseMonth(month) {
       (month.expenses !== undefined && !Array.isArray(month.expenses))) {
     throw new Error('Invalid month expense inventory');
   }
+  if (month.expenseSchemaVersion !== undefined && month.expenseSchemaVersion !== 2) {
+    throw new Error('Unsupported expense schema version');
+  }
   if (month.expenseSchemaVersion === 2) {
     if (month.fixed.length || month.variable.length) {
       throw new Error('Migrated month contains legacy expense duplicates');
     }
     return { ...month, expenses: month.expenses.map(entry => ({ ...entry })) };
+  }
+  if ((month.expenses ?? []).some(entry => entry?.categoryId === 'fixed' || entry?.categoryId === 'variable')) {
+    throw new Error('Legacy default categories already exist in category expenses');
   }
   const expenses = [
     ...(month.expenses ?? []).map(entry => ({ ...entry })),
