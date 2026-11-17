@@ -487,3 +487,25 @@ test('new rules persist a numeric due day derived from the selected calendar sta
   assert.equal(written.versions[0].dueDay, 31);
   assert.equal(written.versions[0].due, undefined);
 });
+
+test('custom recurring rule creation verifies owner category before writing', async () => {
+  const writes = [];
+  const client = { from(table) {
+    if (table === 'budget_expense_categories') return {
+      select() { return { async eq(field, owner) {
+        assert.equal(field, 'user_id'); assert.equal(owner, 'owner-a');
+        return { data: [{ id: 'pets' }], error: null };
+      } }; }
+    };
+    assert.equal(table, 'budget_recurring_rules');
+    return { async insert(row) { writes.push(row); return { error: null }; } };
+  } };
+  const input = { id: 'vet', name: 'Vet', category: 'pets', amount: 60,
+    frequency: 'monthly', startDate: '2027-01-01' };
+  assert.equal((await createRecurringRule(client, 'owner-a', input)).category, 'pets');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].category, 'pets');
+  await assert.rejects(() => createRecurringRule(client, 'owner-a', { ...input, category: 'travel' }),
+    /Unsupported recurring category/);
+  assert.equal(writes.length, 1);
+});
