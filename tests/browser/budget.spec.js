@@ -4,22 +4,29 @@ import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliat
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
-// Respond to the actual branded UI rather than relying on browser-native dialogs.
-async function queueBrandedResponse(page, decision = 'accept', value = '') {
-  await page.evaluate(({ decision, value }) => {
+// Queue real branded-dialog responses before triggering the action.
+async function queueBrandedResponses(page, responses) {
+  await page.evaluate(items => {
+    const backdrop = document.getElementById('rbDialogBackdrop');
+    const queue = items.slice();
+    window.__brandedDialogSeen = [];
     const observer = new MutationObserver(() => {
-      const backdrop = document.getElementById('rbDialogBackdrop');
-      if (!backdrop || backdrop.hidden) return;
-      observer.disconnect();
+      if (backdrop.hidden || !queue.length) return;
+      const item = queue.shift();
+      window.__brandedDialogSeen.push(document.getElementById('rbDialogMessage').textContent);
       const input = document.getElementById('rbDialogInput');
-      if (!input.hidden) {
-        input.value = value;
+      if (!input.hidden && item.value !== undefined) {
+        input.value = item.value;
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      document.getElementById(decision === 'cancel' ? 'rbDialogCancel' : 'rbDialogAccept').click();
+      document.getElementById(item.decision === 'cancel' ? 'rbDialogCancel' : 'rbDialogAccept').click();
+      if (!queue.length) observer.disconnect();
     });
-    observer.observe(document.getElementById('rbDialogBackdrop'), { attributes: true, attributeFilter: ['hidden'] });
-  }, { decision, value });
+    observer.observe(backdrop, { attributes: true, attributeFilter: ['hidden'] });
+  }, responses);
+}
+async function queueBrandedResponse(page, decision = 'accept', value = '') {
+  return queueBrandedResponses(page, [{ decision, value }]);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -580,10 +587,10 @@ test('desktop edit only fills missing future entries and preserves existing amou
       data: db['2026'], updatedAt: rows['2026'].updated_at
     }));
   });
-  const answers = ['150', 'monthly'];
-  await queueBrandedResponse(page, 'accept', answers.shift());
-  // The frequency prompt is queued only after the amount is confirmed.
-  page.evaluate(() => new Promise(resolve => { const obs = new MutationObserver(() => { const el = document.getElementById('rbDialogBackdrop'); if (!el.hidden) { obs.disconnect(); document.getElementById('rbDialogInput').value = 'monthly'; document.getElementById('rbDialogAccept').click(); resolve(); } }); obs.observe(document.getElementById('rbDialogBackdrop'), { attributes: true }); })).catch(() => {});
+  await queueBrandedResponses(page, [
+    { decision: 'accept', value: '150' },
+    { decision: 'accept', value: 'monthly' }
+  ]);
   await page.locator('#desktopRulesList button').filter({ hasText: 'Edit' }).click();
   await expect.poll(() => page.evaluate(() => db['2026'].months[11].fixed.filter(
     entry => entry.name === 'Future price edit').map(entry => entry.amount))).toEqual([150]);
@@ -758,17 +765,13 @@ test('desktop plan copy confirms, skips recurring entries, persists and prevents
   await page.evaluate(async y => { db[y].months[0].fixed.push({name:'Rent plan',amount:900,dueDay:1}); db[y].months[0].fixed.push({name:'Generated',amount:30,occurrenceId:'occ',recurringRuleId:'rule'}); await saveDB(); }, year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeVisible();
-  let confirmations = 0;
-  page.on('dialog', async dialog => {
-    confirmations += 1;
-    if (confirmations === 1) await dialog.dismiss();
-    else await dialog.accept();
-  });
+  await queueBrandedResponse(page, 'cancel');
   await page.locator('#desktopCopyPreviousYear').click();
-  await expect.poll(() => confirmations).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   expect(await page.evaluate(y => db[y].months[0].fixed.length, next)).toBe(0);
+  await queueBrandedResponse(page);
   await page.locator('#desktopCopyPreviousYear').click();
-  await expect.poll(() => confirmations).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   await expect.poll(() => page.evaluate(y => db[y].months[0].fixed.map(e => e.name), next)).toEqual(['Rent plan']);
   await expect(page.locator('#desktopCopyPreviousYear')).toBeHidden();
   await page.reload();
@@ -830,17 +833,13 @@ test('desktop January rollover is opt-in and preserves manual opening balances',
   },year);
   await page.locator('#activeYearSelect').selectOption(next);
   await expect(page.locator('#desktopProjectJanuary')).toBeVisible();
-  let confirmations=0;
-  page.on('dialog',async dialog => {
-    confirmations += 1;
-    if(confirmations === 1) await dialog.dismiss();
-    else await dialog.accept();
-  });
+  await queueBrandedResponse(page, 'cancel');
   await page.locator('#desktopProjectJanuary').click();
-  await expect.poll(() => confirmations).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   expect(await page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(0);
+  await queueBrandedResponse(page);
   await page.locator('#desktopProjectJanuary').click();
-  await expect.poll(() => confirmations).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__brandedDialogSeen.length)).toBe(1);
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover,next)).toBe(300);
   await expect(page.locator('#desktopProjectJanuary')).toBeHidden();
   await page.reload();
