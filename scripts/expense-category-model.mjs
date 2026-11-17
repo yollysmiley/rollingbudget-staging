@@ -40,9 +40,13 @@ export function canDeleteExpenseCategory(id, yearDocuments, recurringRules) {
   if (!id || BUILTIN_EXPENSE_CATEGORIES.some(category => category.id === id)) return false;
   if (!yearDocuments || typeof yearDocuments !== 'object' ||
       !Array.isArray(recurringRules)) return false;
-  if (recurringRules.some(rule => rule?.categoryId === id || rule?.category_id === id)) return false;
+  if (recurringRules.some(rule => rule?.categoryId === id || rule?.category_id === id ||
+      rule?.category === id || rule?.versions?.some(version =>
+        version?.categoryId === id || version?.category_id === id || version?.category === id))) return false;
   return !Object.values(yearDocuments).some(year =>
     !Array.isArray(year?.months) || year.months.some(month =>
-      !month || ['fixed', 'variable'].some(kind =>
-        !Array.isArray(month[kind]) || month[kind].some(entry => entry?.categoryId === id))));
+      !month || (month.expenses !== undefined && !Array.isArray(month.expenses)) ||
+      (Array.isArray(month.expenses) && month.expenses.some(entry => entry?.categoryId === id || entry?.category_id === id)) ||
+      ['fixed', 'variable'].some(kind =>
+        !Array.isArray(month[kind]) || month[kind].some(entry => entry?.categoryId === id || entry?.category_id === id))));
 }
