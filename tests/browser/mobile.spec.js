@@ -1,4 +1,5 @@
 import { mockSignedInBudget, expectAuthenticatedBudget } from './auth-fixture.js';
+import { switchWhileAccountCatalogLoads } from './account-switch-fixture.js';
 import { holdCloudReconciliation, finishHeldReconciliation } from './reconciliation-fixture.js';
 import { test, expect } from '@playwright/test';
 
@@ -893,4 +894,15 @@ test('mobile account deletion refuses stale remote revisions without dropping ac
   await page.locator('.mobile-sidebar-nav [data-mobile-tab="settings"]').click();
   await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Budget Accounts' }).click();
   await expect(page.locator('#mobileSettingsAccounts .account-manager-row[data-account-id="checking"]')).toBeVisible();
+});
+
+
+test('mobile account switching keeps the previous owner hidden until the new catalog loads', async ({ page }) => {
+  await switchWhileAccountCatalogLoads(page);
+  await expect(page.locator('#mobileOverview')).toBeVisible();
+  await expect(page.locator('#mobileOverview')).toContainText('$250.00');
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('SECOND OWNER INCOME');
+  await expect(page.locator('#incomeBody')).not.toContainText('FIRST OWNER INCOME');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => window.__errors)).toEqual([]);
 });
