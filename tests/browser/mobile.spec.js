@@ -934,6 +934,11 @@ test('mobile requires confirmation then blocks deletion referenced by future glo
   await expect(page.locator('#mobileAccountsStatus')).toContainText('Reassign or remove global recurring rules');
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await page.reload();
+  await expectAuthenticatedBudget(page);
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+  await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
 });
 
 
