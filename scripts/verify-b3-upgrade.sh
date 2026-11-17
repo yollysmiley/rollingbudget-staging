@@ -25,7 +25,7 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
-if [[ "${#migrations[@]}" -ne 9 ||
+if [[ "${#migrations[@]}" -ne 10 ||
       "${migrations[6]}" != *"protect_global_recurring_account_refs.sql" ]]; then
   echo "Expected six baseline migrations, B3, and expense category migrations" >&2
   exit 1
