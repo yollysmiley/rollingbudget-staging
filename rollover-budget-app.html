@@ -1382,7 +1382,7 @@ async function confirmDeleteExpenseCategory(id) {
   const owner = currentUser?.id;
   const category = expenseCategories.find(item => item.id === id);
   if (!category || !owner || expenseCategoryOwner !== owner || expenseCategoryBusy) return;
-  const confirmed = await rbConfirm('Delete expense category "' + category.name + '"? This cannot be undone.', { confirmLabel: 'Delete category', destructive: true });
+  const confirmed = await rbConfirm('Delete expense category "' + category.name + '"? This cannot be undone.', { acceptLabel: 'Delete category' });
   if (!confirmed || currentUser?.id !== owner || expenseCategoryOwner !== owner) return;
   expenseCategoryBusy = true;
   expenseCategoryMessage = '';
