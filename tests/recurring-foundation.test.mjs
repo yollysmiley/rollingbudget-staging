@@ -45,3 +45,11 @@ test('supports full start dates and optional end dates with strict calendar vali
   assert.equal(normalizeRecurringRule({ ...rule(), due: undefined, startDate: '2028-02-29' }).dueDay, 29);
   assert.throws(() => normalizeRecurringRule({ ...rule(), dueDay: 32, due: undefined }), /Due day/);
 });
+
+test('custom category IDs require an explicit valid catalog', () => {
+  const custom = { ...rule(), category: 'pets' };
+  assert.throws(() => normalizeRecurringRule(custom), /Unsupported recurring category/);
+  assert.equal(normalizeRecurringRule(custom, { expenseCategoryIds: ['pets'] }).category, 'pets');
+  assert.throws(() => normalizeRecurringRule(custom, { expenseCategoryIds: ['bad category'] }),
+    /Invalid recurring expense category catalog/);
+});
