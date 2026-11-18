@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Permit manually dispatched protected live staging integration tests on PR #89's approved validation branch, without exposing credentials to arbitrary PR runs; add workflow eligibility regression coverage and update CI responsibilities.
+
+- Fix branded confirmation dialogs displaying the prompt-only “Value” label by honoring hidden controls; add distinct desktop and mobile Playwright regressions. No deletion or sign-out behavior changes.
+
+- Phase 2B: fix live authenticated logout acceptance to interact with the branded confirmation dialog, verify cancellation preserves the current budget, and assert the exact public homepage after confirmed sign-out. Strengthen the logout regression contract; no application or database changes.
+
 - Fix live staging logout redirect race: wait for Supabase sign-out completion before navigating to the public homepage, retain immediate in-memory budget clearing, and strengthen authenticated logout plus source-contract regressions. No schema changes.
 
 - Phase 1 release baseline corrections: reconcile three expense-category SQL filenames with applied staging migration versions (20261117071635, 20261117071637, 20261117071639) without changing SQL or deployed databases; update the exact migration-manifest regression and CI responsibility documentation. No production changes. CI execution and branch-protection verification remain pending.

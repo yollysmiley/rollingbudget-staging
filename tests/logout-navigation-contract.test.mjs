@@ -20,6 +20,10 @@ test('UI sign-out waits for session revocation before navigating', () => {
 test('live logout asserts actual public homepage and absence of the prior session', () => {
   assert.match(homepage, /id="publicHeadline"/);
   assert.match(live, /locator\('#publicHeadline'\)/);
+  assert.match(live, /locator\('#rbDialogCancel'\)\.click\(\)/);
+  assert.match(live, /locator\('#rbDialogAccept'\)\.click\(\)/);
+  assert.match(live, /toHaveURL\(\/\^http:/);
+  assert.doesNotMatch(live, /toHaveURL\(\/\\\/\$\/\)/);
   assert.match(live, /localStorage\.getItem\(key\)/);
   assert.match(live, /await page\.goto\('\/app\/'\)/);
 });
