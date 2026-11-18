@@ -1,11 +1,12 @@
 # Browser acceptance tests
 
-The build workflow runs existing Node regression tests and eight Playwright tests on desktop and mobile Chromium (16 browser cases). Tests target the freshly generated dist build on localhost, never production or the previously deployed site. Fresh guest contexts create their own synthetic records. Supabase auth and REST requests are blocked, so live OAuth, cloud sync and RLS are not validated. Initialization is awaited explicitly.
+The staging build runs Node unit/security/contract regressions and Playwright desktop and mobile Chromium suites against a freshly built local `dist/` site. The suites live in `tests/browser/budget.spec.js` (desktop) and `tests/browser/mobile.spec.js` (mobile). Test counts must be obtained from the current Playwright `--list` output rather than historical fixed totals.
 
-Pull requests and the ci/staging-browser-tests branch run tests without deployment. On main, deployment requires all build and test steps to succeed. Failed browser tests retain HTML reports, traces and screenshots for seven days. This workflow does not configure branch protection. An existing stale-summary bug may fail the immediate-summary assertion; do not weaken it to hide a defect.
+Browser fixtures mock or block Supabase requests; these tests validate UI behavior, not real Supabase authorization or persistence. The protected `live-staging-tests.yml` workflow separately runs real staging authentication, owner isolation, persistence, and authenticated desktop acceptance. A corresponding credentialed mobile acceptance suite is not yet a release gate.
 
-Local usage: npm install; npx playwright install chromium; build dist with the pinned upstream source using scripts/build-staging.mjs; npm run test:e2e. Python 3 is required for the localhost server. Commit the generated package-lock.json and switch CI to npm ci after dependency resolution has been verified. The top-level Playwright dependency is pinned, but without a lockfile the full dependency tree is not locked. Tests are authored, not yet verified passing. Mobile Chromium emulation is not real iOS Safari validation.
+Run locally: `npm ci`, `npx playwright install chromium`, `node scripts/build-staging.mjs`, `node --test tests/*.test.mjs tests/live/*.test.mjs`, and `npm run test:e2e`. Python 3 is required for the Playwright local server. CI retains browser failure artifacts for seven days.
 
+Mobile Playwright uses Chromium device emulation; it does not validate iOS Safari. Before production promotion, manually smoke-test sign-in/sign-out, Overview/Plan/Recurring Rules/Settings navigation, account isolation, expense-category changes, and cloud reload on a real mobile browser. Record device, browser, commit, result and issues.
 
 ## Recurring Rules Manager coverage
 
