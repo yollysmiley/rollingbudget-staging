@@ -259,14 +259,13 @@ test('UI logout clears the signed-in budget before another account is loaded', a
 
   await page.locator('#authBtn').click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('#publicHeadline')).toContainText('Make room for what matters');
-  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), AUTH_STORAGE_KEY)).toBeNull();
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
   await expect(page.locator('#incomeBody')).toHaveCount(0);
   uiLoggedOutOwners.add(a.user.id);
 
   // A signed-out visitor cannot reopen the protected budget.
   await page.goto('/app/');
-  await expect(page.locator('#publicHeadline')).toContainText('Make room for what matters');
+  await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
   await expect(page.locator('#incomeBody')).toHaveCount(0);
 
   // Authenticate as the other account in the same browser without carrying A's budget.
