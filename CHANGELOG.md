@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Phase 2C: reconcile browser/CI release documentation, record read-only staging migration/RLS/security-advisor findings, and add a release and rollback checklist. Production unchanged; obsolete manual live-test branch exception and credentialed mobile smoke coverage remain open gates.
+
 - Permit manually dispatched protected live staging integration tests on PR #89's approved validation branch, without exposing credentials to arbitrary PR runs; add workflow eligibility regression coverage and update CI responsibilities.
 
 - Fix branded confirmation dialogs displaying the prompt-only “Value” label by honoring hidden controls; add distinct desktop and mobile Playwright regressions. No deletion or sign-out behavior changes.
