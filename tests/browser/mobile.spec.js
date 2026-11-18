@@ -60,6 +60,17 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#rollingStrip .month-pill')).toHaveCount(12);
 });
 
+test('mobile confirmation hides prompt-only value label and input', async ({ page }) => {
+  await page.evaluate(() => { window.__confirmResult = rbConfirm('Sign out of your account?', { acceptLabel: 'Sign out' }); });
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogInputLabel')).toBeHidden();
+  await expect(page.locator('#rbDialogInput')).toBeHidden();
+  await expect(page.locator('#rbDialogMessage')).toHaveText('Sign out of your account?');
+  await page.locator('#rbDialogCancel').click();
+  expect(await page.evaluate(() => window.__confirmResult)).toBe(false);
+  await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
+});
+
 test('mobile branded dialog validates input and restores focus on cancellation', async ({ page }) => {
   const trigger = page.locator('#mobileMenuButton');
   await trigger.focus();
