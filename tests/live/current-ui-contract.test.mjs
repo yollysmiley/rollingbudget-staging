@@ -36,3 +36,12 @@ test('live workflow builds from the checked-out staging revision only', () => {
 });
 
 // Guard the live acceptance harness against reintroducing guest-first protected-page assumptions.
+
+test('live integration allows protected manual dispatch only for the approved validation branch', () => {
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /github\.event_name == 'workflow_dispatch' &&\s*github\.ref == 'refs\/heads\/fix\/phase2b-confirm-logout-dialog'/);
+  assert.match(workflow, /environment: staging-live-tests/);
+  assert.doesNotMatch(workflow, /pull_request:/);
+  assert.doesNotMatch(workflow, /refs\/heads\/audit\/b4-rls-schema-contract/);
+});
