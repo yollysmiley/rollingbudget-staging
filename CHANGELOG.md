@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix branded confirmation dialogs displaying the prompt-only “Value” label by honoring hidden controls; add distinct desktop and mobile Playwright regressions. No deletion or sign-out behavior changes.
+
 - Phase 2B: fix live authenticated logout acceptance to interact with the branded confirmation dialog, verify cancellation preserves the current budget, and assert the exact public homepage after confirmed sign-out. Strengthen the logout regression contract; no application or database changes.
 
 - Fix live staging logout redirect race: wait for Supabase sign-out completion before navigating to the public homepage, retain immediate in-memory budget clearing, and strengthen authenticated logout plus source-contract regressions. No schema changes.
