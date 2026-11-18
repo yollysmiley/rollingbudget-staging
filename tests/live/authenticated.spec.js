@@ -257,8 +257,21 @@ test('UI logout clears the signed-in budget before another account is loaded', a
   await seed(b, 'LOGOUT-B');
   const page = await open(context, a, 'LOGOUT-A');
 
+  // The app uses a branded HTML confirmation dialog, not window.confirm().
+  // First verify cancelling leaves the authenticated budget intact.
   await page.locator('#authBtn').click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await expect(page.locator('#rbDialogMessage')).toHaveText('Sign out of your account?');
+  await page.locator('#rbDialogCancel').click();
+  await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
+  await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
+  await expect(page.locator('#incomeBody input:not([type])').first()).toHaveValue('LOGOUT-A');
+
+  // Confirm the custom dialog before expecting a redirect.
+  await page.locator('#authBtn').click();
+  await expect(page.locator('#rbDialogBackdrop')).toBeVisible();
+  await page.locator('#rbDialogAccept').click();
+  await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:\d+\/$/);
   await expect(page.locator('#publicHeadline')).toContainText('Make room for what matters');
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), AUTH_STORAGE_KEY)).toBeNull();
   await expect(page.locator('#incomeBody')).toHaveCount(0);
