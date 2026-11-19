@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the obsolete PR #89 credentialed live-test branch exception; retain automatic and manual live staging runs on `main` only, with workflow eligibility regression coverage and updated CI instructions.
+
 - Add credentialed mobile Chromium smoke coverage for authenticated navigation, refresh, owner switching, and branded confirmation cancellation in the protected staging integration suite.
 
 - Phase 2C: reconcile browser/CI release documentation, record read-only staging migration/RLS/security-advisor findings, and add a release and rollback checklist. Production unchanged; obsolete manual live-test branch exception and credentialed mobile smoke coverage remain open gates.
