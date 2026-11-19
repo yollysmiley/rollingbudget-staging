@@ -2,7 +2,7 @@
 
 The staging build runs Node unit/security/contract regressions and Playwright desktop and mobile Chromium suites against a freshly built local `dist/` site. The suites live in `tests/browser/budget.spec.js` (desktop) and `tests/browser/mobile.spec.js` (mobile). Test counts must be obtained from the current Playwright `--list` output rather than historical fixed totals.
 
-Browser fixtures mock or block Supabase requests; these tests validate UI behavior, not real Supabase authorization or persistence. The protected `live-staging-tests.yml` workflow separately runs real staging authentication, owner isolation, persistence, and authenticated desktop acceptance. A corresponding credentialed mobile acceptance suite is not yet a release gate.
+Browser fixtures mock or block Supabase requests; these tests validate UI behavior, not real Supabase authorization or persistence. The protected `live-staging-tests.yml` workflow separately runs real staging authentication, owner isolation, persistence, and authenticated desktop acceptance. The same protected live suite now includes a credentialed mobile Chromium smoke test for sidebar navigation, reload, account isolation, and dialog cancellation; this does not replace a real-device Safari smoke test.
 
 Run locally: `npm ci`, `npx playwright install chromium`, `node scripts/build-staging.mjs`, `node --test tests/*.test.mjs tests/live/*.test.mjs`, and `npm run test:e2e`. Python 3 is required for the Playwright local server. CI retains browser failure artifacts for seven days.
 
