@@ -916,7 +916,10 @@ test('mobile January projection restores its prior value when browser storage fa
   await page.locator('#mobileProjectJanuary').click();
   await expect.poll(() => page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
   await page.reload();
-  expect(await page.evaluate(y => db[y].months[0].recordedLeftover, next)).toBe(180);
+  await expectAuthenticatedBudget(page);
+  // Cloud/year reconciliation is asynchronous after reload; assert the persisted value,
+  // not the transient pre-hydration state. A missing year or wrong amount still times out.
+  await expect.poll(() => page.evaluate(y => db[y]?.months?.[0]?.recordedLeftover, next)).toBe(180);
 });
 
 
