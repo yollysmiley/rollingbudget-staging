@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stabilize the mobile January projection persistence regression by waiting for authenticated budget hydration and the saved value after reload, without changing the expected $180 projection.
+
 - Remove the obsolete PR #89 credentialed live-test branch exception; retain automatic and manual live staging runs on `main` only, with workflow eligibility regression coverage and updated CI instructions.
 
 - Add credentialed mobile Chromium smoke coverage for authenticated navigation, refresh, owner switching, and branded confirmation cancellation in the protected staging integration suite.
