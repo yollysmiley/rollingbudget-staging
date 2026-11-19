@@ -296,16 +296,28 @@ test('authenticated mobile navigation and owner isolation survive reload', async
   await seed(b, 'MOBILE-B');
   const mobile = await browser.newContext({ ...devices['iPhone 13'], trace: 'off', screenshot: 'off', video: 'off' });
   try {
-    const page = await open(mobile, a, 'MOBILE-A');
+    // Shared authentication helpers can assert the desktop income table; mobile
+    // verifies owner-scoped state and its own visible navigation instead.
+    const page = await open(mobile, a);
+    await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe('MOBILE-A');
     await expect(page.locator('#mobileMenuButton')).toBeVisible();
     await page.locator('#mobileMenuButton').click();
     await page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]').click();
+    await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+    await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
     await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+    await expect(page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]')).toHaveAttribute('aria-current', 'page');
     await page.reload();
     await expect(page.locator('html')).toHaveClass(/budget-authenticated/);
     await expect.poll(() => page.evaluate(() => currentUser?.id)).toBe(a.user.id);
-    await switchTo(page, b, 'MOBILE-B');
+    await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+    await expect(page.locator('body')).toHaveClass(/mobile-tab-settings/);
+    await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
+    await expect(page.locator('.mobile-sidebar-nav button[data-mobile-tab="settings"]')).toHaveAttribute('aria-current', 'page');
+    await switchTo(page, b);
     await expect.poll(() => page.evaluate(() => db['2026']?.months?.[0]?.income?.[0]?.name)).toBe('MOBILE-B');
+    await expect.poll(() => page.evaluate(() => accountReadyOwner)).toBe(b.user.id);
+    await expect(page.locator('#mobileSettingsPanel')).toBeVisible();
     await expect(page.locator('#mobileAuthBtn')).toBeVisible();
     await page.locator('#mobileAuthBtn').click();
     await expect(page.locator('#rbDialogInputLabel')).toBeHidden();
