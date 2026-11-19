@@ -294,7 +294,7 @@ test('authenticated mobile navigation and owner isolation survive reload', async
   const [a, b] = accounts;
   await seed(a, 'MOBILE-A');
   await seed(b, 'MOBILE-B');
-  const mobile = await browser.newContext({ ...devices['iPhone 13'], browserName: 'chromium', trace: 'off', screenshot: 'off', video: 'off' });
+  const mobile = await browser.newContext({ ...devices['iPhone 13'], trace: 'off', screenshot: 'off', video: 'off' });
   try {
     const page = await open(mobile, a, 'MOBILE-A');
     await expect(page.locator('#mobileMenuButton')).toBeVisible();
