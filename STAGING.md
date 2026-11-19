@@ -106,3 +106,7 @@ Recurring-rule deletion is guarded by an owner-scoped versions compare-and-swap,
 The staging migration history reports ten applied versions through `20261117071639`. All five application tables listed above have RLS enabled with owner-scoped SELECT/INSERT/UPDATE/DELETE policies; UPDATE includes both USING and WITH CHECK ownership predicates. This verifies policy definitions, not the effectiveness of every client permission or a production deployment.
 
 Supabase security advisor reported **Leaked Password Protection Disabled**. Review [Supabase password security guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) and available plan controls before release. No authentication setting was changed during this review.
+
+### Manual live staging test policy
+
+Use GitHub Actions → **Live staging auth and database tests** → **Run workflow** → select `main` → **Run workflow**. The credentialed integration job is deliberately ineligible on PR branches, even if manually dispatched. The job retains the `staging-live-tests` environment; verify its deployment branch rules and required reviewers in GitHub Settings. For pre-merge PR validation use credential-free frontend and PostgreSQL workflows. A future pre-merge credentialed validation policy requires separate review of trusted refs and environment restrictions.
