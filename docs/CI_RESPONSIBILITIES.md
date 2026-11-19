@@ -25,4 +25,4 @@ Before staging is promoted, verify `build`, `postgres-contracts`, and protected 
 
 ## Phase 2C release gates
 
-For the exact candidate SHA, verify successful main-branch build/deploy, PostgreSQL contracts, and protected live integration. Verify environment protection and required branch checks in GitHub Settings; workflow YAML alone cannot prove settings. Confirm staging Supabase migration history, effective owner-scoped RLS and security advisors; record mobile live smoke testing and a tested rollback plan. Do not infer CI success from a skipped job.
+For the exact candidate SHA, verify successful main-branch build/deploy, PostgreSQL contracts, and protected live integration. Verify environment protection and required branch checks in GitHub Settings; workflow YAML alone cannot prove settings. Confirm staging Supabase migration history, effective owner-scoped RLS and security advisors; require the credentialed mobile Chromium smoke test to pass, record real-device mobile smoke testing, and verify a rollback plan. Do not infer CI success from a skipped job.
