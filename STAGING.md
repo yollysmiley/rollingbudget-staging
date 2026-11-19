@@ -90,3 +90,23 @@ Regression coverage includes recurring service and scheduler unit tests, preview
 ## Final review hardening
 
 Recurring-rule deletion is guarded by an owner-scoped versions compare-and-swap, matching effective-dated edits. Duplicate review uses exact normalized names, distinctive leading names, or substantive shared terms with matching amount and account, avoiding prompts from generic shared words alone. Desktop and mobile browser regression tests cover unresolved cloud conflicts, reload persistence, and explicit cloud recovery. Unit tests cover repeated stale saves and concurrent rule edit/delete rejection. Browser doubles enforce owner identity; live Supabase/RLS integration validation remains necessary before production promotion.
+
+## Phase 2C release validation and rollback checklist
+
+1. Record the candidate staging `main` commit SHA, all three successful workflow run URLs, Pages deployment result, and the current known-good frontend commit.
+2. Read-only verify staging Supabase migration versions and owner-scoped RLS for `budget_accounts`, `budget_data`, `budget_expense_categories`, `budget_recurring_rules`, and `budget_ui_years`. Review current security advisors. Never copy staging users or data to production.
+3. Verify production migration compatibility *before* deployment. A frontend rollback cannot undo incompatible database migrations. Any production database change requires its own reviewed migration and recovery strategy, including a verified backup/restore capability.
+4. Run manual real-browser smoke tests on desktop and mobile: authentication, route refresh, recurring rules, expense categories, account isolation, save/reload, and logout. Record device, browser, results, and release commit.
+5. Confirm GitHub Pages and Supabase Auth redirect allowlists independently for the target environment. Verify GitHub required checks and `staging-live-tests` environment branch restrictions.
+6. To roll back a frontend-only deployment, redeploy the recorded last-known-good frontend commit using the approved workflow; verify public/authenticated routes and data persistence afterward. Do not reset or delete user records to roll back a frontend.
+7. If migrations are incompatible or a data-integrity issue is detected, halt promotion and follow an explicitly approved database recovery plan; do not improvise a destructive rollback.
+
+### Read-only staging database review (2026-11-17)
+
+The staging migration history reports ten applied versions through `20261117071639`. All five application tables listed above have RLS enabled with owner-scoped SELECT/INSERT/UPDATE/DELETE policies; UPDATE includes both USING and WITH CHECK ownership predicates. This verifies policy definitions, not the effectiveness of every client permission or a production deployment.
+
+Supabase security advisor reported **Leaked Password Protection Disabled**. Review [Supabase password security guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) and available plan controls before release. No authentication setting was changed during this review.
+
+### Manual live staging test policy
+
+Use GitHub Actions → **Live staging auth and database tests** → **Run workflow** → select `main` → **Run workflow**. The credentialed integration job is deliberately ineligible on PR branches, even if manually dispatched. The job retains the `staging-live-tests` environment; verify its deployment branch rules and required reviewers in GitHub Settings. For pre-merge PR validation use credential-free frontend and PostgreSQL workflows. A future pre-merge credentialed validation policy requires separate review of trusted refs and environment restrictions.

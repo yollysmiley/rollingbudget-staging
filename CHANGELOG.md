@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Correct protected mobile integration assertions to use owner-scoped state instead of desktop-only income controls; verify Settings query-route, selected navigation and visible panel survive refresh. The credentialed suite remains main-only and requires postmerge validation before release promotion.
+
+- Stabilize the mobile January projection persistence regression by waiting for authenticated budget hydration and the saved value after reload, without changing the expected $180 projection.
+
+- Remove the obsolete PR #89 credentialed live-test branch exception; retain automatic and manual live staging runs on `main` only, with workflow eligibility regression coverage and updated CI instructions.
+
+- Add credentialed mobile Chromium smoke coverage for authenticated navigation, refresh, owner switching, and branded confirmation cancellation in the protected staging integration suite.
+
+- Phase 2C: reconcile browser/CI release documentation, record read-only staging migration/RLS/security-advisor findings, and add a release and rollback checklist. Production unchanged; obsolete manual live-test branch exception and credentialed mobile smoke coverage remain open gates.
+
 - Permit manually dispatched protected live staging integration tests on PR #89's approved validation branch, without exposing credentials to arbitrary PR runs; add workflow eligibility regression coverage and update CI responsibilities.
 
 - Fix branded confirmation dialogs displaying the prompt-only “Value” label by honoring hidden controls; add distinct desktop and mobile Playwright regressions. No deletion or sign-out behavior changes.
