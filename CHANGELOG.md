@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add credentialed mobile Chromium smoke coverage for authenticated navigation, refresh, owner switching, and branded confirmation cancellation in the protected staging integration suite.
+
 - Phase 2C: reconcile browser/CI release documentation, record read-only staging migration/RLS/security-advisor findings, and add a release and rollback checklist. Production unchanged; obsolete manual live-test branch exception and credentialed mobile smoke coverage remain open gates.
 
 - Permit manually dispatched protected live staging integration tests on PR #89's approved validation branch, without exposing credentials to arbitrary PR runs; add workflow eligibility regression coverage and update CI responsibilities.
