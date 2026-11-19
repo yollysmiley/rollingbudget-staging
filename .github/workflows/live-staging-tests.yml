@@ -10,10 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   integration:
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' &&
-       github.ref == 'refs/heads/fix/phase2b-confirm-logout-dialog')
+    # Manual runs are supported on main; never expose staging secrets to PR branches.
+    if: github.ref == 'refs/heads/main'
     environment: staging-live-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
