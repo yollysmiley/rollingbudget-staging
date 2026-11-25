@@ -1306,7 +1306,7 @@ test('desktop confirms deletion and blocks accounts referenced by disabled globa
   await expect(accountRow).toContainText('Checking');
   await queueBrandedResponse(page);
   await accountRow.locator('[data-account-action="remove"]').click();
-  await expect(page.locator('#desktopAccountsStatus')).toContainText('Reassign or remove global recurring rules');
+  await expect(page.locator('#desktopAccountsStatus')).toContainText('Reassign existing budget entries or recurring rules before removing this account');
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
   await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
