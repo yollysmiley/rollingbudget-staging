@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Document staging-only write-freeze preparation, owner authorization gates, exact observed budget-table ACL baseline, and reversible SQL drafts. No database changes, backup or workflow dispatch.
+
+
 - Add staging-only authorized encrypted backup and synthetic CLI restoration regression. No application or database changes; actual backup and recovery require separate approval.
 
 - Correct protected mobile integration assertions to use owner-scoped state instead of desktop-only income controls; verify Settings query-route, selected navigation and visible panel survive refresh. The credentialed suite remains main-only and requires postmerge validation before release promotion.
