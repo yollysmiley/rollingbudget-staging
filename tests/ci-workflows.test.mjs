@@ -13,6 +13,7 @@ test('PostgreSQL CI preserves B3, B1 and B4 assertions in isolated order', () =>
     'bash scripts/verify-clean-migration-replay.sh',
     'supabase/verification/verify-b4-postgres-contract.sql',
     'bash scripts/verify-b3-account-races.sh',
+    'bash tests/verify-staging-write-freeze.sh',
   ];
   let previous = -1;
   for (const step of ordered) {

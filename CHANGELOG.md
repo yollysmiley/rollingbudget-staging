@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Harden the staging freeze runbook with bounded locking, effective column and anonymous permission checks, maintenance and recovery gates, and synthetic PostgreSQL regression coverage.
+
 - Document staging-only write-freeze preparation, owner authorization gates, exact observed budget-table ACL baseline, and reversible SQL drafts. No database changes, backup or workflow dispatch.
 
 
