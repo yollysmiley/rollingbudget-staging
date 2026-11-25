@@ -1,0 +1,7 @@
+# Authorized staging backup
+
+No production connection is permitted. Configure the staging-backup GitHub environment restricted to main, with STAGING_DB_URL (staging session pooler, port 5432, sslmode=require) and BACKUP_RECIPIENT (public Age recipient). Keep the private identity outside GitHub. Configuration, freeze, dispatch and restoration each require separate owner approval. Verify write freeze and capture original grants before dispatching Authorized staging backup with BACKUP. Never paste credentials into chat or logs.
+
+Download encrypted-staging-backup within seven days. Verify the outer SHA256 checksum, decrypt with the owner-controlled Age identity on a trusted machine, and verify the inner SHA256SUMS. Age and checksum tools do not require Docker. Keep ciphertext and sidecar in protected offline storage; never upload plaintext or the private key. Record recovery evidence privately.
+
+The export includes roles, schema, data and migration history. Separate exports require a consistent freeze; managed Auth settings, Storage objects and schema customizations require separate inventory. CI exercises mocked export failures and real CLI export/restore of synthetic PostgreSQL 17 fixtures only. It does not restore the actual staging archive. Actual recovery requires a separately approved isolated restore environment and secure access to decrypted data; do not restore over staging or production. Stop before migrations if recovery cannot be verified or an explicit alternative recovery gate is not approved. No production safeguards are changed.

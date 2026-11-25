@@ -1,0 +1,42 @@
+name: Authorized staging backup
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type BACKUP to authorize export
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: authorized-staging-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'BACKUP'
+    environment: staging-backup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.79.0
+      - run: sudo apt-get update && sudo apt-get install -y age
+      - name: Export and encrypt
+        env:
+          STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
+          BACKUP_RECIPIENT: ${{ vars.BACKUP_RECIPIENT }}
+          BACKUP_CONFIRMATION: ${{ inputs.confirmation }}
+          BACKUP_OUTPUT: ${{ runner.temp }}/encrypted-staging-backup
+        run: bash scripts/export-staging-backup.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-staging-backup
+          path: |
+            ${{ runner.temp }}/encrypted-staging-backup/backup.tar.gz.age
+            ${{ runner.temp }}/encrypted-staging-backup/backup.tar.gz.age.sha256
+          retention-days: 7
+          if-no-files-found: error

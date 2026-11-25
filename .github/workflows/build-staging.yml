@@ -39,6 +39,15 @@ jobs:
         run: node scripts/build-staging.mjs
       - name: Run unit, security, and rendering regression tests
         run: node --test tests/*.test.mjs tests/live/*.test.mjs
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.79.0
+      - name: Synthetic backup and restore regression
+        run: |
+          sudo apt-get update && sudo apt-get install -y age
+          bash -n scripts/export-staging-backup.sh tests/verify-staging-backup.sh tests/verify-staging-cli-restore.sh
+          bash tests/verify-staging-backup.sh
+          bash tests/verify-staging-cli-restore.sh
       - name: Run desktop and mobile acceptance tests
         run: npm run test:e2e
       - name: Retain browser reports and failure evidence

@@ -54,3 +54,10 @@ test('Retired duplicate workflows do not run independently', () => {
     assert.equal(existsSync(new URL('../.github/workflows/' + name, import.meta.url)), false, name);
   }
 });
+
+test('staging backup regression runs without live credentials in primary CI', () => {
+  const ci = workflow('build-staging.yml');
+  assert.match(ci, /bash tests\/verify-staging-backup\.sh/);
+  assert.match(ci, /bash tests\/verify-staging-cli-restore\.sh/);
+  assert.doesNotMatch(ci, /secrets\.STAGING_DB_URL/);
+});

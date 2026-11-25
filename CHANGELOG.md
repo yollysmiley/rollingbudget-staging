@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add staging-only authorized encrypted backup and synthetic CLI restoration regression. No application or database changes; actual backup and recovery require separate approval.
+
 - Correct protected mobile integration assertions to use owner-scoped state instead of desktop-only income controls; verify Settings query-route, selected navigation and visible panel survive refresh. The credentialed suite remains main-only and requires postmerge validation before release promotion.
 
 - Stabilize the mobile January projection persistence regression by waiting for authenticated budget hydration and the saved value after reload, without changing the expected $180 projection.
