@@ -212,7 +212,7 @@ test('global recurring dependencies block account removal regardless of disabled
     });
     await assert.rejects(
       deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {}),
-      /Reassign or remove global recurring rules/
+      /Reassign existing budget entries or recurring rules/
     );
     assert.equal(fixture.operations.length, 0);
     assert.equal(fixture.rows.length, 1);
@@ -246,7 +246,7 @@ test('concurrent recurring reference FK violation aborts account delete without 
     deletionError: Object.assign(new Error('foreign key violation'), { code: '23503' })
   });
   await assert.rejects(deleteAccount(fixture.client, 'user-1', [priorAccount()], 'custom', {}),
-    /Reassign or remove global recurring rules/);
+    /Reassign existing budget entries or recurring rules/);
   assert.equal(fixture.operations.length, 1);
   assert.equal(fixture.rows.length, 1);
   assert.equal(fixture.rows[0].id, 'custom');
