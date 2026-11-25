@@ -21,25 +21,66 @@ export function normalizeAccounts(accounts) {
   });
 }
 
+// Account references include historical versions, even when rules are disabled.
+const referenceObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+function requireReferenceObject(value) {
+  if (!referenceObject(value)) throw new TypeError('Invalid account reference object');
+}
+function requireReferenceArray(value) {
+  if (!Array.isArray(value)) throw new TypeError('Invalid account reference collection');
+}
+function collectAccountFields(entry, refs) {
+  requireReferenceObject(entry);
+  let prior;
+  for (const field of ['accountId', 'account_id', 'acct']) {
+    if (!Object.hasOwn(entry, field)) continue;
+    const id = entry[field];
+    if (id === null || id === '') continue;
+    if (typeof id !== 'string' || !id.trim() || id !== id.trim() || [...id].length > 80) throw new TypeError('Invalid account reference');
+    if (prior !== undefined && prior !== id) throw new TypeError('Conflicting account aliases');
+    prior = id;
+    refs.add(id);
+  }
+}
+export function extractRuleAccountRefs(rules, refs = new Set()) {
+  requireReferenceArray(rules);
+  for (const rule of rules) {
+    collectAccountFields(rule, refs);
+    if (Object.hasOwn(rule, 'versions')) extractRuleAccountRefs(rule.versions, refs);
+  }
+  return refs;
+}
+export function extractBudgetAccountRefs(year) {
+  requireReferenceObject(year);
+  const refs = new Set();
+  if (Object.hasOwn(year, 'recurringRules')) extractRuleAccountRefs(year.recurringRules, refs);
+  if (!Object.hasOwn(year, 'months')) return refs;
+  requireReferenceArray(year.months);
+  for (const month of year.months) {
+    requireReferenceObject(month);
+    for (const key of ['income', 'fixed', 'variable', 'creditCards', 'loans', 'expenses']) {
+      if (!Object.hasOwn(month, key)) continue;
+      requireReferenceArray(month[key]);
+      for (const entry of month[key]) {
+        collectAccountFields(entry, refs);
+        if (key === 'income') {
+          for (const id of ['cpm', 'usaa']) {
+            const raw = entry[id];
+            if (raw == null || (typeof raw === 'string' && !raw.trim())) continue;
+            if (!['string','number'].includes(typeof raw) || !/^[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(String(raw).trim()) || !Number.isFinite(Number(raw))) throw new TypeError('Invalid legacy income');
+            if (Number(raw) !== 0) refs.add(id);
+          }
+        }
+      }
+    }
+  }
+  return refs;
+}
 export function requiredLegacyAccounts(yearDocuments = {}) {
+  requireReferenceObject(yearDocuments);
   const required = new Set();
   for (const year of Object.values(yearDocuments)) {
-    for (const month of year?.months ?? []) {
-      for (const entry of month.income ?? []) {
-        for (const id of ['cpm', 'usaa']) {
-          if ((Number(entry[id]) || 0) !== 0 || entry.accountId === id) required.add(id);
-        }
-      }
-      for (const type of ['fixed', 'variable', 'creditCards', 'loans']) {
-        for (const entry of month[type] ?? []) {
-          if (entry.accountId === 'cpm' || entry.accountId === 'usaa') required.add(entry.accountId);
-        }
-      }
-    }
-    for (const rule of year?.recurringRules ?? []) {
-      const id = rule.accountId || rule.acct;
-      if (id === 'cpm' || id === 'usaa') required.add(id);
-    }
+    for (const id of extractBudgetAccountRefs(year)) required.add(id);
   }
   return LEGACY_ACCOUNTS.filter(account => required.has(account.id));
 }
@@ -87,10 +128,11 @@ export function totalForAccounts(entries, accounts, amountField) {
 }
 
 export function canRemoveAccount(accountId, yearDocuments) {
-  return !Object.values(yearDocuments).some(year =>
-    year?.months?.some(month =>
-      ['income', 'fixed', 'variable', 'creditCards', 'loans'].some(key =>
-        month[key]?.some(entry => entry.accountId === accountId || (key === 'income' && (accountId === 'cpm' || accountId === 'usaa') && Object.hasOwn(entry, accountId))))) ||
-    year?.recurringRules?.some(rule => rule.accountId === accountId || rule.acct === accountId)
-  );
+  if (typeof accountId !== 'string' || !accountId.trim()) return false;
+  try {
+    requireReferenceObject(yearDocuments);
+    return !Object.values(yearDocuments).some(year => extractBudgetAccountRefs(year).has(accountId));
+  } catch {
+    return false; // Malformed inventories cannot establish safe deletion.
+  }
 }
