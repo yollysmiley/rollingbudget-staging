@@ -49,3 +49,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/verification/verify-b4-postgres-contract.sql
       - name: B4 concurrent recurring reference and account deletion
         run: bash scripts/verify-b3-account-races.sh
+      - name: Synthetic staging freeze and exact ACL restoration
+        run: bash tests/verify-staging-write-freeze.sh

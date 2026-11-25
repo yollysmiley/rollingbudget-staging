@@ -14,6 +14,7 @@ See [STAGING.md](STAGING.md) for staging configuration, local build instructions
 - [Browser acceptance tests](docs/browser-tests.md) — desktop/mobile testing guidance.
 - [Brand guidelines](docs/BRAND_GUIDELINES.md) — logo, palette, typography, and authentication branding.
 - [Dynamic account management plan](docs/DYNAMIC_ACCOUNT_MANAGEMENT_PLAN.md) — historical implementation contract (verify status against the application).
+- [Staging write-freeze preparation](docs/STAGING_WRITE_FREEZE.md) — read-only assessment and proposed reversible maintenance procedure.
 - [Staging backup](docs/STAGING_BACKUP.md) — authorized encrypted export and recovery gates.
 - [Changelog](CHANGELOG.md) — chronological implementation and release history.
 
