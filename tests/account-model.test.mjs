@@ -47,7 +47,7 @@ test('accounts referenced by any month or recurring rule cannot be removed', () 
 test('legacy income columns protect both source accounts until migration completes', () => {
   const year = { months: [{ income: [{ name: 'Pay', cpm: 150, usaa: 0 }] }] };
   assert.equal(canRemoveAccount('cpm', { 2026: year }), false);
-  assert.equal(canRemoveAccount('usaa', { 2026: year }), false);
+  assert.equal(canRemoveAccount('usaa', { 2026: year }), true);
 
   const migrated = migrateLegacyYear(year);
   assert.equal(migrated.changed, true);
@@ -86,7 +86,7 @@ test('migration rejects absent source accounts without modifying original income
   assert.equal(year.months[0].income[0].usaa, 20);
   assert.deepEqual(migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], [{ id: 'usaa' }]), [{ name: 'Zero', amount: 0, accountId: 'usaa' }]);
   assert.deepEqual(migrateLegacyIncome([{ name: 'Zero', cpm: 0, usaa: 0 }], []), [{ name: 'Zero', amount: 0, accountId: null }]);
-  assert.equal(canRemoveAccount('cpm', { 2026: { months: [{ income: [{ cpm: 0, usaa: 0 }] }] } }), false);
+  assert.equal(canRemoveAccount('cpm', { 2026: { months: [{ income: [{ cpm: 0, usaa: 0 }] }] } }), true);
 });
 
 test('legacy account discovery excludes zero-dollar sources but preserves referenced accounts', () => {
@@ -98,4 +98,10 @@ test('legacy account discovery excludes zero-dollar sources but preserves refere
   assert.deepEqual(requiredLegacyAccounts(years).map(a => a.id), ['cpm']);
   years[2024].months[0].fixed = [{ accountId: 'usaa', amount: 0 }];
   assert.deepEqual(requiredLegacyAccounts(years).map(a => a.id), ['cpm', 'usaa']);
+});
+
+test('historical aliases and malformed inventories protect accounts', () => {
+  assert.equal(canRemoveAccount('a', {2026:{recurringRules:[{versions:[{acct:'a'}]}]}}), false);
+  assert.equal(canRemoveAccount('a', {2026:{months:[{expenses:[{account_id:'a'}]}]}}), false);
+  assert.equal(canRemoveAccount('z', {2026:{months:[{fixed:[{accountId:'a',acct:'b'}]}]}}), false);
 });
