@@ -246,6 +246,37 @@ BEGIN
 END
 $lifecycle$;
 
+-- #92: embedded references must be enforced by the database.
+DO $embedded$
+DECLARE owner_id uuid := '00000000-0000-4000-8000-000000000101';
+BEGIN
+ INSERT INTO public.budget_accounts(user_id,id,name) VALUES(owner_id,'embedded','Embedded account');
+ INSERT INTO public.budget_expense_categories(user_id,id,name) VALUES(owner_id,'embedded','Embedded category');
+ UPDATE public.budget_ui_years SET budget_data='{"months":[{"expenses":[{"accountId":"embedded","categoryId":"embedded"}]}]}' WHERE user_id=owner_id AND year=2028;
+ BEGIN
+  DELETE FROM public.budget_accounts WHERE user_id=owner_id AND id='embedded';
+  RAISE EXCEPTION 'Embedded account deletion accepted';
+ EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+ BEGIN
+  DELETE FROM public.budget_expense_categories WHERE user_id=owner_id AND id='embedded';
+  RAISE EXCEPTION 'Embedded category deletion accepted';
+ EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+ UPDATE public.budget_ui_years SET budget_data='{}' WHERE user_id=owner_id AND year=2028;
+ UPDATE public.budget_recurring_rules SET versions='[{"accountId":"embedded","category":"embedded"}]' WHERE user_id=owner_id AND id='rule-1';
+ BEGIN
+  DELETE FROM public.budget_accounts WHERE user_id=owner_id AND id='embedded';
+  RAISE EXCEPTION 'Historical account deletion accepted';
+ EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+ BEGIN
+  DELETE FROM public.budget_expense_categories WHERE user_id=owner_id AND id='embedded';
+  RAISE EXCEPTION 'Historical category deletion accepted';
+ EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+ UPDATE public.budget_recurring_rules SET versions='[]' WHERE user_id=owner_id AND id='rule-1';
+ DELETE FROM public.budget_accounts WHERE user_id=owner_id AND id='embedded';
+ DELETE FROM public.budget_expense_categories WHERE user_id=owner_id AND id='embedded';
+END
+$embedded$;
+
 RESET ROLE;
 ROLLBACK;
 SELECT 'B4 PostgreSQL RLS, date, and B3 account FK contracts passed' AS result;
