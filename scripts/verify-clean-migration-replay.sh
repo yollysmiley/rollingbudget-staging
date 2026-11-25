@@ -36,8 +36,8 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 SQL
 
 mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
-if [[ "${#migrations[@]}" -ne 10 ]]; then
-  echo "Expected ten staging migrations including expense categories; found ${#migrations[@]}. Review the replay manifest." >&2
+if [[ "${#migrations[@]}" -ne 16 ]]; then
+  echo "Expected sixteen staging migrations including alignment; found ${#migrations[@]}. Review the replay manifest." >&2
   exit 1
 fi
 for migration in "${migrations[@]}"; do
@@ -95,8 +95,8 @@ BEGIN
   SELECT count(*) INTO index_count FROM pg_indexes
   WHERE schemaname = 'public'
     AND tablename IN ('budget_data','budget_ui_years','budget_accounts','budget_recurring_rules','budget_expense_categories');
-  IF index_count <> 9 THEN
-    RAISE EXCEPTION 'Expected nine budget indexes, found %', index_count;
+  IF index_count <> 10 THEN
+    RAISE EXCEPTION 'Expected ten budget indexes, found %', index_count;
   END IF;
 
   IF EXISTS (SELECT 1 FROM pg_constraint
