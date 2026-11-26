@@ -41,7 +41,11 @@ test('disabled and future recurring references block deletion; incomplete invent
   assert.equal(canDeleteExpenseCategory('utilities', years, [{ categoryId: 'utilities', startDate: '2030-01-01' }]), false);
   assert.equal(canDeleteExpenseCategory('utilities', null, []), false);
   assert.equal(canDeleteExpenseCategory('utilities', years, null), false);
-  assert.equal(canDeleteExpenseCategory('utilities', { 2026: { months: [{}] } }, []), false);
+  // Absent optional collections are valid; malformed present collections are not.
+  assert.equal(canDeleteExpenseCategory('utilities', { 2026: { months: [{}] } }, []), true);
+  assert.equal(canDeleteExpenseCategory('utilities', { 2026: { months: [{fixed:null}] } }, []), false);
+  assert.equal(canDeleteExpenseCategory('utilities', { 2026: { months: [{expenses:[{}]}] } }, []), false);
+  assert.equal(canDeleteExpenseCategory('utilities', { 2026: { months: [{expenses:[{categoryId:'a',category_id:'b'}]}] } }, []), false);
   assert.equal(canDeleteExpenseCategory('fixed', years, []), false);
 });
 

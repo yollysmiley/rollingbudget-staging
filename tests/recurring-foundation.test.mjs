@@ -53,3 +53,7 @@ test('custom category IDs require an explicit valid catalog', () => {
   assert.throws(() => normalizeRecurringRule(custom, { expenseCategoryIds: ['bad category'] }),
     /Invalid recurring expense category catalog/);
 });
+
+test('reserved category IDs cannot appear in custom catalog', () => {
+  for (const id of ['income','fixed','variable','loan','cc']) assert.throws(() => normalizeRecurringRule(rule(), {expenseCategoryIds:[id]}), /Invalid recurring expense category catalog/);
+});

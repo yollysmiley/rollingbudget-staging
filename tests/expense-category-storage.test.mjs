@@ -48,15 +48,20 @@ test('category deletion refuses unauthenticated access', async () => {
   await assert.rejects(deleteExpenseCategory(null, null, [], 'custom'), /Authenticated/);
 });
 
-test('category deletion fails closed when cloud year inventory fails', async () => {
-  let deleted = false;
-  const client = { from(table) {
-    if (table === 'budget_ui_years') return { select() { return { async eq() { return { data: null, error: new Error('Year lookup failed') }; } }; } };
-    deleted = true;
-    throw new Error('Unexpected table access');
-  } };
-  await assert.rejects(deleteExpenseCategory(client, 'owner-a', [{ id: 'custom', name: 'Custom', kind: 'fixed' }], 'custom'), /Year lookup failed/);
-  assert.equal(deleted, false);
+test('category deletion relies on owner-scoped revision and database FK', async () => {
+  const revision = '2026-11-17T00:00:00Z';
+  const categories = [{id:'custom',name:'Custom',updatedAt:revision}];
+  for (const error of [{code:'23503'}, new Error('network failed'), null]) {
+    const calls = [];
+    const client = {from(table) {
+      assert.equal(table,'budget_expense_categories');
+      return {select() {return {eq(field,value) {calls.push([field,value]);return {async eq(field,value) {calls.push([field,value]);return {data:[{id:'custom',name:'Custom',updated_at:revision}],error:null};}};}};},
+        delete() {const chain = {eq(field,value) {calls.push([field,value]);return chain;},async select() {return {data:error?null:[{id:'custom'}],error};}};return chain;}};
+    }};
+    const pending = deleteExpenseCategory(client,'owner-a',categories,'custom');
+    if (error) await assert.rejects(pending,error.code==='23503'?/Category is in use/:/network failed/); else await pending;
+    assert.deepEqual(calls,[['user_id','owner-a'],['id','custom'],['user_id','owner-a'],['id','custom'],['updated_at',revision]]);
+  }
 });
 
 test('category deletion refuses built-in categories without cloud access', async () => {

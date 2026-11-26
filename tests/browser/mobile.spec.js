@@ -1082,7 +1082,7 @@ test('mobile requires confirmation then blocks deletion referenced by future glo
   await expect(page.locator('#mobileAccountsStatus')).not.toContainText('Account changes saved');
   await queueBrandedResponse(page);
   await remove.click();
-  await expect(page.locator('#mobileAccountsStatus')).toContainText('Reassign or remove global recurring rules');
+  await expect(page.locator('#mobileAccountsStatus')).toContainText('Reassign existing budget entries or recurring rules before removing this account');
   await expect(accountRow).toContainText('Checking');
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_recurring_preview_rules')).length)).toBe(1);
   await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
@@ -1130,3 +1130,55 @@ test('mobile expense category settings section is reachable without desktop cont
   await expect(page.locator('#mobileExpenseCategoriesManager')).toHaveCount(1); // Empty manager shell has no visible box until category controls are implemented.
   await expect(page.locator('#settingsCategories')).toBeHidden();
 });
+
+test('mobile category deletion preserves state on rejection and refreshes cards on success', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('__mock_category_rows', JSON.stringify([{ user_id: currentUser.id, id: 'phase-c-category', name: 'Phase C Category', kind: null, updated_at: '2026-11-25T00:00:00Z' }]));
+    sessionStorage.setItem('__mock_category_fk_reject', '1');
+  });
+  await page.goto('rollover-budget-app.html?page=settings');
+  await expectAuthenticatedBudget(page);
+  await page.locator('#mobileSettingsMenu button').filter({ hasText: 'Expense Categories' }).click();
+  const manager = page.locator('#mobileExpenseCategoriesManager');
+  const row = manager.locator('[data-expense-category-id="phase-c-category"]');
+  const card = page.locator('[data-custom-expense-card="phase-c-category"]');
+  await expect(row).toBeVisible();
+  await expect(card).toHaveCount(1);
+  const snapshot = await page.evaluate(() => sessionStorage.getItem('__mock_cloud_budget_rows'));
+  await queueBrandedResponse(page, 'cancel');
+  await row.locator('[data-expense-category-action="delete"]').click();
+  await expect(page.locator('#rbDialogBackdrop')).toBeHidden();
+  await expect(row).toBeVisible();
+  await queueBrandedResponse(page);
+  await row.locator('[data-expense-category-action="delete"]').click();
+  await expect(manager.getByRole('status')).toContainText('Category is in use by a saved budget or recurring rule');
+  await expect(row).toBeVisible();
+  await expect(card).toHaveCount(1);
+  expect(await page.evaluate(() => sessionStorage.getItem('__mock_cloud_budget_rows'))).toBe(snapshot);
+  await page.evaluate(() => sessionStorage.removeItem('__mock_category_fk_reject'));
+  await queueBrandedResponse(page);
+  await row.locator('[data-expense-category-action="delete"]').click();
+  await expect(manager.getByRole('status')).toContainText('Expense category deleted.');
+  await expect(row).toHaveCount(0);
+  await expect(card).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('__mock_category_rows')))).toEqual([]);
+  expect(await page.evaluate(() => sessionStorage.getItem('__mock_cloud_budget_rows'))).toBe(snapshot);
+  await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
+});
+
+for (const entry of ['/app/index.html', '/rollover-budget-app.html']) {
+  test(`mobile sign-out and signed-out guard return to homepage from ${entry}`, async ({ page }) => {
+    const home = new URL('../', page.url()).href;
+    await page.goto(entry + '?page=overview');
+    await expectAuthenticatedBudget(page);
+    const signOut = page.locator('#mobileAuthBtn');
+    await expect(signOut).toHaveText('Sign Out');
+    await queueBrandedResponse(page);
+    await signOut.click();
+    await expect(page).toHaveURL(home);
+    await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+    await page.goto(entry + '?page=settings');
+    await expect(page).toHaveURL(home);
+    await expect(page.locator('#incomeBody')).toHaveCount(0);
+  });
+}

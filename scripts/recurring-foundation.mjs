@@ -1,3 +1,4 @@
+import { RESERVED_CATEGORY_IDS } from './expense-category-model.mjs';
 import { dueDayOf } from './due-day.mjs';
 
 // Validate owner-scoped recurring definitions without altering budget transactions.
@@ -5,7 +6,7 @@ export const FREQUENCY_MONTHS = Object.freeze({
   monthly: 1, 'every-2-months': 2, quarterly: 3,
   'every-6-months': 6, annually: 12
 });
-const CATEGORIES = new Set(['income', 'fixed', 'variable', 'loan', 'cc']);
+const CATEGORIES = new Set(RESERVED_CATEGORY_IDS);
 const DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 function validMonthDate(value) {
@@ -27,7 +28,7 @@ export function normalizeRecurringRule(rule, { expenseCategoryIds = [] } = {}) {
   if (!Object.hasOwn(FREQUENCY_MONTHS, frequency)) throw new Error('Unsupported recurring frequency');
   const category = rule.category;
   if (!Array.isArray(expenseCategoryIds) || expenseCategoryIds.some(id =>
-    typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(id))) {
+    typeof id !== 'string' || CATEGORIES.has(id) || !/^[a-zA-Z0-9_-]{1,80}$/.test(id))) {
     throw new Error('Invalid recurring expense category catalog');
   }
   if (!CATEGORIES.has(category) && !expenseCategoryIds.includes(category)) {

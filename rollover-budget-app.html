@@ -1397,6 +1397,7 @@ async function confirmDeleteExpenseCategory(id) {
     if (currentUser?.id !== owner) return;
     expenseCategories = fresh;
     expenseCategoryMessage = 'Expense category deleted.';
+    render();
   } catch (error) {
     if (currentUser?.id === owner) expenseCategoryMessage = error.message || 'Category could not be deleted.';
   } finally {
@@ -1641,7 +1642,7 @@ function validYearData(value) {
 }
 async function initApp() {
   const gateMessage = document.getElementById("authGateMessage");
-  const home = window.location.pathname.endsWith("/rollover-budget-app.html") ? new URL("./", window.location.href).href : new URL("../", window.location.href).href;
+  const home = new URL(window.location.pathname.endsWith("/app/") || window.location.pathname.endsWith("/app/index.html") ? "../" : "./", window.location.href).href;
   if (!supabaseClient) {
     gateMessage.textContent = "Sign in is temporarily unavailable. Please try again later.";
     return;
@@ -2805,9 +2806,7 @@ async function handleAuthClick() {
       try {
         const { error } = await supabaseClient.auth.signOut();
         if (error) throw error;
-        const home = window.location.pathname.endsWith("/rollover-budget-app.html")
-          ? new URL("./", window.location.href).href
-          : new URL("../", window.location.href).href;
+        const home = new URL(window.location.pathname.endsWith("/app/") || window.location.pathname.endsWith("/app/index.html") ? "../" : "./", window.location.href).href;
         window.location.replace(home);
       } catch (error) {
         uiSignOutInProgress = false;

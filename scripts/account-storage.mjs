@@ -81,7 +81,7 @@ export async function deleteAccount(client, userId, accounts, id, years) {
   if (rulesError) throw rulesError;
   if (!Array.isArray(rules)) throw new Error('Could not verify recurring account references');
   if (rules.length) {
-    throw new Error('Reassign or remove global recurring rules before removing this account');
+    throw new Error('Reassign existing budget entries or recurring rules before removing this account');
   }
   // Owner-scoped CAS prevents stale browser deletions. The composite FK also
   // protects against a rule being created after the application-side preflight.
@@ -92,12 +92,12 @@ export async function deleteAccount(client, userId, accounts, id, years) {
       .eq('user_id', userId).eq('id', id).eq('updated_at', knownRevision).select('id'));
   } catch (deleteError) {
     if (deleteError?.code === '23503') {
-      throw new Error('Reassign or remove global recurring rules before removing this account');
+      throw new Error('Reassign existing budget entries or recurring rules before removing this account');
     }
     throw deleteError;
   }
   if (error?.code === '23503') {
-    throw new Error('Reassign or remove global recurring rules before removing this account');
+    throw new Error('Reassign existing budget entries or recurring rules before removing this account');
   }
   if (error) throw error;
   if (!Array.isArray(data) || data.length !== 1) {

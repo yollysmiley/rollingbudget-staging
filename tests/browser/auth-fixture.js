@@ -47,6 +47,13 @@ export async function mockSignedInBudget(page) {
                   return Promise.resolve({ data: Object.values(rows), error: null });
                 }
 
+                if (table === 'budget_expense_categories') {
+                  const rows = JSON.parse(sessionStorage.getItem('__mock_category_rows') || '[]');
+                  const scoped = field === 'user_id' && value === user.id ? rows.filter(row => row.user_id === user.id) : [];
+                  const result = Promise.resolve({ data: scoped, error: null });
+                  result.eq = (key, expected) => Promise.resolve({ data: scoped.filter(row => row[key] === expected), error: null });
+                  return result;
+                }
                 const accountRows = table !== 'budget_accounts' ? [] :
                   sessionStorage.getItem('__mock_account_rows') !== null
                     ? JSON.parse(sessionStorage.getItem('__mock_account_rows'))
@@ -153,6 +160,21 @@ export async function mockSignedInBudget(page) {
                 return query;
               },
               delete() {
+                if (table === 'budget_expense_categories') {
+                  const filters = {};
+                  const query = {
+                    eq(field, value) { filters[field] = value; return query; },
+                    select() {
+                      const rows = JSON.parse(sessionStorage.getItem('__mock_category_rows') || '[]');
+                      const found = rows.filter(row => filters.user_id === user.id && Object.entries(filters).every(([key, value]) => row[key] === value));
+                      // Simulated FK rejection; actual integrity is tested in PostgreSQL.
+                      if (found.length && sessionStorage.getItem('__mock_category_fk_reject') === '1') return Promise.resolve({ data: null, error: { code: '23503' } });
+                      sessionStorage.setItem('__mock_category_rows', JSON.stringify(rows.filter(row => !found.includes(row))));
+                      return Promise.resolve({ data: found.map(row => ({ id: row.id })), error: null });
+                    }
+                  };
+                  return query;
+                }
                 if (table === 'budget_accounts') {
                   const filters = {};
                   const query = {

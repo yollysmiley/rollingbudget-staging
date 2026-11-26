@@ -15,12 +15,12 @@ test('B1 replay uses only an isolated localhost database and fails on SQL errors
 });
 
 test('B1 replay enumerates all committed SQL migrations in order', () => {
-  assert.equal(migrationFiles.length, 10);
+  assert.equal(migrationFiles.length, 16);
   assert.match(replay, /find supabase\/migrations/);
   assert.match(replay, /LC_ALL=C sort/);
   assert.match(replay, /migrations\[@\]/);
   assert.match(replay, /policy_count <> 16/);
-  assert.match(replay, /index_count <> 9/);
+  assert.match(replay, /index_count <> 10/);
 });
 
 test('Consolidated B1 workflow is secret-free and preserves migration replay', () => {
@@ -41,7 +41,7 @@ test('B3 migration rejects orphaned references and enforces a validated tenant-s
   assert.doesNotMatch(migration, /ON DELETE CASCADE|SET NULL/);
 });
 
-test('committed migrations match the applied staging manifest', () => {
+test('committed migrations match applied baseline plus pending alignment manifest', () => {
   const expected = [
     '20261029194718_create_staging_budget_data.sql',
     '20261114184318_create_budget_ui_years.sql',
@@ -54,5 +54,13 @@ test('committed migrations match the applied staging manifest', () => {
     '20261117071637_remove_expense_category_kind.sql',
     '20261117071639_allow_custom_recurring_categories.sql'
   ];
-  assert.deepEqual(migrationFiles, expected);
+  const pending = [
+  "20261125120000_enforce_recurring_category_owner.sql",
+  "20261125121000_protect_embedded_category_refs.sql",
+  "20261125122000_complete_category_references.sql",
+  "20261125123000_optimize_category_reference_sync.sql",
+  "20261125123500_initialize_required_legacy_accounts.sql",
+  "20261125124000_protect_embedded_account_refs.sql"
+];
+  assert.deepEqual(migrationFiles, [...expected, ...pending]);
 });
