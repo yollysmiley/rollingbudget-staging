@@ -1388,3 +1388,20 @@ test('desktop category deletion preserves state on rejection and refreshes cards
   expect(await page.evaluate(() => sessionStorage.getItem('__mock_cloud_budget_rows'))).toBe(snapshot);
   await expect(page).toHaveURL(/[?&]page=settings(?:&|$)/);
 });
+
+for (const entry of ['/app/index.html', '/rollover-budget-app.html']) {
+  test(`desktop sign-out and signed-out guard return to homepage from ${entry}`, async ({ page }) => {
+    const home = new URL('../', page.url()).href;
+    await page.goto(entry + '?page=overview');
+    await expectAuthenticatedBudget(page);
+    const signOut = page.locator('#authBtn');
+    await expect(signOut).toHaveText('Sign Out');
+    await queueBrandedResponse(page);
+    await signOut.click();
+    await expect(page).toHaveURL(home);
+    await expect(page.getByRole('heading', { name: /Make room for what matters/i })).toBeVisible();
+    await page.goto(entry + '?page=settings');
+    await expect(page).toHaveURL(home);
+    await expect(page.locator('#incomeBody')).toHaveCount(0);
+  });
+}
