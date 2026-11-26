@@ -21,3 +21,7 @@ The public staging homepage is `/rollingbudget-staging/`. The authenticated budg
 ## Staging redesign — Phase 1
 
 The shared brand stylesheet is `styles/brand.css`; the staging build publishes it under both public and authenticated routes. Desktop and mobile navigation remain separate while using the same budget state. See [brand standards](docs/BRAND_GUIDELINES.md) and [staging configuration](STAGING.md).
+
+## Reference integrity (PR #95, pending staging activation)
+
+The six alignment migrations introduce owner-scoped foreign keys and four private reference tables for embedded budget and historical recurring-rule account/category references. Restricted trigger functions maintain those references on writes; client roles cannot directly access the private tables. Category deletion relies on these database constraints and owner-scoped revision checks. Apply and verify all migrations before activating the aligned frontend. See [alignment release gates](ISSUE_92_ALIGNMENT.md).
