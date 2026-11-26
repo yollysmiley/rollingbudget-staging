@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Phase C: extend isolated desktop/mobile category deletion regressions and document database reference integrity and release sequencing. No application or migration changes.
+
 - Align six frontend files and six integrity migrations with accepted production release for #92; staging migration and deployment require separate approval.
 
 - Harden the staging freeze runbook with bounded locking, effective column and anonymous permission checks, maintenance and recovery gates, and synthetic PostgreSQL regression coverage.
