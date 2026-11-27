@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const ci = readFileSync(new URL('../.github/workflows/build-staging.yml', import.meta.url), 'utf8');
 
-test('change-aware build uses base-SHA trusted code and complete PR enumeration, failing closed', () => {
+test('change-aware build uses base-SHA trusted code and immutable PR diffs, failing closed', () => {
   assert.doesNotMatch(ci, /GH_API_TOKEN/);
   assert.match(ci, /id: trusted-base[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(ci, /persist-credentials: false/);
@@ -31,7 +31,7 @@ test('documentation-only build exemption is explicit and substantial gates remai
     'Upload static staging build',
   ]) {
     const section = ci.slice(ci.indexOf(`      - name: ${item}`));
-    assert.ok(section.startsWith(`      - name: ${item}\n        if: steps.ci-mode.outputs.mode != 'lightweight'\n`), item);
+    assert.ok(section.startsWith(`      - name: ${item}\n        if: needs.classify.outputs.mode != 'lightweight'\n`), item);
   }
   assert.match(ci, /Record approved documentation-only exemption/);
   assert.match(ci, /if: github\.ref == 'refs\/heads\/main' && github\.event_name != 'pull_request'/);

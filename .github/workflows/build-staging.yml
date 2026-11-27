@@ -11,13 +11,12 @@ concurrency:
   # Cancel superseded PR builds, but never interrupt a main deployment.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  build:
+  classify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.ci-mode.outputs.mode }}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
       - name: Clear untrusted trusted-checkout path
         if: github.event_name == 'pull_request'
         run: rm -rf -- .ci-trusted
@@ -51,19 +50,35 @@ jobs:
           rm -rf -- .ci-trusted
           printf 'mode=%s\n' "$MODE" >> "$GITHUB_OUTPUT"
           echo "CI validation mode: $MODE"
+  build:
+    needs: classify
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Enforce successful classification
+        env:
+          CLASSIFICATION: ${{ needs.classify.result }}
+          MODE: ${{ needs.classify.outputs.mode }}
+        run: |
+          [[ "$CLASSIFICATION" == success && ( "$MODE" == full || "$MODE" == lightweight ) ]]
+      - uses: actions/checkout@v5
+        if: needs.classify.outputs.mode != 'lightweight'
+        with:
+          persist-credentials: false
       - name: Record approved documentation-only exemption
-        if: steps.ci-mode.outputs.mode == 'lightweight'
+        if: needs.classify.outputs.mode == 'lightweight'
         run: echo 'Trusted base classifier verified an allowlisted documentation-only PR; full build regression is exempted for this PR.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@v5
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         with:
           node-version: '24'
           cache: npm
       - name: Install pinned test runner
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: npm ci --no-audit --no-fund
       - name: Validate authenticated test JavaScript syntax
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: |
           node --check playwright.live.config.js
           node --check tests/live/authenticated.spec.js
@@ -71,30 +86,30 @@ jobs:
           node --check tests/live/safety.mjs
           node --check scripts/live-staging-tests.mjs
       - name: Discover authenticated cases without credentials or live requests
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: npx playwright test --config=playwright.live.config.js --list
       - name: Install Chromium
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: npx playwright install --with-deps chromium
       - name: Build redesigned UI with staging-only configuration
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: node scripts/build-staging.mjs
       - name: Run unit, security, and rendering regression tests
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: node --test tests/*.test.mjs tests/live/*.test.mjs
       - uses: supabase/setup-cli@v1
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         with:
           version: 2.79.0
       - name: Synthetic backup and restore regression
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: |
           sudo apt-get update && sudo apt-get install -y age
           bash -n scripts/export-staging-backup.sh tests/verify-staging-backup.sh tests/verify-staging-cli-restore.sh
           bash tests/verify-staging-backup.sh
           bash tests/verify-staging-cli-restore.sh
       - name: Run desktop and mobile acceptance tests
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         run: npm run test:e2e
       - name: Retain browser reports and failure evidence
         if: failure()
@@ -107,7 +122,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
       - name: Upload static staging build
-        if: steps.ci-mode.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode != 'lightweight'
         uses: actions/upload-artifact@v4
         with:
           name: staging-frontend
@@ -120,6 +135,67 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+  database:
+    needs: classify
+    if: needs.classify.outputs.mode != 'lightweight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local-replay-only
+          POSTGRES_DB: migration_replay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d migration_replay"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-replay-only
+      PGDATABASE: migration_replay
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: B3 populated upgrade, orphan refusal, rollback and idempotence
+        run: bash scripts/verify-b3-upgrade.sh
+      - name: Reset disposable database before clean migration replay
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'DROP DATABASE migration_replay WITH (FORCE);'
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'CREATE DATABASE migration_replay;'
+      - name: B1 clean migration replay and schema assertions
+        run: bash scripts/verify-clean-migration-replay.sh
+      - name: B4 authenticated owner isolation and recurring constraints
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/verification/verify-b4-postgres-contract.sql
+      - name: B4 concurrent recurring reference and account deletion
+        run: bash scripts/verify-b3-account-races.sh
+      - name: Synthetic staging freeze and exact ACL restoration
+        run: bash tests/verify-staging-write-freeze.sh
+  postgres-contracts:
+    needs: [classify, database]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Enforce required PostgreSQL result
+        shell: bash
+        env:
+          CLASSIFICATION: ${{ needs.classify.result }}
+          MODE: ${{ needs.classify.outputs.mode }}
+          DATABASE: ${{ needs.database.result }}
+        run: |
+          if [[ "$CLASSIFICATION" == success ]] && { [[ "$MODE" == lightweight && "$DATABASE" == skipped ]] || [[ "$MODE" != lightweight && "$DATABASE" == success ]]; }; then
+            echo "PostgreSQL validation accepted: mode=$MODE database=$DATABASE" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "PostgreSQL validation failed: classification=$CLASSIFICATION mode=$MODE database=$DATABASE" >&2
+            exit 1
+          fi
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build

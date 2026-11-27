@@ -58,3 +58,7 @@ The classify job reuses the trusted-base resolution steps from build. The databa
 ## Phase 3E corrective policy
 
 Immutable Git merge parents and both PR and merge diffs replace mutable API pagination. Only regular non-executable file modifications qualify. Missing revisions require full validation. Require independent review of workflow and classifier changes through repository rules/CODEOWNERS; trusted-base code alone cannot protect a PR-controlled workflow. Branch protection and actual lightweight execution remain unverified. The earlier Phase 3D local outcome-count claim was not independently evidenced.
+
+## PR #98 Phase 5A — unified validation
+
+The build-staging workflow owns the shared classify job, build, database, postgres-contracts reporting gate and existing deploy job. The standalone PostgreSQL workflow is retired. Both required check names remain unchanged. Classification runs once; build explicitly rejects unsuccessful or invalid classification. Database assertions and deployment permissions are unchanged. The legacy branch trigger now also runs database validation; its retirement is deferred to the trigger audit. Main/manual full validation and protected live integration remain unchanged. Full local validation is unavailable; the owner explicitly authorized GitHub Actions validation for this increment.
