@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from 'node:fs';
 const workflow = (name) => readFileSync(new URL('../.github/workflows/' + name, import.meta.url), 'utf8');
 
 test('PostgreSQL CI preserves B3, B1 and B4 assertions in isolated order', () => {
-  const ci = workflow('staging-postgres-contracts.yml');
+  const ci = workflow('build-staging.yml');
   const ordered = [
     'bash scripts/verify-b3-upgrade.sh',
     'DROP DATABASE migration_replay WITH (FORCE)',
@@ -24,7 +24,7 @@ test('PostgreSQL CI preserves B3, B1 and B4 assertions in isolated order', () =>
   assert.equal(ci.match(/bash scripts\/verify-clean-migration-replay\.sh/g)?.length, 1);
   assert.equal(ci.match(/image: postgres:17/g)?.length, 1);
   assert.match(ci, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
-  assert.match(ci, /branches: \[main\]/);
+  assert.match(ci, /branches: \[main, ci\/staging-browser-tests\]/);
 });
 
 test('Primary CI preserves desktop and mobile checks and authenticated test discovery', () => {
@@ -43,10 +43,13 @@ test('Primary CI preserves desktop and mobile checks and authenticated test disc
   assert.match(ci, /npx playwright test --config=playwright\.live\.config\.js --list/);
   assert.match(ci, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.match(ci, /actions\/deploy-pages@v4/);
+  assert.match(ci, /id: ci-mode/);
+  assert.match(ci, /Record approved documentation-only exemption/);
 });
 
 test('Retired duplicate workflows do not run independently', () => {
   for (const name of [
+    'staging-postgres-contracts.yml',
     'b1-migration-replay.yml',
     'b3-populated-upgrade.yml',
     'b4-postgres-contract.yml',
@@ -61,4 +64,20 @@ test('staging backup regression runs without live credentials in primary CI', ()
   assert.match(ci, /bash tests\/verify-staging-backup\.sh/);
   assert.match(ci, /bash tests\/verify-staging-cli-restore\.sh/);
   assert.doesNotMatch(ci, /secrets\.STAGING_DB_URL/);
+});
+
+test('PostgreSQL required gate preserves full execution and explicit exemptions', () => {
+  const ci = workflow('build-staging.yml');
+  assert.equal(ci.match(/id: ci-mode/g)?.length, 1);
+  assert.match(ci, /  build:\n    needs: classify/);
+  assert.match(ci, /  database:\n    needs: classify/);
+  assert.match(ci, /Enforce successful classification/);
+  assert.ok(ci.includes("    if: needs.classify.outputs.mode == 'full'"));
+  assert.ok(ci.includes('    needs: [classify, database]'));
+  assert.ok(ci.includes('    if: '+ '$' + '{{ always() }}'));
+  assert.ok(ci.includes('[[ ( "$MODE" == lightweight || "$MODE" == presentation || "$MODE" == backup ) && "$DATABASE" == skipped ]]'));
+  assert.ok(ci.includes('[[ "$MODE" == full && "$DATABASE" == success ]]'));
+  assert.ok(ci.includes('[[ "$CLASSIFICATION" == success ]]'));
+  assert.ok(ci.includes('exit 1'));
+  assert.doesNotMatch(ci, /secrets\./);
 });

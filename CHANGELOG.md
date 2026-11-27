@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- PR #98 Phase 3E: replace mutable PR API enumeration with immutable Git revision checks and reject duplicate records and file-mode changes.
+
+- PR #98 Phase 3D: separate PostgreSQL classification, disposable database execution and required result reporting; preserve all database contracts and fail on unexpected skips. No application or production changes.
+
+- PR #98 Phase 3C: introduce trusted-base, fail-closed PR diff enumeration and optional documentation-only validation in the existing required build job; add resolver and workflow regression tests. Full main/manual and non-documentation validation, desktop/mobile browser coverage, synthetic backup checks, and protected credentials remain unchanged. PostgreSQL conditional execution remains a separate phase; production unchanged.
+
+- PR #98 Phase 3B: add a conservative, fail-closed CI change classifier and isolated unit tests. Documentation-only classification is not yet connected to workflows; all existing build, browser, database and credential boundaries remain unchanged. No production changes.
+
 - Phase C: extend isolated desktop/mobile category deletion regressions and document database reference integrity and release sequencing. No application or migration changes.
 
 - Align six frontend files and six integrity migrations with accepted production release for #92; staging migration and deployment require separate approval.
@@ -155,3 +163,11 @@
 - Added a dedicated Recurring Rules Manager with distinct desktop table and mobile card views.
 - Added monthly, every-two-months, quarterly, every-six-months, and annual frequencies; removed the end-month field.
 - Added enable/disable controls and regression coverage for frequency placement, legacy-rule safety, and mobile overflow.
+
+- CI Phase 5A: consolidate secret-free application and PostgreSQL validation with one classification job, preserving required check names and regression assertions.
+
+- CI Phase 5B.2: add advisory impact classifier and regression tests; no workflow execution changes.
+
+- CI Phase 5B.3: integrate trusted impact classification and explicit PostgreSQL and backup exemptions; retain browser coverage.
+
+- CI Phase 5B.4: add executable required-gate regression matrix and unsafe impact-diff scenarios.

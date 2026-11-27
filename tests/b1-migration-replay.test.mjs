@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const replay = readFileSync('scripts/verify-clean-migration-replay.sh', 'utf8');
-const workflow = readFileSync('.github/workflows/staging-postgres-contracts.yml', 'utf8');
+const workflow = readFileSync('.github/workflows/build-staging.yml', 'utf8').split('\n  database:')[1].split('\n  postgres-contracts:')[0];
 const migrationFiles = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
 
 test('B1 replay uses only an isolated localhost database and fails on SQL errors', () => {
