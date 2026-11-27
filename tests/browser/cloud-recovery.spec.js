@@ -1,2 +1,2 @@
 import { sharedCloudBrowserContract } from './shared-cloud-contract.js';
-sharedCloudBrowserContract('.main-grid .card');
+sharedCloudBrowserContract('.main-grid .card:first-child');
