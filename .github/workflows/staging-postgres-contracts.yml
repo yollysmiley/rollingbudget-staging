@@ -6,12 +6,52 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  pull-requests: read
 concurrency:
   group: staging-postgres-${{ github.event.pull_request.number || github.ref }}
   # Preserve main-branch checks; cancel only superseded PR revisions.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  postgres-contracts:
+  classify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.ci-mode.outputs.mode }}
+    steps:
+      - name: Clear untrusted trusted-checkout path
+        if: github.event_name == 'pull_request'
+        run: rm -rf -- .ci-trusted
+      - name: Fetch classifier from immutable PR base
+        id: trusted-base
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-trusted
+          persist-credentials: false
+      - name: Resolve CI mode (fail closed)
+        id: ci-mode
+        shell: bash
+        env:
+          GH_API_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          MODE=full
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ steps.trusted-base.outcome }}" == "success" && -f .ci-trusted/scripts/resolve-ci-mode.mjs && -f .ci-trusted/scripts/classify-ci-changes.mjs ]]; then
+            TRUSTED_SHA="$(git -C .ci-trusted rev-parse HEAD 2>/dev/null)" || TRUSTED_SHA=""
+            if [[ "$TRUSTED_SHA" == "$BASE_SHA" ]]; then
+              MODE="$(node .ci-trusted/scripts/resolve-ci-mode.mjs)" || MODE=full
+            fi
+          fi
+          if [[ "$MODE" != "lightweight" ]]; then MODE=full; fi
+          printf 'mode=%s\n' "$MODE" >> "$GITHUB_OUTPUT"
+          echo "CI validation mode: $MODE"
+  database:
+    needs: classify
+    if: needs.classify.outputs.mode != 'lightweight'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -51,3 +91,22 @@ jobs:
         run: bash scripts/verify-b3-account-races.sh
       - name: Synthetic staging freeze and exact ACL restoration
         run: bash tests/verify-staging-write-freeze.sh
+  postgres-contracts:
+    needs: [classify, database]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Enforce required PostgreSQL result
+        shell: bash
+        env:
+          CLASSIFICATION: ${{ needs.classify.result }}
+          MODE: ${{ needs.classify.outputs.mode }}
+          DATABASE: ${{ needs.database.result }}
+        run: |
+          if [[ "$CLASSIFICATION" == success ]] && { [[ "$MODE" == lightweight && "$DATABASE" == skipped ]] || [[ "$MODE" != lightweight && "$DATABASE" == success ]]; }; then
+            echo "PostgreSQL validation accepted: mode=$MODE database=$DATABASE" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "PostgreSQL validation failed: classification=$CLASSIFICATION mode=$MODE database=$DATABASE" >&2
+            exit 1
+          fi

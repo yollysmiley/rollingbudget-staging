@@ -64,3 +64,18 @@ test('staging backup regression runs without live credentials in primary CI', ()
   assert.match(ci, /bash tests\/verify-staging-cli-restore\.sh/);
   assert.doesNotMatch(ci, /secrets\.STAGING_DB_URL/);
 });
+
+test('PostgreSQL required gate preserves full execution and explicit exemptions', () => {
+  const ci = workflow('staging-postgres-contracts.yml');
+  const build = workflow('build-staging.yml');
+  const start = '      - name: Clear untrusted trusted-checkout path';
+  assert.equal(ci.slice(ci.indexOf(start), ci.indexOf('  database:')), build.slice(build.indexOf(start), build.indexOf('      - name: Record approved')));
+  assert.ok(ci.includes("    if: needs.classify.outputs.mode != 'lightweight'"));
+  assert.ok(ci.includes('    needs: [classify, database]'));
+  assert.ok(ci.includes('    if: '+ '$' + '{{ always() }}'));
+  assert.ok(ci.includes('[[ "$MODE" == lightweight && "$DATABASE" == skipped ]]'));
+  assert.ok(ci.includes('[[ "$MODE" != lightweight && "$DATABASE" == success ]]'));
+  assert.ok(ci.includes('[[ "$CLASSIFICATION" == success ]]'));
+  assert.ok(ci.includes('exit 1'));
+  assert.doesNotMatch(ci, /secrets\./);
+});
