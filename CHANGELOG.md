@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PR #98 Phase 3B: add a conservative, fail-closed CI change classifier and isolated unit tests. Documentation-only classification is not yet connected to workflows; all existing build, browser, database and credential boundaries remain unchanged. No production changes.
+
 - Phase C: extend isolated desktop/mobile category deletion regressions and document database reference integrity and release sequencing. No application or migration changes.
 
 - Align six frontend files and six integrity migrations with accepted production release for #92; staging migration and deployment require separate approval.
