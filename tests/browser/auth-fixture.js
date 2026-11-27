@@ -1,7 +1,10 @@
 import { expect } from '@playwright/test';
 
 // Browser-only Supabase client double. Production code still verifies auth.getUser().
-export async function mockSignedInBudget(page) {
+export async function mockSignedInBudget(page, { sharedCloud = null } = {}) {
+  if (sharedCloud) {
+    await page.exposeFunction('__sharedBudgetCloud', request => sharedCloud(request));
+  }
   await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', route => route.fulfill({
     status: 200, contentType: 'application/javascript', body: `
       window.supabase = { createClient() {
@@ -21,6 +24,24 @@ export async function mockSignedInBudget(page) {
             async signOut() { sessionStorage.setItem('__mock_signed_out', '1'); if (listener) listener('SIGNED_OUT', null); return { error: null }; }
           },
           from(table) {
+            if (table === 'budget_ui_years' && window.__sharedBudgetCloud) {
+              const request = (operation, filters, payload) =>
+                window.__sharedBudgetCloud({ operation, filters, payload, owner: activeUser()?.id });
+              const query = (operation, payload) => {
+                const filters = {};
+                const chain = {
+                  eq(field, value) { filters[field] = value; return chain; },
+                  select() { return chain; },
+                  then(resolve, reject) { return request(operation, filters, payload).then(resolve, reject); }
+                };
+                return chain;
+              };
+              return {
+                select() { return query('read'); },
+                insert(row) { return request('insert', {}, row); },
+                update(row) { return query('update', row); }
+              };
+            }
             const chain = {
               select() { return chain; },
               eq(field, value) {
