@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PR #98 Phase 3C: introduce trusted-base, fail-closed PR diff enumeration and optional documentation-only validation in the existing required build job; add resolver and workflow regression tests. Full main/manual and non-documentation validation, desktop/mobile browser coverage, synthetic backup checks, and protected credentials remain unchanged. PostgreSQL conditional execution remains a separate phase; production unchanged.
+
 - PR #98 Phase 3B: add a conservative, fail-closed CI change classifier and isolated unit tests. Documentation-only classification is not yet connected to workflows; all existing build, browser, database and credential boundaries remain unchanged. No production changes.
 
 - Phase C: extend isolated desktop/mobile category deletion regressions and document database reference integrity and release sequencing. No application or migration changes.

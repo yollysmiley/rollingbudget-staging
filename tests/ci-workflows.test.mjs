@@ -43,6 +43,8 @@ test('Primary CI preserves desktop and mobile checks and authenticated test disc
   assert.match(ci, /npx playwright test --config=playwright\.live\.config\.js --list/);
   assert.match(ci, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.match(ci, /actions\/deploy-pages@v4/);
+  assert.match(ci, /id: ci-mode/);
+  assert.match(ci, /Record approved documentation-only exemption/);
 });
 
 test('Retired duplicate workflows do not run independently', () => {
