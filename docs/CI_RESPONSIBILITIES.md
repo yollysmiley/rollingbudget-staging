@@ -54,3 +54,7 @@ Local validation before this increment: six resolver regression tests, two workf
 ## PR #98 Phase 3D — PostgreSQL required gate
 
 The classify job reuses the trusted-base resolution steps from build. The database job provisions PostgreSQL 17 only when the decision is not lightweight. The always-running postgres-contracts reporting job requires successful classification and either successful database execution or an explicit lightweight decision with the database job skipped. Failure, cancellation and unexpected skips cannot pass. Existing database assertions, order, synthetic credentials and main/manual full validation are unchanged. Local shell validation exercised all 64 combinations of mode, classification and database outcomes; full repository validation is pending CI. No live credentials are introduced.
+
+## Phase 3E corrective policy
+
+Immutable Git merge parents and both PR and merge diffs replace mutable API pagination. Only regular non-executable file modifications qualify. Missing revisions require full validation. Require independent review of workflow and classifier changes through repository rules/CODEOWNERS; trusted-base code alone cannot protect a PR-controlled workflow. Branch protection and actual lightweight execution remain unverified. The earlier Phase 3D local outcome-count claim was not independently evidenced.

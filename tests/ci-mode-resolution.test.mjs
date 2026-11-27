@@ -1,56 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveCiMode } from '../scripts/resolve-ci-mode.mjs';
-
-const doc = { filename: 'README.md', status: 'modified' };
-const changed = { filename: 'scripts/build-staging.mjs', status: 'modified' };
-const params = { eventName: 'pull_request', repository: 'yollysmiley/rollingbudget-staging',
-  pullRequestNumber: '98', expectedChangedFiles: '1', token: 'mock-token' };
-const api = (pages) => async (url, options) => {
-  assert.match(url, /^https:\/\/api.github.com\/repos\/yollysmiley\/rollingbudget-staging\/pulls\/98\/files\?per_page=100&page=/);
-  assert.equal(options.headers.Authorization, 'Bearer mock-token');
-  const page = Number(new URL(url).searchParams.get('page'));
-  const value = pages[page - 1];
-  return value instanceof Error ? Promise.reject(value) : value;
+import { resolveCiMode, parseRawDiff } from '../scripts/resolve-ci-mode.mjs';
+const base='a'.repeat(40), head='b'.repeat(40), merge='c'.repeat(40);
+const doc=':100644 100644 abc def M\0README.md\0';
+const params={eventName:'pull_request',base,head,merge};
+const git=(diff=doc,parents=[merge,base,head].join(' '),second=diff)=>args=>{
+  if(args[0]==='rev-parse') return base+'\n';
+  if(args[0]==='rev-list') return parents+'\n';
+  return args.includes(base+'...'+head)?diff:second;
 };
-const ok = (files) => ({ ok: true, json: async () => files });
-const mode = async (options) => (await resolveCiMode({ ...params, ...options })).mode;
-
-test('trusted PR file enumeration permits explicitly allowlisted documentation-only changes', async () => {
-  assert.equal(await mode({ fetchImpl: api([ok([doc])]) }), 'lightweight');
+test('immutable matching revisions permit documentation only',()=>assert.equal(resolveCiMode({...params,git:git()}).mode,'lightweight'));
+test('stale or mismatched merge parents fail closed',()=>assert.equal(resolveCiMode({...params,git:git(doc,[merge,base,base].join(' '))}).mode,'full'));
+test('both PR and merge diffs must qualify',()=>assert.equal(resolveCiMode({...params,git:git(doc,undefined,doc.replace('README.md','app.js'))}).mode,'full'));
+test('duplicates, mode changes, additions, malformed records fail closed',()=>{
+  for(const raw of [doc+doc,doc.replace('100644 100644','100644 100755'),doc.replace(' M',' A'),doc.slice(0,-1),'']) {
+    assert.equal(resolveCiMode({...params,git:git(raw)}).mode,'full');
+  }
 });
-
-test('mixed changes in complete PR diff require full validation', async () => {
-  assert.equal(await mode({ expectedChangedFiles: 2, fetchImpl: api([ok([doc, changed])]) }), 'full');
+test('main, manual, missing revisions and git failure require full',()=>{
+  for(const input of [{eventName:'push'},{eventName:'workflow_dispatch'},{head:''},{git:()=>{throw Error('missing')}}]) assert.equal(resolveCiMode({...params,git:git(),...input}).mode,'full');
 });
-
-test('complete multipage enumeration is required, including later-page sensitive changes', async () => {
-  const page1 = Array.from({ length: 100 }, () => doc);
-  assert.equal(await mode({ expectedChangedFiles: 101, fetchImpl: api([ok(page1), ok([doc])]) }), 'lightweight');
-  assert.equal(await mode({ expectedChangedFiles: 101, fetchImpl: api([ok(page1), ok([changed])]) }), 'full');
-  assert.equal(await mode({ expectedChangedFiles: 101, fetchImpl: api([ok(page1), ok([])]) }), 'full');
-});
-
-test('partial responses, HTTP errors and API exceptions fail closed', async () => {
-  assert.equal(await mode({ expectedChangedFiles: 2, fetchImpl: api([ok([doc])]) }), 'full');
-  assert.equal(await mode({ fetchImpl: api([{ ok: false, status: 403 }]) }), 'full');
-  assert.equal(await mode({ fetchImpl: api([ok({ files: [doc] })]) }), 'full');
-  assert.equal(await mode({ fetchImpl: api([new Error('offline')]) }), 'full');
-});
-
-test('missing or untrusted event metadata cannot exempt tests', async () => {
-  for (const input of [
-    { eventName: 'push' }, { eventName: 'workflow_dispatch' },
-    { token: '' }, { repository: '../other' }, { pullRequestNumber: '0' },
-    { expectedChangedFiles: '0' }, { expectedChangedFiles: '3001' },
-    { expectedChangedFiles: 'bogus' },
-  ]) assert.equal(await mode({ fetchImpl: api([ok([doc])]), ...input }), 'full');
-});
-
-test('renamed, deleted and unknown documentation never qualify for exemption', async () => {
-  for (const file of [
-    { filename: 'README.md', status: 'renamed', previous_filename: 'old.md' },
-    { filename: 'README.md', status: 'removed' },
-    { filename: 'docs/new.md', status: 'modified' },
-  ]) assert.equal(await mode({ fetchImpl: api([ok([file])]) }), 'full');
-});
+test('raw diff preserves filenames without shell interpretation',()=>assert.deepEqual(parseRawDiff(doc),[{filename:'README.md',status:'modified'}]));

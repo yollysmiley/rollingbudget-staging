@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PR #98 Phase 3E: replace mutable PR API enumeration with immutable Git revision checks and reject duplicate records and file-mode changes.
+
 - PR #98 Phase 3D: separate PostgreSQL classification, disposable database execution and required result reporting; preserve all database contracts and fail on unexpected skips. No application or production changes.
 
 - PR #98 Phase 3C: introduce trusted-base, fail-closed PR diff enumeration and optional documentation-only validation in the existing required build job; add resolver and workflow regression tests. Full main/manual and non-documentation validation, desktop/mobile browser coverage, synthetic backup checks, and protected credentials remain unchanged. PostgreSQL conditional execution remains a separate phase; production unchanged.
