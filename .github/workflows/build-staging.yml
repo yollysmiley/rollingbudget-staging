@@ -46,7 +46,7 @@ jobs:
               MODE="$(node .ci-trusted/scripts/resolve-ci-mode.mjs)" || MODE=full
             fi
           fi
-          if [[ "$MODE" != "lightweight" ]]; then MODE=full; fi
+          case "$MODE" in lightweight|presentation|backup|full) ;; *) MODE=full ;; esac
           rm -rf -- .ci-trusted
           printf 'mode=%s\n' "$MODE" >> "$GITHUB_OUTPUT"
           echo "CI validation mode: $MODE"
@@ -61,7 +61,7 @@ jobs:
           CLASSIFICATION: ${{ needs.classify.result }}
           MODE: ${{ needs.classify.outputs.mode }}
         run: |
-          [[ "$CLASSIFICATION" == success && ( "$MODE" == full || "$MODE" == lightweight ) ]]
+          [[ "$CLASSIFICATION" == success && ( "$MODE" == full || "$MODE" == lightweight || "$MODE" == presentation || "$MODE" == backup ) ]]
       - uses: actions/checkout@v5
         if: needs.classify.outputs.mode != 'lightweight'
         with:
@@ -98,11 +98,11 @@ jobs:
         if: needs.classify.outputs.mode != 'lightweight'
         run: node --test tests/*.test.mjs tests/live/*.test.mjs
       - uses: supabase/setup-cli@v1
-        if: needs.classify.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode == 'full' || needs.classify.outputs.mode == 'backup'
         with:
           version: 2.79.0
       - name: Synthetic backup and restore regression
-        if: needs.classify.outputs.mode != 'lightweight'
+        if: needs.classify.outputs.mode == 'full' || needs.classify.outputs.mode == 'backup'
         run: |
           sudo apt-get update && sudo apt-get install -y age
           bash -n scripts/export-staging-backup.sh tests/verify-staging-backup.sh tests/verify-staging-cli-restore.sh
@@ -137,7 +137,7 @@ jobs:
           path: dist
   database:
     needs: classify
-    if: needs.classify.outputs.mode != 'lightweight'
+    if: needs.classify.outputs.mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -190,7 +190,7 @@ jobs:
           MODE: ${{ needs.classify.outputs.mode }}
           DATABASE: ${{ needs.database.result }}
         run: |
-          if [[ "$CLASSIFICATION" == success ]] && { [[ "$MODE" == lightweight && "$DATABASE" == skipped ]] || [[ "$MODE" != lightweight && "$DATABASE" == success ]]; }; then
+          if [[ "$CLASSIFICATION" == success ]] && { [[ ( "$MODE" == lightweight || "$MODE" == presentation || "$MODE" == backup ) && "$DATABASE" == skipped ]] || [[ "$MODE" == full && "$DATABASE" == success ]]; }; then
             echo "PostgreSQL validation accepted: mode=$MODE database=$DATABASE" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "PostgreSQL validation failed: classification=$CLASSIFICATION mode=$MODE database=$DATABASE" >&2

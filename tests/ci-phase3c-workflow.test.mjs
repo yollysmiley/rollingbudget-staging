@@ -15,7 +15,7 @@ test('change-aware build uses base-SHA trusted code and immutable PR diffs, fail
   assert.ok(ci.includes('MERGE_SHA:'));
   assert.match(ci, /node \.ci-trusted\/scripts\/resolve-ci-mode\.mjs/);
   assert.match(ci, /MODE=full/);
-  assert.match(ci, /if \[\[ "\$MODE" != "lightweight" \]\]; then MODE=full; fi/);
+  assert.ok(ci.includes('case "$MODE" in lightweight|presentation|backup|full) ;; *) MODE=full ;; esac'));
 });
 
 test('documentation-only build exemption is explicit and substantial gates remain active for full validation', () => {
@@ -26,7 +26,6 @@ test('documentation-only build exemption is explicit and substantial gates remai
     'Install Chromium',
     'Build redesigned UI with staging-only configuration',
     'Run unit, security, and rendering regression tests',
-    'Synthetic backup and restore regression',
     'Run desktop and mobile acceptance tests',
     'Upload static staging build',
   ]) {
@@ -36,4 +35,8 @@ test('documentation-only build exemption is explicit and substantial gates remai
   assert.match(ci, /Record approved documentation-only exemption/);
   assert.match(ci, /if: github\.ref == 'refs\/heads\/main' && github\.event_name != 'pull_request'/);
   assert.doesNotMatch(ci, /secrets\.STAGING_DB_URL/);
+});
+
+test('only full and backup modes execute synthetic backup restore',()=>{
+  for(const step of ['- uses: supabase/setup-cli@v1','- name: Synthetic backup and restore regression']) assert.ok(ci.includes(step+"\n        if: needs.classify.outputs.mode == 'full' || needs.classify.outputs.mode == 'backup'"));
 });

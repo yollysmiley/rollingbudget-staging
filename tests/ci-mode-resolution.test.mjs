@@ -21,3 +21,11 @@ test('main, manual, missing revisions and git failure require full',()=>{
   for(const input of [{eventName:'push'},{eventName:'workflow_dispatch'},{head:''},{git:()=>{throw Error('missing')}}]) assert.equal(resolveCiMode({...params,git:git(),...input}).mode,'full');
 });
 test('raw diff preserves filenames without shell interpretation',()=>assert.deepEqual(parseRawDiff(doc),[{filename:'README.md',status:'modified'}]));
+
+test('impact exemptions require matching immutable diffs',()=>{
+  const css=doc.replace('README.md','styles/brand.css');
+  const backup=doc.replace('README.md','scripts/export-staging-backup.sh');
+  assert.equal(resolveCiMode({...params,git:git(css)}).mode,'presentation');
+  assert.equal(resolveCiMode({...params,git:git(backup)}).mode,'backup');
+  for(const other of [backup,doc,css+doc]) assert.equal(resolveCiMode({...params,git:git(css,undefined,other)}).mode,'full');
+});

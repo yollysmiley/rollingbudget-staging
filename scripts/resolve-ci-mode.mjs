@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { classifyCiChanges } from './classify-ci-changes.mjs';
 
+import { classifyCiImpact } from './classify-ci-impact.mjs';
+
 const full = reason => ({ mode: 'full', reason });
 const sha = /^[0-9a-f]{40}$/;
 export function parseRawDiff(raw) {
@@ -24,11 +26,14 @@ export function resolveCiMode({ eventName, base, head, merge, git } = {}) {
     if (git(['rev-parse','HEAD']).trim() !== base) return full('untrusted checkout');
     if (git(['rev-list','--parents','-n','1',merge]).trim() !== [merge,base,head].join(' ')) return full('merge parents mismatch');
     const args = ['diff','--raw','-z','--no-renames','--no-ext-diff','--no-textconv'];
+    const modes = [];
     for (const range of [[base+'...'+head],[base,merge]]) {
       const files = parseRawDiff(git([...args,...range,'--']));
-      if (classifyCiChanges({eventName,files,complete:true}).mode !== 'lightweight') return full('non-documentation or empty diff');
+      const input = {eventName,files,complete:true};
+      modes.push(classifyCiChanges(input).mode === 'lightweight' ? 'lightweight' : classifyCiImpact(input));
     }
-    return {mode:'lightweight',reason:'verified immutable documentation diffs'};
+    if (modes[0] !== modes[1] || modes[0] === 'full') return full('diff classifications disagree or require full validation');
+    return {mode:modes[0],reason:'verified immutable matching diffs'};
   } catch { return full('git verification failed'); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

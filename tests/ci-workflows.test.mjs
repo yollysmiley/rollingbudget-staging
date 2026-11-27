@@ -72,11 +72,11 @@ test('PostgreSQL required gate preserves full execution and explicit exemptions'
   assert.match(ci, /  build:\n    needs: classify/);
   assert.match(ci, /  database:\n    needs: classify/);
   assert.match(ci, /Enforce successful classification/);
-  assert.ok(ci.includes("    if: needs.classify.outputs.mode != 'lightweight'"));
+  assert.ok(ci.includes("    if: needs.classify.outputs.mode == 'full'"));
   assert.ok(ci.includes('    needs: [classify, database]'));
   assert.ok(ci.includes('    if: '+ '$' + '{{ always() }}'));
-  assert.ok(ci.includes('[[ "$MODE" == lightweight && "$DATABASE" == skipped ]]'));
-  assert.ok(ci.includes('[[ "$MODE" != lightweight && "$DATABASE" == success ]]'));
+  assert.ok(ci.includes('[[ ( "$MODE" == lightweight || "$MODE" == presentation || "$MODE" == backup ) && "$DATABASE" == skipped ]]'));
+  assert.ok(ci.includes('[[ "$MODE" == full && "$DATABASE" == success ]]'));
   assert.ok(ci.includes('[[ "$CLASSIFICATION" == success ]]'));
   assert.ok(ci.includes('exit 1'));
   assert.doesNotMatch(ci, /secrets\./);

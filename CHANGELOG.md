@@ -167,3 +167,5 @@
 - CI Phase 5A: consolidate secret-free application and PostgreSQL validation with one classification job, preserving required check names and regression assertions.
 
 - CI Phase 5B.2: add advisory impact classifier and regression tests; no workflow execution changes.
+
+- CI Phase 5B.3: integrate trusted impact classification and explicit PostgreSQL and backup exemptions; retain browser coverage.

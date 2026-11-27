@@ -66,3 +66,7 @@ The build-staging workflow owns the shared classify job, build, database, postgr
 ## Phase 5B.2 — advisory impact classification
 
 The standalone impact classifier recognizes modifications exclusively to the three existing brand, settings and homepage CSS files as presentation, and modifications exclusively to the backup export script as backup. Mixed, unknown, incomplete, duplicate, renamed, added or removed paths and non-PR events default to full. No workflow consumes these results yet. Existing documentation classification and all required checks remain unchanged. Before integration, verify immutable diff provenance and test dependencies, including backup and database isolation. Five standalone regression tests and syntax checks passed locally; the owner authorized full repository validation in GitHub Actions for this increment.
+
+## Phase 5B.3 — impact integration
+
+Trusted base resolution requires matching classifications from both immutable diffs. Presentation and backup modes retain all application, unit, security and desktop/mobile browser checks. Only full mode runs PostgreSQL contracts; full and backup modes run synthetic backup/restore. Both required gates reject invalid classification; the PostgreSQL gate accepts skips only for explicit approved modes. Main/manual and unknown changes remain full. New modes cannot activate until the trusted base contains the resolver. Owner authorized CI validation in lieu of full local checkout.
