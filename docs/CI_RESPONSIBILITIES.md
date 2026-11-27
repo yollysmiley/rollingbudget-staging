@@ -62,3 +62,7 @@ Immutable Git merge parents and both PR and merge diffs replace mutable API pagi
 ## PR #98 Phase 5A — unified validation
 
 The build-staging workflow owns the shared classify job, build, database, postgres-contracts reporting gate and existing deploy job. The standalone PostgreSQL workflow is retired. Both required check names remain unchanged. Classification runs once; build explicitly rejects unsuccessful or invalid classification. Database assertions and deployment permissions are unchanged. The legacy branch trigger now also runs database validation; its retirement is deferred to the trigger audit. Main/manual full validation and protected live integration remain unchanged. Full local validation is unavailable; the owner explicitly authorized GitHub Actions validation for this increment.
+
+## Phase 5B.2 — advisory impact classification
+
+The standalone impact classifier recognizes modifications exclusively to the three existing brand, settings and homepage CSS files as presentation, and modifications exclusively to the backup export script as backup. Mixed, unknown, incomplete, duplicate, renamed, added or removed paths and non-PR events default to full. No workflow consumes these results yet. Existing documentation classification and all required checks remain unchanged. Before integration, verify immutable diff provenance and test dependencies, including backup and database isolation. Five standalone regression tests and syntax checks passed locally; the owner authorized full repository validation in GitHub Actions for this increment.

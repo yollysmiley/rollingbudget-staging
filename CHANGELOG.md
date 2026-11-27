@@ -165,3 +165,5 @@
 - Added enable/disable controls and regression coverage for frequency placement, legacy-rule safety, and mobile overflow.
 
 - CI Phase 5A: consolidate secret-free application and PostgreSQL validation with one classification job, preserving required check names and regression assertions.
+
+- CI Phase 5B.2: add advisory impact classifier and regression tests; no workflow execution changes.
