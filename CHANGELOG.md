@@ -169,3 +169,5 @@
 - CI Phase 5B.2: add advisory impact classifier and regression tests; no workflow execution changes.
 
 - CI Phase 5B.3: integrate trusted impact classification and explicit PostgreSQL and backup exemptions; retain browser coverage.
+
+- CI Phase 5B.4: add executable required-gate regression matrix and unsafe impact-diff scenarios.

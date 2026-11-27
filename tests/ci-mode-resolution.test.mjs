@@ -29,3 +29,11 @@ test('impact exemptions require matching immutable diffs',()=>{
   assert.equal(resolveCiMode({...params,git:git(backup)}).mode,'backup');
   for(const other of [backup,doc,css+doc]) assert.equal(resolveCiMode({...params,git:git(css,undefined,other)}).mode,'full');
 });
+
+test('impact modes reject unsafe records and non-PR events',()=>{
+  for(const path of ['styles/brand.css','scripts/export-staging-backup.sh']) {
+    const raw=doc.replace('README.md',path);
+    for(const diff of [raw+raw,raw.replace('100644 100644','100644 100755'),raw.replace(' M',' A'),raw+doc]) assert.equal(resolveCiMode({...params,git:git(diff)}).mode,'full');
+    for(const eventName of ['push','workflow_dispatch']) assert.equal(resolveCiMode({...params,eventName,git:git(raw)}).mode,'full');
+  }
+});

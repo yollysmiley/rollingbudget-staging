@@ -70,3 +70,7 @@ The standalone impact classifier recognizes modifications exclusively to the thr
 ## Phase 5B.3 — impact integration
 
 Trusted base resolution requires matching classifications from both immutable diffs. Presentation and backup modes retain all application, unit, security and desktop/mobile browser checks. Only full mode runs PostgreSQL contracts; full and backup modes run synthetic backup/restore. Both required gates reject invalid classification; the PostgreSQL gate accepts skips only for explicit approved modes. Main/manual and unknown changes remain full. New modes cannot activate until the trusted base contains the resolver. Owner authorized CI validation in lieu of full local checkout.
+
+## Phase 5B.4 — executable gate regression
+
+Execute the actual workflow Bash gates in regression tests: 30 classification/mode combinations for build and 150 classification/mode/database combinations for PostgreSQL. Only successful recognized classification is accepted; full requires database success and explicit exemptions require database skipped. Unknown, missing, failed or cancelled results reject. These tests do not simulate GitHub scheduling. Actual exemption execution remains a post-rollout verification requirement. Full local validation exception authorized by owner.
